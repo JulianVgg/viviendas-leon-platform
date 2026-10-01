@@ -1,0 +1,18 @@
+{
+  "name": "viviendas-leon-platform",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w @viviendas-leon/web\" \"npm run dev -w @viviendas-leon/api\"",
+    "dev:web": "npm run dev -w @viviendas-leon/web",
+    "dev:api": "npm run dev -w @viviendas-leon/api",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
+  }
+}
