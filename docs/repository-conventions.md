@@ -27,4 +27,9 @@ Cada issue del proyecto debe desarrollarse en una rama independiente creada a pa
 Se utilizará principalmente la siguiente convención:
 
 ```text
-issue-<identificador>-<descripcion>
+issue-<identificador>-<descripcion>'
+
+issue-arch-01-definir-arquitectura
+issue-arch-02-responsabilidades-dependencias
+issue-arch-04-repositorio-estructura
+issue-req-priorizar-requerimientos
