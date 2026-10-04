@@ -1,0 +1,803 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// UBICACIÓN
+// ============================================================
+
+model Municipio {
+  id     Int     @id @default(autoincrement())
+  nombre String  @unique @db.VarChar(100)
+  activo Boolean @default(true)
+
+  comunidades Comunidad[]
+
+  @@map("municipio")
+}
+
+model Comunidad {
+  id          Int     @id @default(autoincrement())
+  municipioId Int     @map("municipio_id")
+  nombre      String  @db.VarChar(100)
+  activo      Boolean @default(true)
+
+  municipio Municipio @relation(fields: [municipioId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  familias       Familia[]
+  capacitaciones Capacitacion[]
+
+  @@unique([municipioId, nombre])
+  @@index([municipioId])
+  @@map("comunidad")
+}
+
+// ============================================================
+// FAMILIAS Y BENEFICIARIOS
+// ============================================================
+
+model Familia {
+  id               Int       @id @default(autoincrement())
+  comunidadId      Int       @map("comunidad_id")
+  nombreReferencia String    @map("nombre_referencia") @db.VarChar(150)
+  fechaIngreso     DateTime? @map("fecha_ingreso") @db.Date
+  estado           String    @default("ACTIVA") @db.VarChar(30)
+  observaciones    String?
+  activo           Boolean   @default(true)
+
+  comunidad Comunidad @relation(fields: [comunidadId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  integrantes    IntegranteFamilia[]
+  programas      FamiliaPrograma[]
+  huertos        Huerto[]
+  visitas        Visita[]
+  entregasInsumo EntregaInsumo[]
+  alertas        Alerta[]
+
+  @@index([comunidadId])
+  @@map("familia")
+}
+
+model IntegranteFamilia {
+  id              Int       @id @default(autoincrement())
+  familiaId       Int       @map("familia_id")
+  nombreCompleto  String    @map("nombre_completo") @db.VarChar(200)
+  fechaNacimiento DateTime? @map("fecha_nacimiento") @db.Date
+  sexo            String?   @db.VarChar(30)
+  parentesco      String?   @db.VarChar(100)
+  telefono        String?   @db.VarChar(30)
+  observaciones   String?
+  activo          Boolean   @default(true)
+
+  familia Familia @relation(fields: [familiaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  participaciones ParticipacionCapacitacion[]
+
+  @@index([familiaId])
+  @@map("integrante_familia")
+}
+
+// ============================================================
+// PROGRAMAS
+// ============================================================
+
+model Programa {
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique @db.VarChar(150)
+  descripcion String?
+  fechaInicio DateTime? @map("fecha_inicio") @db.Date
+  fechaFin    DateTime? @map("fecha_fin") @db.Date
+  estado      String    @default("ACTIVO") @db.VarChar(30)
+
+  familias FamiliaPrograma[]
+
+  @@map("programa")
+}
+
+model FamiliaPrograma {
+  id            Int       @id @default(autoincrement())
+  familiaId     Int       @map("familia_id")
+  programaId    Int       @map("programa_id")
+  fechaIngreso  DateTime  @map("fecha_ingreso") @db.Date
+  fechaSalida   DateTime? @map("fecha_salida") @db.Date
+  estado        String    @default("ACTIVO") @db.VarChar(30)
+  observaciones String?
+
+  familia  Familia  @relation(fields: [familiaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  programa Programa @relation(fields: [programaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([familiaId, programaId, fechaIngreso])
+  @@index([familiaId])
+  @@index([programaId])
+  @@map("familia_programa")
+}
+
+// ============================================================
+// GESTIÓN AGRÍCOLA
+// ============================================================
+
+model Huerto {
+  id            Int       @id @default(autoincrement())
+  familiaId     Int       @map("familia_id")
+  nombre        String    @db.VarChar(150)
+  tipo          String?   @db.VarChar(100)
+  fechaInicio   DateTime? @map("fecha_inicio") @db.Date
+  estado        String    @default("ACTIVO") @db.VarChar(30)
+  observaciones String?
+
+  familia Familia @relation(fields: [familiaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  ciclos CicloCultivo[]
+
+  @@index([familiaId])
+  @@map("huerto")
+}
+
+model Cultivo {
+  id          Int     @id @default(autoincrement())
+  nombre      String  @unique @db.VarChar(100)
+  descripcion String?
+  activo      Boolean @default(true)
+
+  ciclos CicloCultivo[]
+
+  @@map("cultivo")
+}
+
+model EtapaCultivo {
+  id          Int     @id @default(autoincrement())
+  nombre      String  @unique @db.VarChar(100)
+  descripcion String?
+  activo      Boolean @default(true)
+
+  ciclos       CicloCultivo[]
+  evaluaciones EvaluacionCultivo[]
+
+  @@map("etapa_cultivo")
+}
+
+model CicloCultivo {
+  id              Int       @id @default(autoincrement())
+  huertoId        Int       @map("huerto_id")
+  cultivoId       Int       @map("cultivo_id")
+  etapaCultivoId  Int?      @map("etapa_cultivo_id")
+  fechaSiembra    DateTime? @map("fecha_siembra") @db.Date
+  fechaTrasplante DateTime? @map("fecha_trasplante") @db.Date
+  cantidadPlantas Int?      @map("cantidad_plantas")
+  fechaFin        DateTime? @map("fecha_fin") @db.Date
+  estado          String    @default("ACTIVO") @db.VarChar(30)
+  observaciones   String?
+
+  huerto Huerto @relation(fields: [huertoId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  cultivo Cultivo @relation(fields: [cultivoId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  etapaCultivo EtapaCultivo? @relation(fields: [etapaCultivoId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  producciones RegistroProduccion[]
+  evaluaciones EvaluacionCultivo[]
+
+  @@index([huertoId])
+  @@index([cultivoId])
+  @@index([etapaCultivoId])
+  @@map("ciclo_cultivo")
+}
+
+// ============================================================
+// CATÁLOGOS GENERALES
+// ============================================================
+
+model UnidadMedida {
+  id          Int     @id @default(autoincrement())
+  codigo      String  @unique @db.VarChar(30)
+  nombre      String  @db.VarChar(100)
+  descripcion String?
+  activo      Boolean @default(true)
+
+  detallesProduccion DetalleProduccion[]
+  ventas             RegistroVenta[]
+  insumos            Insumo[]
+  tratamientos       TratamientoAplicado[]
+  detallesEntrega    DetalleEntregaInsumo[]
+
+  @@map("unidad_medida")
+}
+
+model Moneda {
+  id      Int     @id @default(autoincrement())
+  codigo  String  @unique @db.VarChar(10)
+  nombre  String  @db.VarChar(100)
+  simbolo String? @db.VarChar(10)
+  activo  Boolean @default(true)
+
+  preciosVenta PrecioVenta[]
+
+  @@map("moneda")
+}
+
+// ============================================================
+// PRODUCCIÓN
+// ============================================================
+
+model RegistroProduccion {
+  id                 Int      @id @default(autoincrement())
+  cicloCultivoId     Int      @map("ciclo_cultivo_id")
+  fechaInicioPeriodo DateTime @map("fecha_inicio_periodo") @db.Date
+  fechaFinPeriodo    DateTime @map("fecha_fin_periodo") @db.Date
+  observaciones      String?
+
+  cicloCultivo CicloCultivo @relation(fields: [cicloCultivoId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  detalles DetalleProduccion[]
+  ventas   RegistroVenta[]
+
+  @@index([cicloCultivoId])
+  @@index([fechaInicioPeriodo, fechaFinPeriodo])
+  @@map("registro_produccion")
+}
+
+model DetalleProduccion {
+  id                   Int      @id @default(autoincrement())
+  registroProduccionId Int      @map("registro_produccion_id")
+  unidadMedidaId       Int      @map("unidad_medida_id")
+  productoPorPlanta    Decimal? @map("producto_por_planta") @db.Decimal(12, 2)
+  totalProduccion      Decimal? @map("total_produccion") @db.Decimal(12, 2)
+  observaciones        String?
+
+  registroProduccion RegistroProduccion @relation(fields: [registroProduccionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  unidadMedida UnidadMedida @relation(fields: [unidadMedidaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([registroProduccionId, unidadMedidaId])
+  @@index([registroProduccionId])
+  @@index([unidadMedidaId])
+  @@map("detalle_produccion")
+}
+
+// ============================================================
+// VENTAS
+// ============================================================
+
+model RegistroVenta {
+  id                   Int      @id @default(autoincrement())
+  registroProduccionId Int      @map("registro_produccion_id")
+  unidadMedidaId       Int      @map("unidad_medida_id")
+  fecha                DateTime @db.Date
+  cantidad             Decimal  @db.Decimal(12, 2)
+  observaciones        String?
+
+  registroProduccion RegistroProduccion @relation(fields: [registroProduccionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  unidadMedida UnidadMedida @relation(fields: [unidadMedidaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  precios PrecioVenta[]
+
+  @@index([registroProduccionId])
+  @@index([unidadMedidaId])
+  @@index([fecha])
+  @@map("registro_venta")
+}
+
+model PrecioVenta {
+  id              Int      @id @default(autoincrement())
+  registroVentaId Int      @map("registro_venta_id")
+  monedaId        Int      @map("moneda_id")
+  precioUnitario  Decimal  @map("precio_unitario") @db.Decimal(12, 2)
+  totalVenta      Decimal? @map("total_venta") @db.Decimal(12, 2)
+
+  registroVenta RegistroVenta @relation(fields: [registroVentaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  moneda Moneda @relation(fields: [monedaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([registroVentaId, monedaId])
+  @@index([registroVentaId])
+  @@index([monedaId])
+  @@map("precio_venta")
+}
+
+// ============================================================
+// VISITAS
+// ============================================================
+
+model CondicionClimatica {
+  id     Int     @id @default(autoincrement())
+  nombre String  @unique @db.VarChar(100)
+  activo Boolean @default(true)
+
+  visitas Visita[]
+
+  @@map("condicion_climatica")
+}
+
+model Visita {
+  id                   Int       @id @default(autoincrement())
+  familiaId            Int       @map("familia_id")
+  usuarioResponsableId Int       @map("usuario_responsable_id")
+  condicionClimaticaId Int?      @map("condicion_climatica_id")
+  fecha                DateTime  @db.Date
+  horaInicio           DateTime? @map("hora_inicio") @db.Time(0)
+  horaFin              DateTime? @map("hora_fin") @db.Time(0)
+  tipo                 String?   @db.VarChar(50)
+  estado               String    @default("PROGRAMADA") @db.VarChar(30)
+  comentario           String?
+  observaciones        String?
+
+  familia Familia @relation(fields: [familiaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  usuarioResponsable Usuario @relation(fields: [usuarioResponsableId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  condicionClimatica CondicionClimatica? @relation(fields: [condicionClimaticaId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  evaluaciones EvaluacionCultivo[]
+  evidencias   VisitaEvidencia[]
+  alertas      Alerta[]
+
+  @@index([familiaId])
+  @@index([usuarioResponsableId])
+  @@index([condicionClimaticaId])
+  @@index([fecha])
+  @@map("visita")
+}
+
+// ============================================================
+// EVALUACIONES AGRÍCOLAS
+// ============================================================
+
+model Calidad {
+  id     Int     @id @default(autoincrement())
+  nombre String  @unique @db.VarChar(100)
+  activo Boolean @default(true)
+
+  evaluaciones EvaluacionCultivo[]
+
+  @@map("calidad")
+}
+
+model EvaluacionCultivo {
+  id             Int     @id @default(autoincrement())
+  visitaId       Int     @map("visita_id")
+  cicloCultivoId Int     @map("ciclo_cultivo_id")
+  etapaCultivoId Int?    @map("etapa_cultivo_id")
+  calidadId      Int?    @map("calidad_id")
+  observaciones  String?
+
+  visita Visita @relation(fields: [visitaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  cicloCultivo CicloCultivo @relation(fields: [cicloCultivoId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  etapaCultivo EtapaCultivo? @relation(fields: [etapaCultivoId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  calidad Calidad? @relation(fields: [calidadId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  enfermedades EvaluacionEnfermedad[]
+  plagas       EvaluacionPlaga[]
+  tratamientos TratamientoAplicado[]
+  seguimientos SeguimientoTecnico[]
+  evidencias   EvaluacionEvidencia[]
+
+  @@index([visitaId])
+  @@index([cicloCultivoId])
+  @@index([etapaCultivoId])
+  @@index([calidadId])
+  @@map("evaluacion_cultivo")
+}
+
+// ============================================================
+// ENFERMEDADES
+// ============================================================
+
+model Enfermedad {
+  id          Int     @id @default(autoincrement())
+  nombre      String  @unique @db.VarChar(100)
+  descripcion String?
+  activo      Boolean @default(true)
+
+  evaluaciones EvaluacionEnfermedad[]
+
+  @@map("enfermedad")
+}
+
+model EvaluacionEnfermedad {
+  id                  Int      @id @default(autoincrement())
+  evaluacionCultivoId Int      @map("evaluacion_cultivo_id")
+  enfermedadId        Int      @map("enfermedad_id")
+  porcentajeDanio     Decimal? @map("porcentaje_danio") @db.Decimal(5, 2)
+  observaciones       String?
+
+  evaluacionCultivo EvaluacionCultivo @relation(fields: [evaluacionCultivoId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  enfermedad Enfermedad @relation(fields: [enfermedadId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([evaluacionCultivoId, enfermedadId])
+  @@index([evaluacionCultivoId])
+  @@index([enfermedadId])
+  @@map("evaluacion_enfermedad")
+}
+
+// ============================================================
+// PLAGAS
+// ============================================================
+
+model Plaga {
+  id          Int     @id @default(autoincrement())
+  nombre      String  @unique @db.VarChar(100)
+  descripcion String?
+  activo      Boolean @default(true)
+
+  evaluaciones EvaluacionPlaga[]
+
+  @@map("plaga")
+}
+
+model EvaluacionPlaga {
+  id                  Int      @id @default(autoincrement())
+  evaluacionCultivoId Int      @map("evaluacion_cultivo_id")
+  plagaId             Int      @map("plaga_id")
+  porcentajeDanio     Decimal? @map("porcentaje_danio") @db.Decimal(5, 2)
+  observaciones       String?
+
+  evaluacionCultivo EvaluacionCultivo @relation(fields: [evaluacionCultivoId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  plaga Plaga @relation(fields: [plagaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([evaluacionCultivoId, plagaId])
+  @@index([evaluacionCultivoId])
+  @@index([plagaId])
+  @@map("evaluacion_plaga")
+}
+
+// ============================================================
+// INSUMOS Y TRATAMIENTOS
+// ============================================================
+
+model CategoriaInsumo {
+  id          Int     @id @default(autoincrement())
+  nombre      String  @unique @db.VarChar(100)
+  descripcion String?
+  activo      Boolean @default(true)
+
+  insumos Insumo[]
+
+  @@map("categoria_insumo")
+}
+
+model Insumo {
+  id                Int     @id @default(autoincrement())
+  categoriaInsumoId Int     @map("categoria_insumo_id")
+  unidadMedidaId    Int?    @map("unidad_medida_id")
+  nombre            String  @db.VarChar(150)
+  descripcion       String?
+  activo            Boolean @default(true)
+
+  categoriaInsumo CategoriaInsumo @relation(fields: [categoriaInsumoId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  unidadMedida UnidadMedida? @relation(fields: [unidadMedidaId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  tratamientos    TratamientoAplicado[]
+  detallesEntrega DetalleEntregaInsumo[]
+
+  @@index([categoriaInsumoId])
+  @@index([unidadMedidaId])
+  @@map("insumo")
+}
+
+model TratamientoAplicado {
+  id                  Int      @id @default(autoincrement())
+  evaluacionCultivoId Int      @map("evaluacion_cultivo_id")
+  insumoId            Int      @map("insumo_id")
+  unidadMedidaId      Int?     @map("unidad_medida_id")
+  fechaAplicacion     DateTime @map("fecha_aplicacion") @db.Date
+  cantidad            Decimal? @db.Decimal(12, 2)
+  observaciones       String?
+
+  evaluacionCultivo EvaluacionCultivo @relation(fields: [evaluacionCultivoId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  insumo Insumo @relation(fields: [insumoId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  unidadMedida UnidadMedida? @relation(fields: [unidadMedidaId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([evaluacionCultivoId])
+  @@index([insumoId])
+  @@index([unidadMedidaId])
+  @@map("tratamiento_aplicado")
+}
+
+// ============================================================
+// ENTREGA DE INSUMOS
+// ============================================================
+
+model EntregaInsumo {
+  id                   Int      @id @default(autoincrement())
+  familiaId            Int      @map("familia_id")
+  usuarioResponsableId Int?     @map("usuario_responsable_id")
+  fecha                DateTime @db.Date
+  observaciones        String?
+
+  familia Familia @relation(fields: [familiaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  usuarioResponsable Usuario? @relation(fields: [usuarioResponsableId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  detalles DetalleEntregaInsumo[]
+
+  @@index([familiaId])
+  @@index([usuarioResponsableId])
+  @@index([fecha])
+  @@map("entrega_insumo")
+}
+
+model DetalleEntregaInsumo {
+  id              Int     @id @default(autoincrement())
+  entregaInsumoId Int     @map("entrega_insumo_id")
+  insumoId        Int     @map("insumo_id")
+  unidadMedidaId  Int     @map("unidad_medida_id")
+  cantidad        Decimal @db.Decimal(12, 2)
+  observaciones   String?
+
+  entregaInsumo EntregaInsumo @relation(fields: [entregaInsumoId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  insumo Insumo @relation(fields: [insumoId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  unidadMedida UnidadMedida @relation(fields: [unidadMedidaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([entregaInsumoId])
+  @@index([insumoId])
+  @@index([unidadMedidaId])
+  @@map("detalle_entrega_insumo")
+}
+
+// ============================================================
+// SEGUIMIENTO TÉCNICO
+// ============================================================
+
+model SeguimientoTecnico {
+  id                   Int       @id @default(autoincrement())
+  evaluacionCultivoId  Int       @map("evaluacion_cultivo_id")
+  usuarioResponsableId Int?      @map("usuario_responsable_id")
+  recomendacion        String
+  fechaProgramada      DateTime? @map("fecha_programada") @db.Date
+  fechaRealizada       DateTime? @map("fecha_realizada") @db.Date
+  estado               String    @default("PENDIENTE") @db.VarChar(30)
+  resultado            String?
+  observaciones        String?
+
+  evaluacionCultivo EvaluacionCultivo @relation(fields: [evaluacionCultivoId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  usuarioResponsable Usuario? @relation(fields: [usuarioResponsableId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  alertas Alerta[]
+
+  @@index([evaluacionCultivoId])
+  @@index([usuarioResponsableId])
+  @@index([fechaProgramada])
+  @@map("seguimiento_tecnico")
+}
+
+// ============================================================
+// CAPACITACIONES
+// ============================================================
+
+model Capacitacion {
+  id            Int       @id @default(autoincrement())
+  comunidadId   Int       @map("comunidad_id")
+  tema          String    @db.VarChar(200)
+  descripcion   String?
+  fecha         DateTime  @db.Date
+  horaInicio    DateTime? @map("hora_inicio") @db.Time(0)
+  horaFin       DateTime? @map("hora_fin") @db.Time(0)
+  facilitador   String?   @db.VarChar(200)
+  observaciones String?
+  estado        String    @default("PROGRAMADA") @db.VarChar(30)
+
+  comunidad Comunidad @relation(fields: [comunidadId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  participantes ParticipacionCapacitacion[]
+  evidencias    CapacitacionEvidencia[]
+
+  @@index([comunidadId])
+  @@index([fecha])
+  @@map("capacitacion")
+}
+
+model ParticipacionCapacitacion {
+  id                  Int     @id @default(autoincrement())
+  capacitacionId      Int     @map("capacitacion_id")
+  integranteFamiliaId Int     @map("integrante_familia_id")
+  asistio             Boolean @default(false)
+  observaciones       String?
+
+  capacitacion Capacitacion @relation(fields: [capacitacionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  integranteFamilia IntegranteFamilia @relation(fields: [integranteFamiliaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@unique([capacitacionId, integranteFamiliaId])
+  @@index([capacitacionId])
+  @@index([integranteFamiliaId])
+  @@map("participacion_capacitacion")
+}
+
+// ============================================================
+// EVIDENCIAS
+// ============================================================
+
+model Evidencia {
+  id            Int      @id @default(autoincrement())
+  nombreArchivo String   @map("nombre_archivo") @db.VarChar(255)
+  rutaArchivo   String   @map("ruta_archivo") @db.VarChar(500)
+  tipoArchivo   String?  @map("tipo_archivo") @db.VarChar(100)
+  descripcion   String?
+  fechaRegistro DateTime @default(now()) @map("fecha_registro")
+
+  visitas        VisitaEvidencia[]
+  evaluaciones   EvaluacionEvidencia[]
+  capacitaciones CapacitacionEvidencia[]
+
+  @@map("evidencia")
+}
+
+model VisitaEvidencia {
+  visitaId    Int @map("visita_id")
+  evidenciaId Int @map("evidencia_id")
+
+  visita Visita @relation(fields: [visitaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  evidencia Evidencia @relation(fields: [evidenciaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([visitaId, evidenciaId])
+  @@index([evidenciaId])
+  @@map("visita_evidencia")
+}
+
+model EvaluacionEvidencia {
+  evaluacionCultivoId Int @map("evaluacion_cultivo_id")
+  evidenciaId         Int @map("evidencia_id")
+
+  evaluacionCultivo EvaluacionCultivo @relation(fields: [evaluacionCultivoId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  evidencia Evidencia @relation(fields: [evidenciaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([evaluacionCultivoId, evidenciaId])
+  @@index([evidenciaId])
+  @@map("evaluacion_evidencia")
+}
+
+model CapacitacionEvidencia {
+  capacitacionId Int @map("capacitacion_id")
+  evidenciaId    Int @map("evidencia_id")
+
+  capacitacion Capacitacion @relation(fields: [capacitacionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  evidencia Evidencia @relation(fields: [evidenciaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([capacitacionId, evidenciaId])
+  @@index([evidenciaId])
+  @@map("capacitacion_evidencia")
+}
+
+// ============================================================
+// ALERTAS
+// ============================================================
+
+model Alerta {
+  id                   Int       @id @default(autoincrement())
+  familiaId            Int?      @map("familia_id")
+  visitaId             Int?      @map("visita_id")
+  seguimientoTecnicoId Int?      @map("seguimiento_tecnico_id")
+  tipo                 String    @db.VarChar(100)
+  descripcion          String
+  fechaGeneracion      DateTime  @default(now()) @map("fecha_generacion")
+  fechaVencimiento     DateTime? @map("fecha_vencimiento")
+  estado               String    @default("PENDIENTE") @db.VarChar(30)
+  fechaResolucion      DateTime? @map("fecha_resolucion")
+
+  familia Familia? @relation(fields: [familiaId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  visita Visita? @relation(fields: [visitaId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  seguimientoTecnico SeguimientoTecnico? @relation(fields: [seguimientoTecnicoId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([familiaId])
+  @@index([visitaId])
+  @@index([seguimientoTecnicoId])
+  @@index([estado])
+  @@index([fechaVencimiento])
+  @@map("alerta")
+}
+
+// ============================================================
+// USUARIOS, ROLES Y PERMISOS
+// ============================================================
+
+model Usuario {
+  id            Int       @id @default(autoincrement())
+  nombre        String    @db.VarChar(150)
+  correo        String    @unique @db.VarChar(150)
+  passwordHash  String    @map("password_hash") @db.VarChar(255)
+  estado        String    @default("ACTIVO") @db.VarChar(30)
+  ultimoAcceso  DateTime? @map("ultimo_acceso")
+  fechaCreacion DateTime  @default(now()) @map("fecha_creacion")
+
+  roles          UsuarioRol[]
+  visitas        Visita[]
+  entregasInsumo EntregaInsumo[]
+  seguimientos   SeguimientoTecnico[]
+  bitacoras      Bitacora[]
+
+  @@map("usuario")
+}
+
+model Rol {
+  id          Int     @id @default(autoincrement())
+  nombre      String  @unique @db.VarChar(100)
+  descripcion String?
+  activo      Boolean @default(true)
+
+  usuarios UsuarioRol[]
+  permisos RolPermiso[]
+
+  @@map("rol")
+}
+
+model Permiso {
+  id          Int     @id @default(autoincrement())
+  codigo      String  @unique @db.VarChar(100)
+  nombre      String  @db.VarChar(150)
+  descripcion String?
+
+  roles RolPermiso[]
+
+  @@map("permiso")
+}
+
+model UsuarioRol {
+  usuarioId Int @map("usuario_id")
+  rolId     Int @map("rol_id")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  rol Rol @relation(fields: [rolId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([usuarioId, rolId])
+  @@index([rolId])
+  @@map("usuario_rol")
+}
+
+model RolPermiso {
+  rolId     Int @map("rol_id")
+  permisoId Int @map("permiso_id")
+
+  rol Rol @relation(fields: [rolId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  permiso Permiso @relation(fields: [permisoId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([rolId, permisoId])
+  @@index([permisoId])
+  @@map("rol_permiso")
+}
+
+// ============================================================
+// AUDITORÍA
+// ============================================================
+
+model Bitacora {
+  id              Int      @id @default(autoincrement())
+  usuarioId       Int      @map("usuario_id")
+  entidad         String   @db.VarChar(100)
+  registroId      Int?     @map("registro_id")
+  accion          String   @db.VarChar(50)
+  fecha           DateTime @default(now())
+  datosAnteriores Json?    @map("datos_anteriores")
+  datosNuevos     Json?    @map("datos_nuevos")
+  descripcion     String?
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([usuarioId])
+  @@index([fecha])
+  @@index([entidad, registroId])
+  @@map("bitacora")
+}
