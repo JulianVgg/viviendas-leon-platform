@@ -2,9 +2,13 @@ import { forwardRef, type ButtonHTMLAttributes } from 'react'
 import { cn } from '@/app/lib/cn'
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost'
-type ButtonSize = 'sm' | 'md' | 'lg'
 
-const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: ButtonSize }>(function Button({ className, variant = 'primary', size = 'md', ...props }, ref) {
+const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: 'sm' | 'md' | 'lg' }>(function Button({
+  className,
+  variant = 'primary',
+  size = 'md',
+  ...props
+}, ref) {
   return <button
     ref={ref}
     className={cn(
