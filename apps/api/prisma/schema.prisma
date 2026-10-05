@@ -27,7 +27,7 @@ model Comunidad {
   nombre      String
   activo      Boolean
 
-  municipio      Municipio      @relation(fields: [municipioId], references: [id])
+  municipio      Municipio      @relation(fields: [municipioId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   familias       Familia[]
   capacitaciones Capacitacion[]
 
@@ -48,7 +48,7 @@ model Familia {
   estado           String
   observaciones    String?
 
-  comunidad Comunidad @relation(fields: [comunidadId], references: [id])
+  comunidad Comunidad @relation(fields: [comunidadId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   integrantes    IntegranteFamilia[]
   programas      FamiliaPrograma[]
@@ -72,7 +72,7 @@ model IntegranteFamilia {
   observaciones   String?
   activo          Boolean
 
-  familia Familia @relation(fields: [familiaId], references: [id])
+  familia Familia @relation(fields: [familiaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   participaciones ParticipacionCapacitacion[]
 
@@ -106,8 +106,8 @@ model FamiliaPrograma {
   estado        String?
   observaciones String?
 
-  familia  Familia  @relation(fields: [familiaId], references: [id])
-  programa Programa @relation(fields: [programaId], references: [id])
+  familia  Familia  @relation(fields: [familiaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  programa Programa @relation(fields: [programaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@unique([familiaId, programaId])
   @@index([familiaId])
@@ -128,7 +128,7 @@ model Huerto {
   estado        String
   observaciones String?
 
-  familia Familia @relation(fields: [familiaId], references: [id])
+  familia Familia @relation(fields: [familiaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   ciclos CicloCultivo[]
 
@@ -169,8 +169,8 @@ model CicloCultivo {
   estado          String
   observaciones   String?
 
-  huerto  Huerto  @relation(fields: [huertoId], references: [id])
-  cultivo Cultivo @relation(fields: [cultivoId], references: [id])
+  huerto  Huerto  @relation(fields: [huertoId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  cultivo Cultivo @relation(fields: [cultivoId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   producciones RegistroProduccion[]
   evaluaciones EvaluacionCultivo[]
@@ -222,12 +222,13 @@ model RegistroProduccion {
   fechaFinPeriodo    DateTime @map("fecha_fin_periodo") @db.Date
   observaciones      String?
 
-  cicloCultivo CicloCultivo @relation(fields: [cicloCultivoId], references: [id])
+  cicloCultivo CicloCultivo @relation(fields: [cicloCultivoId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   detalles DetalleProduccion[]
   ventas   RegistroVenta[]
 
   @@index([cicloCultivoId])
+  @@index([fechaInicioPeriodo, fechaFinPeriodo])
   @@map("registro_produccion")
 }
 
@@ -237,8 +238,8 @@ model DetalleProduccion {
   unidadMedidaId       Int     @map("unidad_medida_id")
   cantidadTotal        Decimal @map("cantidad_total")
 
-  registroProduccion RegistroProduccion @relation(fields: [registroProduccionId], references: [id])
-  unidadMedida       UnidadMedida       @relation(fields: [unidadMedidaId], references: [id])
+  registroProduccion RegistroProduccion @relation(fields: [registroProduccionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  unidadMedida       UnidadMedida       @relation(fields: [unidadMedidaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@unique([registroProduccionId, unidadMedidaId])
   @@index([registroProduccionId])
@@ -254,13 +255,14 @@ model RegistroVenta {
   unidadMedidaId       Int       @map("unidad_medida_id")
   observaciones        String?
 
-  registroProduccion RegistroProduccion @relation(fields: [registroProduccionId], references: [id])
-  unidadMedida       UnidadMedida       @relation(fields: [unidadMedidaId], references: [id])
+  registroProduccion RegistroProduccion @relation(fields: [registroProduccionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  unidadMedida       UnidadMedida       @relation(fields: [unidadMedidaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   precios PrecioVenta[]
 
   @@index([registroProduccionId])
   @@index([unidadMedidaId])
+  @@index([fecha])
   @@map("registro_venta")
 }
 
@@ -270,8 +272,8 @@ model PrecioVenta {
   monedaId        Int     @map("moneda_id")
   precioUnitario  Decimal @map("precio_unitario")
 
-  registroVenta RegistroVenta @relation(fields: [registroVentaId], references: [id])
-  moneda        Moneda        @relation(fields: [monedaId], references: [id])
+  registroVenta RegistroVenta @relation(fields: [registroVentaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  moneda        Moneda        @relation(fields: [monedaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@unique([registroVentaId, monedaId])
   @@index([registroVentaId])
@@ -305,9 +307,9 @@ model Visita {
   estado               String
   observaciones        String?
 
-  familia            Familia             @relation(fields: [familiaId], references: [id])
-  usuarioResponsable Usuario             @relation(fields: [usuarioResponsableId], references: [id])
-  condicionClimatica CondicionClimatica? @relation(fields: [condicionClimaticaId], references: [id])
+  familia            Familia             @relation(fields: [familiaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  usuarioResponsable Usuario             @relation(fields: [usuarioResponsableId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  condicionClimatica CondicionClimatica? @relation(fields: [condicionClimaticaId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   evaluaciones EvaluacionCultivo[]
   evidencias   VisitaEvidencia[]
@@ -316,6 +318,7 @@ model Visita {
   @@index([familiaId])
   @@index([usuarioResponsableId])
   @@index([condicionClimaticaId])
+  @@index([fecha])
   @@map("visita")
 }
 
@@ -337,10 +340,10 @@ model EvaluacionCultivo {
   calidadId      Int?    @map("calidad_id")
   observaciones  String?
 
-  visita       Visita        @relation(fields: [visitaId], references: [id])
-  cicloCultivo CicloCultivo  @relation(fields: [cicloCultivoId], references: [id])
-  etapaCultivo EtapaCultivo? @relation(fields: [etapaCultivoId], references: [id])
-  calidad      Calidad?      @relation(fields: [calidadId], references: [id])
+  visita       Visita        @relation(fields: [visitaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  cicloCultivo CicloCultivo  @relation(fields: [cicloCultivoId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  etapaCultivo EtapaCultivo? @relation(fields: [etapaCultivoId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  calidad      Calidad?      @relation(fields: [calidadId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   enfermedades EvaluacionEnfermedad[]
   plagas       EvaluacionPlaga[]
@@ -378,8 +381,8 @@ model EvaluacionEnfermedad {
   porcentajeDanio     Decimal? @map("porcentaje_danio")
   observaciones       String?
 
-  evaluacionCultivo EvaluacionCultivo @relation(fields: [evaluacionCultivoId], references: [id])
-  enfermedad        Enfermedad        @relation(fields: [enfermedadId], references: [id])
+  evaluacionCultivo EvaluacionCultivo @relation(fields: [evaluacionCultivoId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  enfermedad        Enfermedad        @relation(fields: [enfermedadId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@unique([evaluacionCultivoId, enfermedadId])
   @@index([evaluacionCultivoId])
@@ -405,8 +408,8 @@ model EvaluacionPlaga {
   porcentajeDanio     Decimal? @map("porcentaje_danio")
   observaciones       String?
 
-  evaluacionCultivo EvaluacionCultivo @relation(fields: [evaluacionCultivoId], references: [id])
-  plaga             Plaga             @relation(fields: [plagaId], references: [id])
+  evaluacionCultivo EvaluacionCultivo @relation(fields: [evaluacionCultivoId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  plaga             Plaga             @relation(fields: [plagaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@unique([evaluacionCultivoId, plagaId])
   @@index([evaluacionCultivoId])
@@ -436,7 +439,7 @@ model Insumo {
   descripcion       String?
   activo            Boolean
 
-  categoriaInsumo CategoriaInsumo @relation(fields: [categoriaInsumoId], references: [id])
+  categoriaInsumo CategoriaInsumo @relation(fields: [categoriaInsumoId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   tratamientos    TratamientoAplicado[]
   detallesEntrega DetalleEntregaInsumo[]
@@ -455,9 +458,9 @@ model TratamientoAplicado {
   cantidad            Decimal?
   observaciones       String?
 
-  evaluacionCultivo EvaluacionCultivo @relation(fields: [evaluacionCultivoId], references: [id])
-  insumo            Insumo            @relation(fields: [insumoId], references: [id])
-  unidadMedida      UnidadMedida?     @relation(fields: [unidadMedidaId], references: [id])
+  evaluacionCultivo EvaluacionCultivo @relation(fields: [evaluacionCultivoId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  insumo            Insumo            @relation(fields: [insumoId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  unidadMedida      UnidadMedida?     @relation(fields: [unidadMedidaId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   @@index([evaluacionCultivoId])
   @@index([insumoId])
@@ -473,13 +476,14 @@ model EntregaInsumo {
   estado               String
   observaciones        String?
 
-  familia            Familia @relation(fields: [familiaId], references: [id])
-  usuarioResponsable Usuario @relation(fields: [usuarioResponsableId], references: [id])
+  familia            Familia @relation(fields: [familiaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  usuarioResponsable Usuario @relation(fields: [usuarioResponsableId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   detalles DetalleEntregaInsumo[]
 
   @@index([familiaId])
   @@index([usuarioResponsableId])
+  @@index([fecha])
   @@map("entrega_insumo")
 }
 
@@ -491,9 +495,9 @@ model DetalleEntregaInsumo {
   cantidad        Decimal
   observaciones   String?
 
-  entregaInsumo EntregaInsumo @relation(fields: [entregaInsumoId], references: [id])
-  insumo        Insumo        @relation(fields: [insumoId], references: [id])
-  unidadMedida  UnidadMedida  @relation(fields: [unidadMedidaId], references: [id])
+  entregaInsumo EntregaInsumo @relation(fields: [entregaInsumoId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  insumo        Insumo        @relation(fields: [insumoId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  unidadMedida  UnidadMedida  @relation(fields: [unidadMedidaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@unique([entregaInsumoId, insumoId, unidadMedidaId])
   @@index([entregaInsumoId])
@@ -517,13 +521,14 @@ model SeguimientoTecnico {
   resultado            String?
   observaciones        String?
 
-  evaluacionCultivo  EvaluacionCultivo @relation(fields: [evaluacionCultivoId], references: [id])
-  usuarioResponsable Usuario           @relation(fields: [usuarioResponsableId], references: [id])
+  evaluacionCultivo  EvaluacionCultivo @relation(fields: [evaluacionCultivoId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  usuarioResponsable Usuario           @relation(fields: [usuarioResponsableId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   alertas Alerta[]
 
   @@index([evaluacionCultivoId])
   @@index([usuarioResponsableId])
+  @@index([fechaProgramada])
   @@map("seguimiento_tecnico")
 }
 
@@ -543,12 +548,13 @@ model Capacitacion {
   estado            String
   observaciones     String?
 
-  comunidad Comunidad? @relation(fields: [comunidadId], references: [id])
+  comunidad Comunidad? @relation(fields: [comunidadId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   participantes ParticipacionCapacitacion[]
   evidencias    CapacitacionEvidencia[]
 
   @@index([comunidadId])
+  @@index([fecha])
   @@map("capacitacion")
 }
 
@@ -559,8 +565,8 @@ model ParticipacionCapacitacion {
   asistio             Boolean
   observaciones       String?
 
-  capacitacion      Capacitacion      @relation(fields: [capacitacionId], references: [id])
-  integranteFamilia IntegranteFamilia @relation(fields: [integranteFamiliaId], references: [id])
+  capacitacion      Capacitacion      @relation(fields: [capacitacionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  integranteFamilia IntegranteFamilia @relation(fields: [integranteFamiliaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@unique([capacitacionId, integranteFamiliaId])
   @@index([capacitacionId])
@@ -591,8 +597,8 @@ model VisitaEvidencia {
   visitaId    Int @map("visita_id")
   evidenciaId Int @map("evidencia_id")
 
-  visita    Visita    @relation(fields: [visitaId], references: [id])
-  evidencia Evidencia @relation(fields: [evidenciaId], references: [id])
+  visita    Visita    @relation(fields: [visitaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  evidencia Evidencia @relation(fields: [evidenciaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@id([visitaId, evidenciaId])
   @@index([evidenciaId])
@@ -603,8 +609,8 @@ model EvaluacionEvidencia {
   evaluacionCultivoId Int @map("evaluacion_cultivo_id")
   evidenciaId         Int @map("evidencia_id")
 
-  evaluacionCultivo EvaluacionCultivo @relation(fields: [evaluacionCultivoId], references: [id])
-  evidencia         Evidencia         @relation(fields: [evidenciaId], references: [id])
+  evaluacionCultivo EvaluacionCultivo @relation(fields: [evaluacionCultivoId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  evidencia         Evidencia         @relation(fields: [evidenciaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@id([evaluacionCultivoId, evidenciaId])
   @@index([evidenciaId])
@@ -615,8 +621,8 @@ model CapacitacionEvidencia {
   capacitacionId Int @map("capacitacion_id")
   evidenciaId    Int @map("evidencia_id")
 
-  capacitacion Capacitacion @relation(fields: [capacitacionId], references: [id])
-  evidencia    Evidencia    @relation(fields: [evidenciaId], references: [id])
+  capacitacion Capacitacion @relation(fields: [capacitacionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  evidencia    Evidencia    @relation(fields: [evidenciaId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@id([capacitacionId, evidenciaId])
   @@index([evidenciaId])
@@ -639,13 +645,15 @@ model Alerta {
   estado               String
   fechaResolucion      DateTime? @map("fecha_resolucion")
 
-  familia            Familia?            @relation(fields: [familiaId], references: [id])
-  visita             Visita?             @relation(fields: [visitaId], references: [id])
-  seguimientoTecnico SeguimientoTecnico? @relation(fields: [seguimientoTecnicoId], references: [id])
+  familia            Familia?            @relation(fields: [familiaId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  visita             Visita?             @relation(fields: [visitaId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  seguimientoTecnico SeguimientoTecnico? @relation(fields: [seguimientoTecnicoId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   @@index([familiaId])
   @@index([visitaId])
   @@index([seguimientoTecnicoId])
+  @@index([estado])
+  @@index([fechaVencimiento])
   @@map("alerta")
 }
 
@@ -698,8 +706,8 @@ model UsuarioRol {
   usuarioId Int @map("usuario_id")
   rolId     Int @map("rol_id")
 
-  usuario Usuario @relation(fields: [usuarioId], references: [id])
-  rol     Rol     @relation(fields: [rolId], references: [id])
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  rol     Rol     @relation(fields: [rolId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@id([usuarioId, rolId])
   @@index([rolId])
@@ -710,8 +718,8 @@ model RolPermiso {
   rolId     Int @map("rol_id")
   permisoId Int @map("permiso_id")
 
-  rol     Rol     @relation(fields: [rolId], references: [id])
-  permiso Permiso @relation(fields: [permisoId], references: [id])
+  rol     Rol     @relation(fields: [rolId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  permiso Permiso @relation(fields: [permisoId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@id([rolId, permisoId])
   @@index([permisoId])
@@ -733,8 +741,10 @@ model Bitacora {
   datosNuevos     String?  @map("datos_nuevos")
   descripcion     String?
 
-  usuario Usuario @relation(fields: [usuarioId], references: [id])
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([usuarioId])
+  @@index([fecha])
+  @@index([entidad, registroId])
   @@map("bitacora")
 }
