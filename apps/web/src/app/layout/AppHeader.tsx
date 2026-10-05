@@ -8,6 +8,8 @@ import Button from '@/components/ui/Button'
 import { formControlClassName } from '@/components/ui/FormField'
 import SyncStatus from '@/components/ui/SyncStatus'
 
+const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-950'
+
 export default function AppHeader() {
   const { isMobileOpen, toggleSidebar, toggleMobileSidebar } = useSidebar()
   const { theme, toggleTheme } = useTheme()

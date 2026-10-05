@@ -104,3 +104,24 @@ Una visita puede contener múltiples evaluaciones. Cada evaluación mantiene sus
 La condición climática pertenece a la visita porque describe el contexto de la actividad completa y no un cultivo individual. La evaluación selecciona un ciclo de cultivo existente; no crea ni modifica el ciclo. La etapa y la calidad pertenecen a la evaluación, porque describen el estado observado durante esa visita. Las enfermedades, plagas y tratamientos también pertenecen a la evaluación que los identificó o aplicó.
 
 Los selectores de familias, usuarios, ciclos, etapas, calidades, enfermedades, plagas, insumos, unidades y condiciones climáticas utilizan catálogos estáticos locales. La demostración no realiza consultas externas ni representa autenticación, inventario o persistencia.
+
+## Verificación responsive y estados
+
+La revisión del layout cubre los breakpoints de Tailwind utilizados por la aplicación: móvil pequeño (`320px`), móvil (`360px`), tablet (`768px`), escritorio pequeño (`1024px`) y escritorio (`1280px` o superior).
+
+Correcciones aplicadas:
+
+- El encabezado reduce espacios en móvil, oculta únicamente la marca secundaria y mantiene el menú, tema, notificaciones y perfil disponibles.
+- El contenedor principal ya no utiliza `overflow-x-clip`, evitando ocultar contenido accidentalmente.
+- Sidebar, backdrop, enlaces, botones y controles del encabezado tienen una indicación `focus-visible` consistente.
+- El símbolo decorativo de `EmptyState` está marcado con `aria-hidden="true"`.
+- `DataTableContainer` conserva `overflow-x-auto` para tablas anchas.
+
+Estados disponibles para verificación:
+
+- Carga: `LoadingState`.
+- Vacío: `EmptyState`.
+- Error y confirmación: `Alert`.
+- Sin conexión y sincronización: `SyncStatus`, preparado para conectarse a la infraestructura futura de sincronización.
+
+La revisión realizada en este entorno fue estática. No se contó con una herramienta de navegador automatizado para medir visualmente cada viewport ni con una herramienta automatizada de contraste. La verificación visual interactiva y de teclado debe completarse en un navegador antes de cerrar el issue.
