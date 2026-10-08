@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import { familiesRouter } from './modules/families/families.routes.js';
 
 export const app = express();
 
@@ -17,3 +18,4 @@ app.get('/api/health', (_req, res) => {
     service: 'viviendas-leon-api',
   });
 });
+app.use('/api/v1/familias', familiesRouter);
