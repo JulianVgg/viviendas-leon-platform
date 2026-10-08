@@ -1,5 +1,38 @@
 import type { Request, Response } from 'express'
-import { listFamilies } from './families.service.js'
+import { createFamily, findFamily, listFamilies } from './families.service.js'
+import { parseFamilyId, validateFamilyInput } from './families.validation.js'
+
+export async function postFamily(req: Request, res: Response) {
+  const result = validateFamilyInput(req.body)
+  if (!result.data) return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Revisa los datos de la familia.', details: result.details } })
+  try {
+    const family = await createFamily(result.data)
+    if (!family) return res.status(400).json({ error: {
+      code: 'VALIDATION_ERROR', message: 'Revisa la comunidad seleccionada.',
+      details: [{ field: 'comunidadId', message: 'La comunidad debe existir y estar activa, al igual que su municipio.' }],
+    } })
+    return res.status(201).location(`/api/v1/familias/${family.id}`).json({ data: family })
+  } catch (error) {
+    console.error('Failed to create family:', error)
+    return res.status(500).json({ error: { code: 'FAMILY_CREATE_ERROR', message: 'No fue posible guardar la familia. Intenta nuevamente.' } })
+  }
+}
+
+export async function getFamily(req: Request, res: Response) {
+  const id = parseFamilyId(req.params.id)
+  if (id === null) return res.status(400).json({ error: {
+    code: 'VALIDATION_ERROR', message: 'El identificador no es válido.',
+    details: [{ field: 'id', message: 'El identificador debe ser un entero positivo válido.' }],
+  } })
+  try {
+    const family = await findFamily(id)
+    if (!family) return res.status(404).json({ error: { code: 'FAMILY_NOT_FOUND', message: 'La familia solicitada no existe.' } })
+    return res.json({ data: family })
+  } catch (error) {
+    console.error('Failed to get family:', error)
+    return res.status(500).json({ error: { code: 'FAMILY_DETAIL_ERROR', message: 'No fue posible consultar la familia.' } })
+  }
+}
 
 const DEFAULT_PAGE = 1
 const DEFAULT_LIMIT = 20

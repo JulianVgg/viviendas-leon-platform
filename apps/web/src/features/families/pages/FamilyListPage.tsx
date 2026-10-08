@@ -137,6 +137,7 @@ export default function FamilyListPage() {
       <PageHeader
         title="Familias y beneficiarios"
         description="Consulta las familias registradas y localízalas por nombre, integrante, comunidad o programa."
+        actions={<Link to="/familias/nueva" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500">Registrar familia</Link>}
       />
 
       <ComponentCard
