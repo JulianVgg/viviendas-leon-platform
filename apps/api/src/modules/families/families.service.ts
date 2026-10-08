@@ -1,6 +1,35 @@
 import { getPrismaClient } from '../../config/prisma.js'
 import type { Prisma } from '../../generated/prisma/client.js'
-import type { FamilyListFilters, FamilyListItem } from './families.types.js'
+import type { FamilyCreateInput, FamilyListFilters, FamilyListItem } from './families.types.js'
+
+const familyDetailSelect = {
+  id: true,
+  nombreReferencia: true,
+  fechaIngreso: true,
+  estado: true,
+  observaciones: true,
+  comunidad: { select: { id: true, nombre: true, municipio: { select: { id: true, nombre: true } } } },
+} satisfies Prisma.FamiliaSelect
+
+export async function findFamily(id: number) {
+  return getPrismaClient().familia.findUnique({ where: { id }, select: familyDetailSelect })
+}
+
+export async function createFamily(input: FamilyCreateInput) {
+  return getPrismaClient().$transaction(async (transaction) => {
+    // Lock the related rows while validating and creating the family.
+    const communities = await transaction.$queryRaw<Array<{ id: number }>>`
+      SELECT c.id FROM comunidad c JOIN municipio m ON m.id = c.municipio_id
+      WHERE c.id = ${input.comunidadId} AND c.activo = true AND m.activo = true
+      FOR SHARE OF c, m
+    `
+    if (!communities.length) return null
+    return transaction.familia.create({
+      data: { ...input, estado: 'ACTIVA' },
+      select: familyDetailSelect,
+    })
+  })
+}
 
 export type FamilyListResult = {
   data: FamilyListItem[]

@@ -1,3 +1,12 @@
+export type FamilyCreateInput = {
+  nombreReferencia: string
+  comunidadId: number
+  fechaIngreso: Date | null
+  observaciones: string | null
+}
+
+export type ValidationDetail = { field: string; message: string }
+
 export type FamilyListFilters = {
   search?: string
   estado?: string

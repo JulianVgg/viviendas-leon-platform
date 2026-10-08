@@ -1,3 +1,25 @@
+export type CommunityOption = {
+  id: number
+  nombre: string
+  municipio: { id: number; nombre: string }
+}
+
+export type FamilyDetail = {
+  id: number
+  nombreReferencia: string
+  comunidad: CommunityOption
+  estado: string
+  fechaIngreso: string | null
+  observaciones: string | null
+}
+
+export type FamilyCreateInput = {
+  nombreReferencia: string
+  comunidadId: number
+  fechaIngreso?: string
+  observaciones?: string
+}
+
 export type FamilyListItem = {
   id: number
   nombreReferencia: string

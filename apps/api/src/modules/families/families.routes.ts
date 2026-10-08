@@ -1,6 +1,8 @@
 import { Router } from 'express'
-import { getFamilies } from './families.controller.js'
+import { getFamilies, getFamily, postFamily } from './families.controller.js'
 
 export const familiesRouter = Router()
 
 familiesRouter.get('/', getFamilies)
+familiesRouter.post('/', postFamily)
+familiesRouter.get('/:id', getFamily)
