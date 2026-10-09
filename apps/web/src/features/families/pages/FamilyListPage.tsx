@@ -11,7 +11,8 @@ import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import { formControlClassName } from '@/components/ui/FormField'
 import LoadingState from '@/components/ui/LoadingState'
-import { fetchFamilies } from '@/features/families/services/familyService'
+import { fetchFamiliesWithOffline } from '@/features/families/services/familyOfflineService'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import type { FamilyListResponse } from '@/features/families/types/family'
 
 const PAGE_SIZE = 20
@@ -53,6 +54,9 @@ export default function FamilyListPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [requestVersion, setRequestVersion] = useState(0)
+  const [cachedAt, setCachedAt] = useState<string | null>(null)
+  const [dataOrigin, setDataOrigin] = useState<'remote' | 'cache' | null>(null)
+  const isOnline = useOnlineStatus()
 
   useEffect(() => {
     const controller = new AbortController()
@@ -62,7 +66,7 @@ export default function FamilyListPage() {
       setError(null)
 
       try {
-        const response = await fetchFamilies(
+        const { data: response, source, savedAt } = await fetchFamiliesWithOffline(
           {
             search: search || undefined,
             estado: status || undefined,
@@ -79,9 +83,13 @@ export default function FamilyListPage() {
         }
 
         setResult(response)
+        setDataOrigin(source)
+        setCachedAt(savedAt)
       } catch (cause) {
         if (controller.signal.aborted) return
         setResult(null)
+        setDataOrigin(null)
+        setCachedAt(null)
         setError(cause instanceof Error ? cause.message : 'Ocurrió un error al consultar las familias.')
       } finally {
         if (!controller.signal.aborted) setLoading(false)
@@ -90,7 +98,7 @@ export default function FamilyListPage() {
 
     void loadFamilies()
     return () => controller.abort()
-  }, [page, search, status, requestVersion])
+  }, [page, search, status, requestVersion, isOnline])
 
   function retryQuery() {
     setRequestVersion((current) => current + 1)
@@ -144,7 +152,13 @@ export default function FamilyListPage() {
         title="Listado de familias"
         description="La información principal se obtiene desde la base de datos institucional."
       >
-        <form className="mb-5 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_auto]" onSubmit={handleSearch}>
+        {dataOrigin === 'cache' && (
+          <Alert variant="warning" title="Consulta sin conexión: copia local">
+            Se muestra una copia guardada {cachedAt ? new Date(cachedAt).toLocaleString('es-GT') : 'anteriormente'}.
+            Puede estar desactualizada y es solo de lectura.
+          </Alert>
+        )}
+        <form className="mb-5 mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_auto]" onSubmit={handleSearch}>
           <div>
             <label htmlFor="family-search" className="sr-only">Buscar familia</label>
             <input

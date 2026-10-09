@@ -6,7 +6,9 @@ import Alert from '@/components/ui/Alert'
 import Button from '@/components/ui/Button'
 import Card, { CardBody, CardHeader } from '@/components/ui/Card'
 import LoadingState from '@/components/ui/LoadingState'
-import { FamilyApiError, fetchFamily } from '@/features/families/services/familyService'
+import { FamilyApiError } from '@/features/families/services/familyService'
+import { fetchFamilyWithOffline } from '@/features/families/services/familyOfflineService'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import type { FamilyDetail } from '@/features/families/types/family'
 
 export default function FamilyDetailPage() {
@@ -16,6 +18,9 @@ export default function FamilyDetailPage() {
   const [error, setError] = useState<string>()
   const [notFound, setNotFound] = useState(false)
   const [requestVersion, setRequestVersion] = useState(0)
+  const [dataOrigin, setDataOrigin] = useState<'remote' | 'cache' | null>(null)
+  const [cachedAt, setCachedAt] = useState<string | null>(null)
+  const isOnline = useOnlineStatus()
 
   useEffect(() => {
     const controller = new AbortController()
@@ -24,9 +29,15 @@ export default function FamilyDetailPage() {
       setFamily(undefined)
       setError(undefined)
       setNotFound(false)
+      setDataOrigin(null)
+      setCachedAt(null)
       try {
-        const data = await fetchFamily(id, controller.signal)
-        if (!controller.signal.aborted) setFamily(data)
+        const response = await fetchFamilyWithOffline(id, controller.signal)
+        if (!controller.signal.aborted) {
+          setFamily(response.data)
+          setDataOrigin(response.source)
+          setCachedAt(response.savedAt)
+        }
       } catch (cause) {
         if (controller.signal.aborted) return
         setNotFound(cause instanceof FamilyApiError && cause.status === 404)
@@ -37,7 +48,7 @@ export default function FamilyDetailPage() {
     }
     void loadFamily()
     return () => controller.abort()
-  }, [id, requestVersion])
+  }, [id, requestVersion, isOnline])
 
   const fields = family ? [
     ['ID del expediente', String(family.id)],
@@ -57,6 +68,12 @@ export default function FamilyDetailPage() {
       <p>{error}</p>
       {!notFound && <Button className="mt-3" variant="secondary" onClick={() => setRequestVersion((value) => value + 1)}>Reintentar</Button>}
     </Alert>}
+    {!loading && family && dataOrigin === 'cache' && (
+      <Alert variant="warning" title="Expediente desde una copia local" className="mb-4">
+        Copia guardada {cachedAt ? new Date(cachedAt).toLocaleString('es-GT') : 'anteriormente'}.
+        Solo lectura; los datos podrían estar desactualizados.
+      </Alert>
+    )}
     {!loading && family && <Card>
       <CardHeader title={family.nombreReferencia} description={`Expediente ${family.id}`} />
       <CardBody><dl className="grid grid-cols-1 gap-5 sm:grid-cols-2">

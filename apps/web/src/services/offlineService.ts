@@ -8,12 +8,11 @@ export type EssentialDataResult<T> = {
 
 /**
  * Consulta la fuente remota si hay conexión y guarda una copia local.
- * Sin conexión (o si la consulta remota falla), utiliza la última copia.
- * No crea ni sincroniza registros: OFF-02 es exclusivamente de lectura.
  */
 export async function getEssentialData<T>(
   key: string,
   fetchRemote: () => Promise<T>,
+  options: { canUseCacheAfterError?: (error: unknown) => boolean } = {},
 ): Promise<EssentialDataResult<T>> {
   let remoteError: unknown
 
@@ -31,6 +30,12 @@ export async function getEssentialData<T>(
 
       return { data, source: 'remote', savedAt }
     } catch (error) {
+      // Never recover from cache after a cancelled navigation or an
+      // explicit denial from the API (configured by each module).
+      if ((error instanceof Error && error.name === 'AbortError') ||
+          (options.canUseCacheAfterError && !options.canUseCacheAfterError(error))) {
+        throw error
+      }
       remoteError = error
     }
   }
