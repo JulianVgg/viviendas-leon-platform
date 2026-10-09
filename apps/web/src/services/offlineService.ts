@@ -8,8 +8,6 @@ export type EssentialDataResult<T> = {
 
 /**
  * Consulta la fuente remota si hay conexión y guarda una copia local.
- * Sin conexión (o si la consulta remota falla), utiliza la última copia.
- * No crea ni sincroniza registros: OFF-02 es exclusivamente de lectura.
  */
 export async function getEssentialData<T>(
   key: string,
