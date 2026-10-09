@@ -1,7 +1,9 @@
 
 const DB_NAME = 'viviendas-leon-offline'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const STORE_NAME = 'essential-data'
+
+export const PENDING_OPERATIONS_STORE = 'pending-operations'
 
 export type OfflineRecord<T> = {
   key: string
@@ -16,9 +18,17 @@ export function openOfflineDb(): Promise<IDBDatabase> {
     request.onupgradeneeded = () => {
       const db = request.result
 
+      // OFF-02: Almacén para consultar información offline
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, {
           keyPath: 'key',
+        })
+      }
+
+      // OFF-03: Almacén para registrar operaciones pendientes
+      if (!db.objectStoreNames.contains(PENDING_OPERATIONS_STORE)) {
+        db.createObjectStore(PENDING_OPERATIONS_STORE, {
+          keyPath: 'id',
         })
       }
     }
