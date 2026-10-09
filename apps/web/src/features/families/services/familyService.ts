@@ -60,7 +60,7 @@ export async function fetchFamilies(
 
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as { error?: { message?: string } } | null
-    throw new Error(payload?.error?.message ?? 'No fue posible consultar las familias.')
+    throw new FamilyApiError(payload?.error?.message ?? 'No fue posible consultar las familias.', response.status)
   }
 
   return response.json() as Promise<FamilyListResponse>
