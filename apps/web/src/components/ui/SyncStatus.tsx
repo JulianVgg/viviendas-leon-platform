@@ -3,6 +3,8 @@ import Badge from './Badge'
 
 type SyncState =
   | 'connected'
+  | 'checking'
+  | 'server-unavailable'
   | 'synced'
   | 'syncing'
   | 'pending'
@@ -11,6 +13,8 @@ type SyncState =
 
 const labels: Record<SyncState, string> = {
   connected: 'Con conexión',
+  checking: 'Comprobando conexión',
+  'server-unavailable': 'Servidor no disponible',
   synced: 'Sincronizado',
   syncing: 'Sincronizando',
   pending: 'Pendiente de sincronización',
@@ -20,6 +24,8 @@ const labels: Record<SyncState, string> = {
 
 const variants = {
   connected: 'success',
+  checking: 'neutral',
+  'server-unavailable': 'warning',
   synced: 'success',
   syncing: 'neutral',
   pending: 'warning',
