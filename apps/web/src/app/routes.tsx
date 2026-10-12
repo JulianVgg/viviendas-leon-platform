@@ -8,6 +8,7 @@ import FamilyDetailPage from '@/features/families/pages/FamilyDetailPage'
 import OfflineTestPage from '@/features/offline/pages/OfflineTestPage'
 import OfflineOperationsTestPage from '@/features/offline/pages/OfflineOperationsTestPage'
 import OfflineQueueTestPage from '@/features/offline/pages/OfflineQueueTestPage'
+import OfflineConnectivityTestPage from '@/features/offline/pages/OfflineConnectivityTestPage'
 const module = (title: string, description: string, columns: string[]) => <ModulePage title={title} description={description} columns={columns} />
 
 export default function AppRoutes() {
@@ -25,6 +26,9 @@ export default function AppRoutes() {
     path="offline-queue-test"
     element={<OfflineQueueTestPage />}
   />
+)}
+{import.meta.env.DEV && (
+  <Route path="offline-connectivity-test" element={<OfflineConnectivityTestPage />} />
 )}
   <Route path="familias/nueva" element={<FamilyCreatePage />} />
   <Route path="familias/:id" element={<FamilyDetailPage />} />
