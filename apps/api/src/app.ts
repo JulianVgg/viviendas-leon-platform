@@ -3,6 +3,7 @@ import cors from 'cors';
 import { familiesRouter } from './modules/families/families.routes.js';
 import { communitiesRouter } from './modules/catalogs/catalogs.routes.js';
 import type { ErrorRequestHandler } from 'express';
+import { offlineDemoRouter } from './modules/offline/offline.routes.js';
 
 export const app = express();
 
@@ -22,6 +23,7 @@ app.get('/api/health', (_req, res) => {
 });
 app.use('/api/v1/familias', familiesRouter);
 app.use('/api/v1/comunidades', communitiesRouter);
+app.use('/api/v1/offline', offlineDemoRouter);
 
 const handleRequestError: ErrorRequestHandler = (error, _req, res, _next) => {
   if (error?.type === 'entity.parse.failed' || error?.type === 'entity.too.large') {
