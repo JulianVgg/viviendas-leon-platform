@@ -2,7 +2,7 @@ import type { HTMLAttributes, ReactNode } from 'react'
 import { cn } from '@/app/lib/cn'
 
 export default function Card({ className, ...props }: HTMLAttributes<HTMLElement>) {
-  return <section className={cn('overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900', className)} {...props} />
+  return <section className={cn('overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-theme-xs dark:border-slate-800 dark:bg-slate-900', className)} {...props} />
 }
 
 export function CardHeader({ className, title, description, actions }: { className?: string; title: string; description?: string; actions?: ReactNode }) {
