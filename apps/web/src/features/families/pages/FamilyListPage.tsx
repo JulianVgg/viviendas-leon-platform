@@ -9,7 +9,7 @@ import PageMeta from '@/components/common/PageMeta'
 import Alert from '@/components/ui/Alert'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
-import { formControlClassName } from '@/components/ui/FormField'
+import FormField, { formControlClassName } from '@/components/ui/FormField'
 import LoadingState from '@/components/ui/LoadingState'
 import { fetchFamiliesWithOffline } from '@/features/families/services/familyOfflineService'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
@@ -123,13 +123,14 @@ export default function FamilyListPage() {
     <Link
       key={family.id}
       to={`/familias/${family.id}`}
-      className="font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+      className="layout-focus inline-flex min-w-48 max-w-80 flex-col gap-1 rounded-md whitespace-normal text-brand-600 hover:text-brand-700 dark:text-brand-300 dark:hover:text-brand-100"
     >
-      {family.nombreReferencia}
+      <span className="font-semibold leading-5">{family.nombreReferencia}</span>
+      <span className="text-xs text-slate-500 dark:text-slate-400">Expediente #{family.id}</span>
     </Link>,
-    family.comunidad.nombre,
-    family.programas.length > 0 ? family.programas.map((program) => program.nombre).join(', ') : 'Sin programa',
-    <span key={`members-${family.id}`}>{family.integrantes}</span>,
+    <span key={`community-${family.id}`} className="block min-w-32 max-w-56 whitespace-normal leading-5">{family.comunidad.nombre}</span>,
+    <span key={`programs-${family.id}`} className="block min-w-32 max-w-64 whitespace-normal leading-5">{family.programas.length > 0 ? family.programas.map((program) => program.nombre).join(', ') : 'Sin programa'}</span>,
+    <span key={`members-${family.id}`} className="font-medium tabular-nums">{family.integrantes}</span>,
     formatDate(family.fechaIngreso),
     <Badge key={`status-${family.id}`} variant={statusBadgeVariant(family.estado)}>
       {humanizeStatus(family.estado)}
@@ -145,22 +146,22 @@ export default function FamilyListPage() {
       <PageHeader
         title="Familias y beneficiarios"
         description="Consulta las familias registradas y localízalas por nombre, integrante, comunidad o programa."
-        actions={<Link to="/familias/nueva" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500">Registrar familia</Link>}
+        actions={<Link to="/familias/nueva" className="layout-focus inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs transition-colors hover:bg-brand-600 motion-reduce:transition-none"><span aria-hidden="true" className="text-lg leading-none">+</span>Registrar familia</Link>}
       />
 
       <ComponentCard
         title="Listado de familias"
-        description="La información principal se obtiene desde la base de datos institucional."
+        description="Consulta los registros y abre un expediente para ver su información."
+        actions={!loading && !error && result ? <Badge>{result.pagination.total} {result.pagination.total === 1 ? 'familia' : 'familias'}</Badge> : undefined}
       >
         {dataOrigin === 'cache' && (
-          <Alert variant="warning" title="Consulta sin conexión: copia local">
+          <Alert variant="warning" title="Consulta sin conexión: copia local" className="mb-5">
             Se muestra una copia guardada {cachedAt ? new Date(cachedAt).toLocaleString('es-GT') : 'anteriormente'}.
             Puede estar desactualizada y es solo de lectura.
           </Alert>
         )}
-        <form className="mb-5 mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_auto]" onSubmit={handleSearch}>
-          <div>
-            <label htmlFor="family-search" className="sr-only">Buscar familia</label>
+        <form role="search" aria-label="Buscar familias" aria-controls="family-results" className="mb-6 grid items-end gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[minmax(0,1fr)_12rem] 2xl:grid-cols-[minmax(0,1fr)_12rem_auto] dark:border-slate-800 dark:bg-white/5" onSubmit={handleSearch}>
+          <FormField label="Buscar familia" id="family-search">
             <input
               id="family-search"
               type="search"
@@ -170,10 +171,9 @@ export default function FamilyListPage() {
               onChange={(event) => setSearchInput(event.target.value)}
               maxLength={100}
             />
-          </div>
+          </FormField>
 
-          <div>
-            <label htmlFor="family-status" className="sr-only">Filtrar por estado</label>
+          <FormField label="Estado" id="family-status">
             <select
               id="family-status"
               className={formControlClassName}
@@ -187,16 +187,17 @@ export default function FamilyListPage() {
                 <option key={option.value || 'all'} value={option.value}>{option.label}</option>
               ))}
             </select>
-          </div>
+          </FormField>
 
-          <div className="flex gap-2">
-            <Button type="submit">Buscar</Button>
+          <div className="flex flex-wrap gap-2 md:col-span-2 2xl:col-span-1">
+            <Button type="submit" className="flex-1 sm:flex-none">Buscar</Button>
             {(search || status) && (
-              <Button type="button" variant="secondary" onClick={clearFilters}>Limpiar</Button>
+              <Button type="button" variant="secondary" className="flex-1 sm:flex-none" onClick={clearFilters}>Limpiar</Button>
             )}
           </div>
         </form>
 
+        <div id="family-results" aria-busy={loading} className="space-y-5">
         {error && (
           <Alert variant="error" title="No se pudo cargar el listado">
             <p>{error}</p>
@@ -227,13 +228,15 @@ export default function FamilyListPage() {
             {result.data.length > 0 && <DataTableContainer
               columns={['Familia', 'Comunidad', 'Programas', 'Integrantes', 'Fecha de ingreso', 'Estado']}
               rows={rows}
+              caption="Familias y beneficiarios registrados"
             />}
 
-            <div className="mt-5 flex flex-col gap-3 border-t border-slate-100 pt-4 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400 sm:flex-row sm:items-center sm:justify-between">
-              <p>
+            <div className="mt-5 flex flex-col gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 dark:border-slate-800 dark:bg-white/5 dark:text-slate-400 lg:flex-row lg:items-center lg:justify-between">
+              <p role="status" className="font-medium tabular-nums">
                 {result.pagination.total} {result.pagination.total === 1 ? 'familia encontrada' : 'familias encontradas'}
               </p>
-              <div className="flex items-center gap-2">
+              <nav aria-label="Paginación de familias" className="grid grid-cols-2 items-center gap-2 sm:flex">
+                <span className="col-span-2 py-1 text-center text-xs font-medium tabular-nums sm:me-2">Página {result.pagination.page} de {result.pagination.totalPages}</span>
                 <Button
                   type="button"
                   variant="secondary"
@@ -243,7 +246,6 @@ export default function FamilyListPage() {
                 >
                   Anterior
                 </Button>
-                <span>Página {result.pagination.page} de {result.pagination.totalPages}</span>
                 <Button
                   type="button"
                   variant="secondary"
@@ -253,10 +255,11 @@ export default function FamilyListPage() {
                 >
                   Siguiente
                 </Button>
-              </div>
+              </nav>
             </div>
           </>
         )}
+        </div>
       </ComponentCard>
     </>
   )

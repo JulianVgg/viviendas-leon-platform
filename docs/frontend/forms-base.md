@@ -139,3 +139,16 @@ Se modernizaron FormField, Form, FormSection, FormGrid y FormActions sin modific
 - `FormActions` mantiene etiquetas, tipos submit/button, `onCancel` y bloqueo mediante `submitting`, `disabled` o `blocked`. Añade `aria-busy` e indicador decorativo de guardado, respetando movimiento reducido. No ejecuta guardado ni cancelación por sí mismo.
 
 Las verificaciones de renderizado en memoria cubrieron los siete estados, botones bloqueados, etiquetas de acciones, asociaciones de errores/hints, IDs generados y atributos ARIA existentes. Build y lint validaron la compatibilidad de los usos actuales, incluido FamilyForm. No se ejecutaron pruebas visuales, envíos reales ni pruebas de teclado en navegador. No se modificaron FamilyForm, FamilyListPage, servicios, conectividad, cola offline ni configuración PWA.
+
+## Presentación de FamilyForm — Etapa 3
+
+Los cuatro campos existentes se distribuyen en dos FormSection con variante card:
+
+- **Identificación y ubicación:** nombre de referencia y comunidad, con ayudas sobre el nombre y la identificación del municipio en las opciones.
+- **Información complementaria:** fecha de ingreso opcional y observaciones, conservando todos los IDs y límites anteriores.
+
+FamilyCreatePage incorpora un panel de orientación, enlace al listado y contenedor de carga coherente con Card. FormActions mantiene Cancelar, Guardar y el estado de guardado. No se añadieron campos, dependencias ni cambios a `FamilyCreateInput`.
+
+La lógica de FamilyForm anterior al render y sus atributos funcionales se compararon sintácticamente con la versión de partida. Permanecen intactos la validación, normalización del payload, selección de comunidad, enfoque del primer error, mensajes de API, guardia contra doble envío y callback `onCreated`.
+
+Las verificaciones en memoria comprobaron campos vacíos, máximos de longitud, fecha inexistente, payload con campos opcionales, doble envío y errores de API mediante callbacks simulados. No se registraron familias ni se consultó una API real. La matriz manual de pantallas, teclado, temas, viewports y pruebas con API aislada está en [componentes-base.md](./componentes-base.md#matriz-manual-reproducible); todos sus casos siguen pendientes de navegador.

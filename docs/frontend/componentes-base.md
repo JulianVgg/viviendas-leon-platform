@@ -126,3 +126,72 @@ Se adaptaron los estilos de los componentes existentes tomando como referencia B
 - No se ejecutaron pruebas visuales ni de interacción en un navegador real. Queda pendiente comprobar teclado, lector de pantalla, contraste medido, tema claro/oscuro y pantallas pequeñas. Dialog no tiene consumidores de pantalla actualmente; su apertura debe probarse antes de integrarlo en un flujo funcional.
 
 No se modificaron páginas, datos, servicios, roles, rutas ni persistencia offline.
+
+## Familias y beneficiarios — Etapa 3
+
+Se modernizaron únicamente la presentación de FamilyListPage, FamilyCreatePage, FamilyDetailPage y FamilyForm. Se reutilizan PageHeader, ComponentCard, DataTableContainer, Card, Badge, Alert, FormField y las primitivas de formularios adaptadas en la Etapa 2. Las referencias visuales PRO fueron BasicTableOne, DefaultInputs y UserMetaCard; no se copiaron datos, acciones de edición ni módulos de demostración.
+
+- **Listado:** acción de registro con foco visible, etiquetas de filtros visibles, tabla con caption, nombre e ID del expediente en el enlace, texto largo de comunidad/programas ajustable y paginación en dos columnas en móvil. El total y los números de página proceden de la respuesta del servidor. La región de resultados comunica `aria-busy` durante la carga.
+- **Registro:** secciones de identificación/ubicación e información complementaria; panel de orientación sin campos nuevos. Mantiene consulta de comunidades, cancelación, guardado y redirección existentes.
+- **Expediente:** datos básicos en una Card y observaciones en otra; estado con Badge y distribución responsive. No contiene pestañas ni consultas de módulos pendientes.
+- **Estados:** se conservan cargas, reintentos, errores, vacíos y advertencias de copia local/solo lectura. No se habilita caché en producción ni se cambia el comportamiento de persistencia.
+
+### Verificación realizada
+
+Build y lint iniciales y finales, revisión de contratos y comparación sintáctica de efectos, estados, handlers y atributos funcionales con la rama de partida. Once grupos de verificaciones en memoria cubrieron renderizado de las pantallas, errores/vacíos/caché simulados, payload, validación y bloqueo de doble envío. Las fixtures sintéticas existieron solo durante la ejecución de pruebas: no se añadieron a la aplicación ni se enviaron a una API.
+
+No se dispuso de Playwright, Puppeteer ni un DOM de pruebas instalado. No se realizaron capturas, interacción en navegador, registro real ni lectura real de IndexedDB. La matriz siguiente es un procedimiento **pendiente**, no un resultado aprobado.
+
+### Matriz manual reproducible
+
+Preparación:
+
+1. Utilizar un entorno de desarrollo con API y base de datos de pruebas aisladas. Confirmar que no contiene beneficiarios reales antes de consultar, registrar o capturar información. No ejecutar pruebas de escritura contra producción.
+2. Ejecutar `npm run dev:web` desde la raíz y abrir la URL indicada por Vite. Para las pruebas de API, disponer del backend de pruebas ya configurado; esta etapa no instala ni configura una base de datos.
+3. Usar el rol simulado `fieldWorker` o `coordination`. Abrir DevTools, pestañas Network y Console. Los permisos de interfaz no representan autorización del backend.
+4. Repetir las pruebas visuales y de teclado a **320, 375, 768, 1024 y 1440px**, en tema claro y oscuro. Registrar navegador, viewport, tema, resultado y evidencia sin datos personales.
+
+| Caso | Procedimiento | Resultado esperado | Estado |
+|---|---|---|---|
+| Sidebar móvil | Abrir menú, usar Tab/Shift+Tab, Escape, backdrop y un enlace | Foco limitado a navegación abierta; cierre y restauración del scroll; enlace cierra menú | Pendiente |
+| Sidebar escritorio | A 1440px, colapsar y acceder por hover y teclado; abrir/cerrar submenú activo | Navegación legible, foco visible y submenú colapsable; sin ocultar destinos | Pendiente |
+| Tema y overlays | Cambiar tema; abrir/cerrar avisos y selector mock con teclado y clic exterior | Contraste legible, controles funcionales y foco restaurado con Escape | Pendiente |
+| `/familias` | Abrir listado; con datos de prueba, seguir un enlace | Carga visible, columnas accesibles, datos de API y expediente correcto | Pendiente |
+| Búsqueda | Escribir un término de pruebas y enviar; después Limpiar | Network muestra `search`, `page=1`, `limit=20`; Limpiar restablece filtros | Pendiente |
+| Estado | Seleccionar cada estado disponible | Network muestra `estado` y reinicia página; sin filtro u ordenamiento local | Pendiente |
+| Paginación | Con más de 20 registros de pruebas, usar Siguiente/Anterior | Nueva consulta con `page`; totales del servidor; límites deshabilitados | Pendiente |
+| Tabla móvil | Enfocar región de tabla y desplazarla horizontalmente | Scroll dentro de tabla, no de toda la página; enlaces con foco visible | Pendiente |
+| Vacío | Buscar un término sin coincidencias o usar una base de pruebas vacía | Mensaje contextual y acción Limpiar cuando hay filtros | Pendiente |
+| Error de API | Bloquear temporalmente la petición de familias/comunidades/detalle con DevTools; desbloquear y Reintentar | Error visible y recuperación sin perder controles | Pendiente |
+| Cancelación | Con throttling, cambiar filtros o abandonar la página durante una consulta | La solicitud anterior se cancela o su respuesta no modifica la pantalla actual | Pendiente |
+| `/familias/nueva` | Abrir y consultar comunidades; dejar obligatorios vacíos o nombre solo con espacios; enviar | No hay POST inválido; errores asociados; foco en primer campo inválido | Pendiente |
+| Límites de campos | Comprobar máximos de 150/2000 caracteres y fecha opcional | Controles mantienen límites; ayudas legibles; sin campos añadidos | Pendiente |
+| Registro válido | Solo con API aislada, completar datos sintéticos autorizados y pulsar Guardar dos veces | Un POST; estado Guardando; payload original; redirección al expediente creado | Pendiente |
+| Error al guardar | En entorno aislado, simular fallo de POST o respuesta de validación del backend | Valores conservados, mensaje general/de campo y guardado desbloqueado | Pendiente |
+| Cancelar registro | Cambiar campos sin guardar y pulsar Cancelar | Vuelve al listado sin POST | Pendiente |
+| `/familias/:id` | Consultar expediente de pruebas y otro con observaciones vacías | Nombre, ID, comunidad, municipio, estado, fecha y observaciones correctos | Pendiente |
+| No encontrado | Consultar un ID numérico inexistente en la API de pruebas | Mensaje de no encontrado y enlace al listado; no copia local ni reintento de 404 | Pendiente |
+| Caché de desarrollo | Seguir el procedimiento debajo, desconectar red y repetir consultas ya visitadas | Advertencia de copia local/solo lectura; sin envío ni sincronización automática | Pendiente |
+| Dialog aislado | Ejecutar el harness temporal descrito debajo | Modal nativo, foco, Escape/backdrop y scroll restaurados | Pendiente |
+
+**Caché offline:** exclusivamente con datos sintéticos y una sesión de desarrollo aislada, iniciar Vite con `VITE_ENABLE_FAMILY_OFFLINE_TESTS=true` en esa terminal. No modificar `.env` de producción ni VitePWA. Visitar listado y un expediente para guardar sus copias; luego activar Offline en Network sin recargar la aplicación y repetir esas consultas. Una búsqueda/página nunca visitada no debe mostrarse como si estuviera cacheada. No esperar una copia local tras 400/401/403/404. El flag sigue condicionado a `import.meta.env.DEV`; detener la sesión de pruebas al terminar.
+
+**Dialog aislado, sin ruta/demo permanente:** en una copia local de pruebas, conservar el contenido de `apps/web/src/App.tsx`. Añadir temporalmente los imports de `useState`, Button y Dialog, la función siguiente y cambiar únicamente el retorno de App a `<ThemeProvider><DialogCheck /></ThemeProvider>`. Después de probar, restaurar manualmente solo este harness y su retorno/imports; comprobar que App no figure en el diff de entrega.
+
+```tsx
+function DialogCheck() {
+  const [open, setOpen] = useState(false)
+  const [backgroundClicks, setBackgroundClicks] = useState(0)
+  return <div className="space-y-4 p-6">
+    <Button type="button" onClick={() => setOpen(true)}>Abrir diálogo</Button>
+    <Button type="button" onClick={() => setBackgroundClicks((value) => value + 1)}>Acción de fondo</Button>
+    <p>Activaciones de fondo: {backgroundClicks}</p>
+    <Dialog open={open} title="Verificación de diálogo" description="Prueba aislada sin datos personales." onClose={() => setOpen(false)} actions={<Button type="button" onClick={() => setOpen(false)}>Aceptar</Button>}>
+      <label htmlFor="dialog-check-input">Campo de prueba</label>
+      <input id="dialog-check-input" className="block rounded-lg border p-2" />
+    </Dialog>
+  </div>
+}
+```
+
+Imports temporales: `useState` desde `react`, Button desde `@/components/ui/Button` y Dialog desde `@/components/ui/Dialog`; ThemeProvider ya existe en App. Verificar Tab/Shift+Tab, foco inicial en Cerrar, imposibilidad de activar el botón de fondo, Escape, Aceptar y clic en backdrop. El foco debe volver a Abrir diálogo. Comparar `document.body.style.overflow` antes/después y repetir abrir/cerrar para detectar bloqueos persistentes. Esta comprobación no se ha ejecutado en esta etapa.

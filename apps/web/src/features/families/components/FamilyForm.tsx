@@ -71,22 +71,24 @@ export default function FamilyForm({ communities, onSave, onCreated, onCancel }:
 
   return <Form mode="create" status={saving ? 'saving' : generalError ? 'error' : 'idle'} generalError={generalError} onSubmit={handleSubmit} noValidate
     actions={<FormActions submitting={saving} disabled={!communities.length} onCancel={onCancel} />}>
-    <FormSection title="Datos de la familia" description="Los campos con asterisco son obligatorios. La familia se registrará como activa." variant="card">
+    <FormSection title="Identificación y ubicación" description="Los campos con asterisco son obligatorios. La familia se registrará como activa." variant="card">
       <FormGrid>
-        <FormField id="family-nombreReferencia" label="Nombre de referencia" required error={errors.nombreReferencia}>
+        <FormField id="family-nombreReferencia" label="Nombre de referencia" required error={errors.nombreReferencia} hint="Nombre utilizado para identificar el expediente. Máximo 150 caracteres.">
           <input {...fieldAttributes('nombreReferencia')} className={formControlClassName} required aria-required="true" maxLength={150} value={referenceName} onChange={(event) => setReferenceName(event.target.value)} />
         </FormField>
-        <FormField id="family-comunidadId" label="Comunidad" required error={errors.comunidadId}>
+        <FormField id="family-comunidadId" label="Comunidad" required error={errors.comunidadId} hint="Las opciones muestran la comunidad y su municipio.">
           <select {...fieldAttributes('comunidadId')} className={formControlClassName} required aria-required="true" value={communityId} onChange={(event) => setCommunityId(event.target.value)}>
             <option value="">Selecciona una comunidad</option>
             {communities.map((community) => <option key={community.id} value={community.id}>{community.nombre} — {community.municipio.nombre}</option>)}
           </select>
         </FormField>
-        <FormField id="family-fechaIngreso" label="Fecha de ingreso" error={errors.fechaIngreso}>
-          <input {...fieldAttributes('fechaIngreso')} type="date" className={formControlClassName} value={entryDate} onChange={(event) => setEntryDate(event.target.value)} />
-        </FormField>
       </FormGrid>
-      <div className="mt-4">
+    </FormSection>
+    <FormSection title="Información complementaria" description="Estos campos son opcionales." variant="card">
+      <div className="space-y-5">
+        <div className="max-w-sm"><FormField id="family-fechaIngreso" label="Fecha de ingreso" error={errors.fechaIngreso} hint="Selecciona la fecha de ingreso, si está disponible.">
+          <input {...fieldAttributes('fechaIngreso')} type="date" className={formControlClassName} value={entryDate} onChange={(event) => setEntryDate(event.target.value)} />
+        </FormField></div>
         <FormField id="family-observaciones" label="Observaciones" error={errors.observaciones} hint="Máximo 2000 caracteres.">
           <textarea {...fieldAttributes('observaciones')} className={`${formControlClassName} h-auto min-h-28 py-2`} rows={4} maxLength={2000} value={observations} onChange={(event) => setObservations(event.target.value)} />
         </FormField>
