@@ -200,7 +200,7 @@ Imports temporales: `useState` desde `react`, Button desde `@/components/ui/Butt
 
 **Fecha:** 2026-10-13. **Rama:** `feat/tailadmin-pro-families`.
 
-**Dictamen:** frontend aprobado en el entorno sintético descrito abajo; **NO-GO para una aprobación integral e incondicional de fusión a main** hasta ejecutar el smoke test con una API/base de datos de pruebas aisladas. No quedan fallos abiertos entre las 56 pruebas de navegador ejecutadas, pero no se ha validado la integración real. Este informe actualiza los resultados históricos de las secciones anteriores: sus matrices pendientes no implican que las pruebas posteriores tampoco se hayan ejecutado.
+**Dictamen actualizado:** frontend aprobado en las 56 pruebas con respuestas sintéticas y **N01 GO tras 14 pruebas de integración real aprobadas**, documentadas al final de este informe. El bloqueo de integración de familias está cerrado. Se recomienda integrar las Etapas 1–3 tras revisión del diff y aceptación explícita de los pendientes N02–N05; no es una certificación de seguridad ni autorización para producción con beneficiarios reales. Se conservan los resultados históricos para trazabilidad.
 
 ### Entorno y protección de datos
 
@@ -303,10 +303,177 @@ Los fallos de importación del arnés de Dialog, temporización de reload/resize
 
 | ID | Prueba | Estado | Motivo / procedimiento de cierre |
 |---|---|---|---|
-| N01 | Integración GET/POST con API y BD de pruebas | No ejecutada | No se confirmó un entorno real aislado. Confirmarlo y repetir listado, filtros/páginas, comunidades, creación y expediente usando únicamente datos sintéticos |
+| N01 | Integración GET/POST con API y BD de pruebas | **Aprobada — GO** | Nueva instancia exclusiva QA autorizada, aislamiento verificado y 14 pruebas reales aprobadas. Ver cierre N01 al final |
 | N02 | Lectores de pantalla y contraste WCAG completo | No ejecutada | Sin lector ni medición exhaustiva. Usar NVDA/VoiceOver, revisar nombres/mensajes/foco y medir contraste en ambos temas |
 | N03 | Safari, Firefox y dispositivos táctiles | No ejecutada | Solo Edge headless disponible en esta ejecución. Repetir matriz en Safari/Firefox y dispositivo físico |
 | N04 | Service worker y PWA instalada de producción | No ejecutada | Se probó Vite DEV, no un despliegue productivo. En staging aislado, probar instalación/actualización y recursos offline, sin habilitar caché sensible |
 | N05 | Auditoría visual completa de todas las páginas/estados | No ejecutada | Capturas de viewport y revisión selectiva, no revisión completa de cada imagen ni de todos los módulos |
 
-**Criterio de fusión:** cerrar N01 como smoke test mínimo de integración antes de aprobar la fusión integral a main. Registrar o aceptar explícitamente los riesgos N02–N05 según la política del proyecto. El frontend no presenta fallos abiertos en el entorno automatizado, pero esta evidencia no certifica backend, seguridad, PWA de producción ni compatibilidad multinavegador. No se hizo commit, push ni merge.
+**Criterio de fusión:** N01 ya está cerrada como smoke test de integración. Revisar los cambios y registrar o aceptar explícitamente los riesgos N02–N05 según la política del proyecto. Esta evidencia no certifica seguridad, PWA de producción ni compatibilidad multinavegador. No se hizo commit, push ni merge.
+
+## Intento anterior N01 — Bloqueo por ausencia de aislamiento
+
+Registro histórico del intento sin autorización para crear una instancia nueva. Sus estados de bloqueo fueron superados por el cierre N01 documentado debajo; no describen el estado actual.
+
+**Fecha:** 2026-10-13. **Rama:** `feat/tailadmin-pro-families`. **Dictamen: NO-GO; N01 bloqueada por aislamiento no confirmado.** El bloqueo de integración de familias sigue abierto. No se sustituyó esta prueba por las respuestas sintéticas de la validación anterior.
+
+### Preparación y evidencia de aislamiento
+
+| Comprobación | Estado | Evidencia / alcance |
+|---|---|---|
+| Git y rama | Aprobada | Rama solicitada; árbol de trabajo limpio al iniciar. Sin sobrescrituras |
+| Documentación de entorno e informe QA | Aprobada | Leídos `docs/environment-setup.md` y el informe integral. La documentación describe `viviendas_leon` como base local de desarrollo, no exclusiva de QA |
+| Configuración y contratos | Aprobada, inspección | Revisados Express, PrismaPg, configuración Prisma 7, esquema, migraciones disponibles, controladores, validaciones, catálogo de comunidades y servicios React. No acredita integración ejecutada |
+| PostgreSQL local disponible | Aprobada, metadatos | `docker ps` mostró `viviendas-leon-postgres`, imagen `postgres:17-alpine`, puerto publicado solo en `127.0.0.1:5432`. Disponibilidad no implica aislamiento de datos |
+| Destino de conexión habitual | Aprobada, inspección sanitizada | `apps/api/.env` apunta a host local, puerto 5432 y base `viviendas_leon`. No se encontraron variables alternativas TEST/QA de conexión en ese archivo o el proceso. No se imprimió la URL, usuario ni contraseña |
+| Base exclusiva de pruebas | **Bloqueada** | Consulta real de `pg_database`: únicamente `postgres` y `viviendas_leon`, ambas sin marcador explícito de exclusividad de pruebas. No se consultaron tablas de negocio |
+
+La única conexión SQL de esta comprobación se dirigió a la base administrativa **`postgres`**, con `default_transaction_read_only=on`. `SHOW transaction_read_only` devolvió `on`. Se consultaron únicamente nombres/permisos de conexión de bases y presencia de una descripción explícita de exclusividad; las descripciones completas no se imprimieron. No se inspeccionaron registros de beneficiarios ni se conectó a tablas de `viviendas_leon`.
+
+Consulta de metadatos reproducible, usando credenciales fuera de consola/chat y una conexión administrativa local de solo lectura:
+
+```sql
+SHOW transaction_read_only;
+SELECT datname, datallowconn
+FROM pg_database
+WHERE NOT datistemplate
+ORDER BY datname;
+```
+
+Resultado observado: `postgres` y `viviendas_leon`, con conexiones permitidas. Una base local o un nombre que parezca de QA **no basta** para certificar exclusividad: se requiere una base designada y confirmada como ajena a datos reales/entorno habitual. Esta inspección no descarta otras instancias externas; ninguna fue proporcionada o confirmada para esta prueba.
+
+### Integración solicitada — estado individual
+
+Sin una base de pruebas confirmada, no se inició API/frontend para N01 ni se ejecutaron sus peticiones. En la columna HTTP se registran respuestas **observadas**, no las previstas por el código.
+
+| ID | Prueba | Estado | HTTP observado / evidencia |
+|---|---|---|---|
+| N01-H | `GET /api/health` del entorno aislado | No ejecutada, bloqueada | Ninguno; API de QA no iniciada |
+| N01-01 | Consultar comunidades activas | No ejecutada, bloqueada | Ninguno |
+| N01-02 | Mostrar listado desde React y API real | No ejecutada, bloqueada | Ninguno |
+| N01-03 | Búsqueda por texto | No ejecutada, bloqueada | Ninguno |
+| N01-04 | Filtro por estado | No ejecutada, bloqueada | Ninguno |
+| N01-05 | Paginación del servidor | No ejecutada, bloqueada | Ninguno |
+| N01-06 | Expediente existente | No ejecutada, bloqueada | Ninguno |
+| N01-07 | Expediente inexistente | No ejecutada, bloqueada | Ninguno |
+| N01-08 | Registrar familia QA desde frontend | No ejecutada, bloqueada | Sin POST ni registro |
+| N01-09 | Un único POST y respuesta 201 | No ejecutada, bloqueada | No se observó HTTP 201 real |
+| N01-10 | Verificar persistencia en PostgreSQL | No ejecutada, bloqueada | Sin registro creado ni consulta a tablas de negocio |
+| N01-11 | Redirección al expediente creado | No ejecutada, bloqueada | Sin expediente de prueba |
+| N01-12 | Recarga y recuperación desde API | No ejecutada, bloqueada | Ninguno |
+| N01-13 | Entrada inválida sin persistencia | No ejecutada, bloqueada | Sin POST ni verificación de persistencia |
+| N01-14 | Recuperación ante error controlado | No ejecutada, bloqueada | No se alteró API/base habitual para provocar errores |
+
+### Escrituras, limpieza y verificaciones
+
+- No se creó una base, no se configuró temporalmente otra conexión y no se modificó ningún `.env`.
+- No se ejecutaron migraciones, seed, preparación de fixtures, INSERT/UPDATE/DELETE, limpieza global ni limpieza selectiva. **IDs creados: ninguno; limpieza: no necesaria.**
+- `npm run build` desde la raíz: **aprobada**, TypeScript API/frontend, Vite y generación de artefactos PWA sin errores. Compilar la API no inició Express ni abrió Prisma contra datos de negocio.
+- `npm run lint` desde la raíz: **aprobada**, oxlint sin errores.
+- `git diff --check`: **aprobada**; los posibles avisos LF/CRLF no son errores de whitespace.
+- Único archivo de entrega modificado durante este intento: `docs/frontend/componentes-base.md`. Servicios, contratos, rutas, roles, autenticación, backend, Prisma, IndexedDB, cola y PWA permanecen sin cambios.
+
+### Requisito para desbloquear y completar N01
+
+Proporcionar y confirmar una base **existente y exclusivamente destinada a QA**, con host/puerto/nombre identificables y sin datos reales. La conexión debe configurarse de forma segura fuera de logs/chat y solo para el proceso de prueba. Si se necesita crear un entorno nuevo, eso requiere una autorización explícita adicional; no se asumió que la base habitual pudiera reutilizarse o limpiarse.
+
+Una vez confirmado el aislamiento: aplicar solo migraciones pendientes de esa base, crear fixtures QA registrando sus IDs, iniciar Express y Vite, repetir N01-H y N01-01–14 con solicitudes reales, verificar el alta directamente en PostgreSQL y limpiar solo IDs propios previamente comprobados. Registrar respuestas y consultas sanitizadas. Hasta entonces **no se aprueba la fusión integral a main**. Incluso un futuro GO de N01 no certificará seguridad, PWA de producción ni compatibilidad multinavegador. Sin commit, push ni merge.
+
+## Cierre N01 — Integración real en PostgreSQL exclusivo de QA
+
+**Fecha de ejecución:** `2026-10-13T22:13:26.156Z`. **Rama:** `feat/tailadmin-pro-families`.
+
+**Dictamen N01: GO. 14 aprobadas, 0 fallidas, 0 no ejecutadas.** Se cierra el bloqueo de integración de familias. La numeración de esta tabla sigue la última solicitud: health es N01-01; no debe confundirse con la numeración del intento histórico bloqueado.
+
+### Autorización, preparación y aislamiento efectivo
+
+El usuario autorizó expresamente un contenedor/volumen nuevos y archivos locales protegidos fuera de Git. Se conservó el cambio local previo de este documento; no se descartó trabajo existente.
+
+| Comprobación | Evidencia observada | Resultado |
+|---|---|---|
+| Contenedor exclusivo | `viviendas-leon-qa-postgres`, ID `c9878fa14e02cabacc4503a076f53cc3aeab03a401c0a49b94696d875f84f815` | Aprobada |
+| Imagen y versión real | `postgres:17`; PostgreSQL `17.11 (Debian 17.11-1.pgdg13+2)` | Aprobada |
+| Puerto publicado | Solo `127.0.0.1:5433` hacia 5432 interno del contenedor | Aprobada |
+| Volumen exclusivo | `viviendas-leon-qa-data`, distinto en nombre y origen de `viviendas-leon-postgres-data` | Aprobada |
+| Base y usuario efectivos | `SELECT current_database(), current_user` devolvió `viviendas_leon_qa`, `viviendas_qa` | Aprobada |
+| Dirección del servidor QA | `172.17.0.3`, puerto interno 5432. El puerto cliente/publicado es 5433; no se conectó al 5432 del host para estas pruebas | Aprobada |
+| Conexión temporal API | Host `127.0.0.1`, puerto **5433**, base `viviendas_leon_qa`, usuario `viviendas_qa`; URL completa nunca registrada | Aprobada |
+| Proceso Prisma real | `pg_stat_activity` mostró sesiones `qa_n01_api` en base/usuario QA | Aprobada |
+| Separación del entorno habitual | Contenedor habitual ID `7b7b578c90107b8fe468fed3ab78cef99ef08728507affa986a2d0a6c9ae0adb`; huella de configuración/montajes y hashes de archivos `.env` sin cambios | Aprobada |
+
+Esta barrera se ejecutó **antes** de migraciones y fixtures y se repitió al conectar/verificar/reiniciar QA. Cualquier discrepancia provoca aborto del arnés. El contenedor y volumen QA no existían previamente; se etiquetaron `viviendas.purpose=exclusive-n01-qa`.
+
+La contraseña se generó con 36 bytes aleatorios, sin reutilizar credenciales habituales. Se conserva en un archivo local separado, fuera de Git y de las evidencias, con ACL limitada al usuario actual y SYSTEM. Docker recibió `POSTGRES_PASSWORD_FILE` mediante montaje de solo lectura, no una contraseña literal en argumentos ni en `docker inspect` de variables de creación. La API recibió su conexión únicamente por entorno de proceso. No se modificó `apps/api/.env` ni el entorno habitual. No exportar el directorio `private` ni el perfil de navegador.
+
+### Migraciones y datos preparados
+
+Se ejecutó Prisma `migrate deploy --config prisma7.config.ts`, desde `apps/api`, usando exclusivamente la conexión QA validada. Se aplicaron correctamente las cuatro migraciones existentes, sin modificarlas:
+
+1. `20261004070402_init`
+2. `20261005034229_update_schema_normalized`
+3. `20261005050000_add_db04_indexes`
+4. `20261005060000_adjust_db04_foreign_keys`
+
+El seed general fue revisado: utiliza datos sintéticos, pero crea módulos/relaciones ajenos a N01. **No se ejecutó.** En la base nueva vacía se prepararon fixtures SQL mínimos con prefijo **`QA_N01_20261013220411`**: municipio ID 1, comunidad activa ID 1 y familias IDs 1–25, con 21 ACTIVA y 4 RETIRADA. Los IDs se registraron en `fixtures.json`. No se usaron datos personales ni beneficiarios reales.
+
+### API, frontend y ausencia de simulación
+
+3000 y 5173 estaban ocupados por procesos preexistentes (PIDs 7828 y 18460); no se reutilizaron ni se detuvieron. Se iniciaron únicamente procesos propios:
+
+- API real: `http://127.0.0.1:3001`, PID 26012, importando la aplicación Express compilada actual, con PrismaPg y PostgreSQL QA. El launcher temporal verificó la identidad SQL antes de escuchar.
+- Frontend real: `http://127.0.0.1:5178`, PID 24372, Vite con la configuración actual y un override programático temporal de proxy `/api` hacia `http://127.0.0.1:3001`. No se modificó `vite.config.ts` ni VitePWA.
+- `VITE_API_URL=/api`; caché de familias deshabilitado para N01. Perfil nuevo de Edge `155.0.4283.45`; caché HTTP y service worker bypassed durante esta comprobación.
+- El arnés observó eventos de Network y códigos HTTP. **No habilitó Fetch interception, no fabricó respuestas, no sustituyó fetch ni servicios.** Bloqueó destinos habituales/externos por seguridad, sin sustituir respuestas de QA. Todas las solicitudes API del navegador pertenecieron al origen QA.
+
+### Resultados individuales
+
+| ID | Prueba ejecutada | Estado | HTTP observado y evidencia |
+|---|---|---|---|
+| N01-01 | Health directo y a través del proxy QA | Aprobada | 200/200; `status=ok`, identidad de proceso/base QA comprobada |
+| N01-02 | Catálogo de comunidades activas | Aprobada | 200; comunidad ID 1 coincide con JOIN real de comunidad/municipio activos y sesión Prisma QA |
+| N01-03 | Listado y contrato de respuesta | Aprobada | 200; 20 filas, total 25 y estructura de pagination/programas/integrantes correctas, comparados con SQL |
+| N01-04 | Búsqueda desde React | Aprobada | 200; `search=FAMILY+01&page=1&limit=20`; resultado ID 1 coincide con SQL ILIKE |
+| N01-05 | Filtro de estado desde React | Aprobada | 200; `estado=RETIRADA`, cuatro resultados, igual al conteo SQL |
+| N01-06 | Paginación real del servidor | Aprobada | 200; 20 filas en página 1, cinco en página 2, totalPages=2 y límite deshabilitado |
+| N01-07 | Expediente existente | Aprobada | 200; ID 1, nombre, fecha, estado, observaciones, comunidad y municipio comparados contra SQL; captura |
+| N01-08 | Expediente inexistente | Aprobada | 404 real, código `FAMILY_NOT_FOUND`; ID 2147483000 confirmado ausente por SQL |
+| N01-09 | Alta desde formulario React | Aprobada | Guardado real mediante formulario; ID generado 26. Un lock transitorio de la comunidad exclusivamente QA permitió observar Guardando/campos bloqueados antes de liberar la transacción |
+| N01-10 | Doble envío y único POST | Aprobada | Dos intentos consecutivos del formulario originaron **un solo POST**, respuesta **201** y `X-Powered-By: Express`; payload normalizado original |
+| N01-11 | Persistencia independiente | Aprobada | SELECT real encontró familia ID 26, nombre `QA_N01_20261013220411 UI CREATED`, comunidad 1, estado ACTIVA, fecha 2026-10-13 y observaciones QA; total final 26 |
+| N01-12 | Redirección y recarga completa | Aprobada | Ruta `/familias/26`; nuevo GET real 200 después de reload con caché deshabilitado; captura del dato persistido |
+| N01-13 | Entrada inválida sin persistencia | Aprobada | Formulario vacío no emitió POST. POST inválido directo a la misma API QA devolvió **400**, `VALIDATION_ERROR` y errores de comunidad/fecha/observaciones. SQL: total 26 antes/después y cero registros con nombre inválido |
+| N01-14 | Error real y recuperación | Aprobada | Se detuvo temporalmente **solo** PostgreSQL QA: Prisma P1001 y GET **500** real, mensaje genérico en React. Se reinició la misma instancia, se revalidó identidad y Reintentar obtuvo **200**; 26 filas conservadas |
+
+Los errores Prisma P1001 del log corresponden al fallo **deliberado** N01-14, no a un fallo abierto. Health actual comprueba que Express responde; no certifica salud de la base. No se cambió esa lógica.
+
+### Evidencia reproducible y conservación
+
+Ubicación estable autorizada, fuera del repositorio:
+
+`C:\Users\calde\.local\share\opencode\qa\viviendas-leon-n01-20261013`
+
+Compartir solo `evidence`, que fue verificado sin contraseñas ni URLs de PostgreSQL completas:
+
+- `isolation.json`, `baseline.json`: identidad QA y separación del contenedor/entorno habituales, sin credenciales.
+- `migrations.txt`, `fixtures.json`: migraciones y manifiesto de IDs/prefijo.
+- `api-process.json`, `frontend-process.json`: procesos, puertos y destino de proxy.
+- `n01-results.json`: las 14 pruebas, HTTP reales y observaciones de Network. SHA-256: `2b2a63131aaa50ad495fe93ea9fb259c3f7af62daf13765c1e2b5c7b0ffa1e93`.
+- `persisted-family.json`: resultado de SELECT independiente de la familia 26.
+- Capturas de expediente, guardado, validación, error real y recuperación.
+- `verification.json`: comprobaciones finales y hashes de evidencias. Logs sanitizados conservados para reproducir el diagnóstico.
+
+Los scripts locales `setup.cjs`, `api-runner.cjs`, `frontend-runner.mjs`, `servers.cjs`, `integration.cjs` y `verify.cjs` no modifican código de producción. `setup.cjs` se niega a sobreescribir un contenedor, volumen o secreto ya existente. **No ejecutarlo de nuevo para recrear este entorno.** Para revisar evidencia, `node "C:\Users\calde\.local\share\opencode\qa\viviendas-leon-n01-20261013\verify.cjs"` valida resultados, separación y ausencia de secretos sin escrituras de negocio.
+
+Para repetir pruebas con esta instancia, revisar primero su procedencia/aislamiento y preparar otro manifiesto/prefijo; el smoke actual presupone una base recién creada con 25 fixtures y no debe repetirse a ciegas sobre los 26 registros conservados. La contraseña permanece disponible exclusivamente en el archivo protegido para conexión local. No copiarla al informe ni a argumentos de comandos.
+
+Se conservaron **municipio 1, comunidad 1 y familias 1–26** en QA, claramente identificados. No se ejecutaron DELETE globales, TRUNCATE, DROP, migrate reset, db push ni limpieza de desarrollo. El contenedor y volumen QA quedan **conservados y operativos**. Los procesos temporales API/Vite/Edge se cerraron; los puertos 3001/5178 quedaron libres. Las variables temporales desaparecieron con esos procesos. Los procesos habituales de 3000/5173 siguieron activos con sus mismos PIDs.
+
+### Repositorio, límites y recomendación
+
+- `npm run build`: **aprobada**, API/web, TypeScript, Vite y artefactos PWA.
+- `npm run lint`: **aprobada**, sin errores.
+- `git diff --check`: **aprobada**, solo avisos LF/CRLF no bloqueantes.
+- Único archivo versionado modificado en esta tarea: **`docs/frontend/componentes-base.md`**, conservando su cambio local previo. Sin cambios en apps/api/src, servicios/contratos de familias, schema, migraciones, IndexedDB, offline, roles/navegación, autenticación, VitePWA ni dependencias.
+- No se ejecutó SQL de prueba ni escritura contra `viviendas_leon` o el contenedor habitual. Sus IDs/configuración/montajes y los archivos `.env` se comprobaron sin cambios. Esta afirmación se refiere a las operaciones de esta tarea; no audita actividad independiente de otros procesos del usuario.
+
+**Recomendación:** GO de N01 y cierre del bloqueo técnico de integración de familias; se recomienda fusionar las Etapas 1–3 tras revisión del diff y aceptación/documentación de N02–N05. No equivale a un GO para producción con datos reales: autenticación/autorización siguen pendientes y no se certificaron seguridad, PWA productiva ni compatibilidad multinavegador. No se hizo commit, push ni merge.
