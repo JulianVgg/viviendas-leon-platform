@@ -152,3 +152,14 @@ FamilyCreatePage incorpora un panel de orientación, enlace al listado y contene
 La lógica de FamilyForm anterior al render y sus atributos funcionales se compararon sintácticamente con la versión de partida. Permanecen intactos la validación, normalización del payload, selección de comunidad, enfoque del primer error, mensajes de API, guardia contra doble envío y callback `onCreated`.
 
 Las verificaciones en memoria comprobaron campos vacíos, máximos de longitud, fecha inexistente, payload con campos opcionales, doble envío y errores de API mediante callbacks simulados. No se registraron familias ni se consultó una API real. La matriz manual de pantallas, teclado, temas, viewports y pruebas con API aislada está en [componentes-base.md](./componentes-base.md#matriz-manual-reproducible); todos sus casos siguen pendientes de navegador.
+
+## Actualización de QA en navegador — 2026-10-13
+
+La validación posterior sí utilizó Edge headless con perfil aislado y respuestas de API interceptadas. No hubo acceso a beneficiarios reales ni escrituras de backend. El [informe integral](./componentes-base.md#informe-de-qa-integral--etapas-1-2-y-3) sustituye el estado histórico de pruebas pendientes para los casos efectivamente ejecutados.
+
+- Q08/Q09: formulario vacío, nombre con espacios y límites de longitud rechazados; foco y mensajes asociados. La fecha imposible se normalizó mediante el control nativo; no se declara una nueva prueba independiente de toda la validación de fechas.
+- Q10/Q11: respuesta 422 sintética, valores conservados, guardado bloqueado, doble envío, payload y navegación a expediente tras éxito sintético.
+- Q13/Q26: comunidades vacías/error, cancelación sin POST, Tab entre campos y foco visible.
+- Responsive: cinco viewports en ambos temas; `dark:scheme-dark` corrige el indicador nativo de fecha ilegible en oscuro sin cambiar valores ni validaciones. Se verificó su estilo computado y capturas seleccionadas.
+
+El smoke test con API/base de datos realmente aisladas, lectores de pantalla y otros navegadores permanece no ejecutado. La lógica de FamilyForm y sus cuatro campos no se modificaron durante QA.

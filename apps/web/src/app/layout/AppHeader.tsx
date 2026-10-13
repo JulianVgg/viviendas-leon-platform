@@ -44,7 +44,7 @@ export default function AppHeader() {
     <div className="flex min-h-20 items-center justify-between gap-2 px-3 sm:gap-4 sm:px-6">
       <div className="flex min-w-0 items-center gap-3">
         <button id="sidebar-toggle" type="button" className="layout-icon-button layout-focus rounded-lg" aria-controls="app-sidebar" onClick={toggleMenu}>
-          <span className="sr-only xl:hidden">{isMobileOpen ? 'Cerrar navegación' : 'Abrir navegación'}</span><span className="hidden xl:sr-only">{isExpanded ? 'Colapsar navegación' : 'Expandir navegación'}</span>
+          <span className="sr-only xl:hidden">{isMobileOpen ? 'Cerrar navegación' : 'Abrir navegación'}</span><span className="sr-only hidden xl:inline">{isExpanded ? 'Colapsar navegación' : 'Expandir navegación'}</span>
           <svg aria-hidden="true" className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M4 6h16M4 12h10M4 18h16" /></svg>
         </button>
         <Link to="/" className="layout-focus hidden min-w-0 rounded-lg sm:block"><span className="block truncate text-sm font-semibold text-slate-900 dark:text-white">ViviendasLeón Guatemala</span><span className="block text-xs text-slate-500 dark:text-slate-400">Plataforma de gestión</span></Link>

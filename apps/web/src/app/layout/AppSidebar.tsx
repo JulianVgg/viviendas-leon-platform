@@ -23,10 +23,16 @@ export default function AppSidebar() {
   useEffect(() => {
     if (!isMobileOpen) return
     const sidebar = sidebarRef.current
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const activeElement = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const previousFocus = activeElement && activeElement !== document.body && !activeElement.closest('[inert]')
+      ? activeElement
+      : document.getElementById('sidebar-toggle')
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    sidebar?.querySelector<HTMLElement>('button')?.focus()
+    // Wait for the visibility transition to enter its visible state before focusing.
+    let focusFrame = window.requestAnimationFrame(() => {
+      focusFrame = window.requestAnimationFrame(() => sidebar?.querySelector<HTMLElement>('button')?.focus())
+    })
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -47,9 +53,10 @@ export default function AppSidebar() {
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => {
+      window.cancelAnimationFrame(focusFrame)
       document.body.style.overflow = previousOverflow
       document.removeEventListener('keydown', handleKeyDown)
-      previousFocus?.focus()
+      previousFocus?.focus({ preventScroll: true })
     }
   }, [isMobileOpen, closeMobileSidebar])
 
