@@ -20,7 +20,7 @@ export default function Form({ mode = 'create', status = 'idle', generalError, a
 
   return <form
     data-form-mode={mode}
-    className={cn('space-y-6', (isDisabled || isReadonly) && 'opacity-80', className)}
+    className={cn('min-w-0 space-y-6', (isDisabled || isReadonly) && 'opacity-80', className)}
     aria-busy={isBusy}
     aria-disabled={isDisabled || undefined}
     aria-readonly={isReadonly || undefined}

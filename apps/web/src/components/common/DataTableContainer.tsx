@@ -1,6 +1,6 @@
-import type { ReactNode } from 'react'
+import type { ComponentProps } from 'react'
 import DataTable from '@/components/ui/DataTable'
 
-export default function DataTableContainer({ columns, rows }: { columns: string[]; rows: ReactNode[][] }) {
-  return <DataTable columns={columns} rows={rows} />
+export default function DataTableContainer(props: ComponentProps<typeof DataTable>) {
+  return <DataTable {...props} />
 }
