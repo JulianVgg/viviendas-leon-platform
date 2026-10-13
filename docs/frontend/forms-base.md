@@ -125,3 +125,17 @@ Estados disponibles para verificación:
 - Sin conexión y sincronización: `SyncStatus`, preparado para conectarse a la infraestructura futura de sincronización.
 
 La revisión realizada en este entorno fue estática. No se contó con una herramienta de navegador automatizado para medir visualmente cada viewport ni con una herramienta automatizada de contraste. La verificación visual interactiva y de teclado debe completarse en un navegador antes de cerrar el issue.
+
+## Adaptación visual TailAdmin PRO — Etapa 2
+
+Se modernizaron FormField, Form, FormSection, FormGrid y FormActions sin modificar sus props anteriores, validaciones de negocio ni valores del formulario.
+
+- `formControlClassName` utiliza altura de 44px, bordes, sombra y foco con tokens de la Etapa 1. Añade estilos para `aria-invalid="true"`, `disabled` y el atributo explícito `readonly`, con variantes oscuras. No aplica apariencia de solo lectura a selects editables. Los consumidores pueden seguir sobrescribiendo dimensiones mediante sus clases.
+- `FormField` conserva `label`, `id`, `hint`, `error`, `required` y `children`. Si contiene un único input, select o textarea nativo directo, asocia automáticamente label y mensaje; respeta el ID del control cuando no se proporciona `id` al campo y genera uno único si ambos faltan. Conserva los atributos ARIA explícitos, combina `aria-describedby` sin duplicados y completa `aria-invalid`/`aria-required` cuando no existen. No altera eventos, valores, refs ni validaciones nativas. Para componentes personalizados, controles anidados o múltiples controles, el consumidor sigue gestionando las asociaciones; no se clonan esos controles.
+- Los errores conservan `${id}-error` y `role="alert"`; los hints reciben `${id}-hint`. El error sustituye visualmente al hint, como antes.
+- `Form` mantiene los modos y los siete estados. El fieldset continúa bloqueando controles durante loading, saving, disabled y readonly. Se conserva la ubicación de `actions` fuera del fieldset: el consumidor debe continuar pasando los flags correspondientes a `FormActions`.
+- `FormSection` mantiene variantes plain, outlined y card, con padding responsive y tipografía coherente con Card. En la variante card también muestra una descripción cuando no hay título.
+- `FormGrid` mantiene las opciones de una, dos y tres columnas y sus breakpoints; ajusta los espacios entre campos y evita anchos mínimos que dificulten el diseño móvil.
+- `FormActions` mantiene etiquetas, tipos submit/button, `onCancel` y bloqueo mediante `submitting`, `disabled` o `blocked`. Añade `aria-busy` e indicador decorativo de guardado, respetando movimiento reducido. No ejecuta guardado ni cancelación por sí mismo.
+
+Las verificaciones de renderizado en memoria cubrieron los siete estados, botones bloqueados, etiquetas de acciones, asociaciones de errores/hints, IDs generados y atributos ARIA existentes. Build y lint validaron la compatibilidad de los usos actuales, incluido FamilyForm. No se ejecutaron pruebas visuales, envíos reales ni pruebas de teclado en navegador. No se modificaron FamilyForm, FamilyListPage, servicios, conectividad, cola offline ni configuración PWA.

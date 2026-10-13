@@ -106,3 +106,23 @@ Estados: `synced`, `syncing`, `pending`, `offline`, `error`. `pendingCount` mues
 - `NotificationDropdown`: avisos del encabezado.
 - `ComponentCard`: fachada compatible que usa `Card`.
 - `DataTableContainer`: fachada compatible que usa `DataTable`.
+
+## Adaptación TailAdmin PRO — Etapa 2
+
+Se adaptaron los estilos de los componentes existentes tomando como referencia Button, Badge, Alert, ComponentCard, Modal y BasicTableOne de TailAdmin React PRO 2.4. No se importaron sus contratos, datos de ejemplo ni estilos globales. Se conservan Inter, los breakpoints actuales y los tokens `brand` y `shadow-theme-*` de la Etapa 1, sin dependencias adicionales.
+
+- **Button:** conserva `forwardRef`, atributos y eventos nativos, las cuatro variantes y los tres tamaños. Usa foco visible con tokens institucionales, sombras discretas y estados hover/active limitados a botones habilitados. No cambia el `type` recibido ni añade uno predeterminado.
+- **Badge:** conserva variantes, contenido ReactNode y atributos HTML, con borde sutil y colores claros/oscuros. No añade un rol automático; los estados anunciados siguen siendo responsabilidad de `SyncStatus` o del consumidor.
+- **Alert:** conserva `title`, `children`, variantes y atributos HTML. Mantiene `alert` para errores y `status` para el resto, salvo un `role` explícito del consumidor. Añade un icono decorativo por variante y mantiene el contenido dinámico, incluidos botones y el valor `0`.
+- **Card:** conserva Card, CardHeader y CardBody. Ajusta tipografía, padding responsive y distribución de acciones. `ComponentCard` sigue siendo una fachada; además de sus props anteriores, acepta opcionalmente `actions` y `className`, sin exigir cambios en sus usos.
+- **Dialog:** conserva `open`, `onClose`, `title`, `description`, `children` y `actions`. Se renderiza mediante un portal a `document.body` y un `<dialog>` nativo abierto con `showModal()`: el navegador administra la capa modal, el foco y el aislamiento del fondo. Los IDs de título y descripción son únicos. El foco inicial va a Cerrar; Escape solicita `onClose` sin cerrar por su cuenta el estado controlado. El backdrop también solicita cierre. Al cerrar o desmontar, restaura el foco si el elemento original sigue conectado y el estilo anterior de scroll, incluida su prioridad CSS. Los diálogos comparten el bloqueo de scroll. El padre debe actualizar `open` al recibir `onClose`.
+- **DataTable:** conserva `columns: string[]`, `rows: ReactNode[][]`, `caption` y `className`. Añade marco, cabecera diferenciada y estados hover/focus de fila. Mantiene `scope="col"`, caption accesible y scroll horizontal, ahora enfocable por teclado como región etiquetada. `DataTableContainer` delega también las props opcionales `caption` y `className`. No añade filtros, ordenamiento ni paginación.
+
+### Verificaciones de esta etapa
+
+- Build y lint iniciales y finales desde la raíz, más `git diff --check`.
+- Verificaciones puntuales en memoria de renderizado HTML y contratos: variantes/tamaños y forwarding de Button, roles y contenido de Badge/Alert, composición de Card, campos y mensajes, estados de formularios, tablas dinámicas y Dialog cerrado.
+- Ciclo de Dialog verificado con un DOM simulado: IDs, foco inicial/restaurado, cierre solicitado, bloqueo de scroll compartido y restauración del estilo previo. Esto **no sustituye** una prueba del comportamiento nativo de `showModal()`.
+- No se ejecutaron pruebas visuales ni de interacción en un navegador real. Queda pendiente comprobar teclado, lector de pantalla, contraste medido, tema claro/oscuro y pantallas pequeñas. Dialog no tiene consumidores de pantalla actualmente; su apertura debe probarse antes de integrarlo en un flujo funcional.
+
+No se modificaron páginas, datos, servicios, roles, rutas ni persistencia offline.
