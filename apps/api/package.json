@@ -6,6 +6,8 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
+    "test": "npm run build && node --test tests/families-integral.test.mjs",
+    "test:qa": "npm run build && node --test tests/families-integral.qa.test.mjs",
     "postinstall": "prisma skills sync || exit 0"
   },
   "description": "",
