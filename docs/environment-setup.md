@@ -46,6 +46,46 @@ Desde la raíz del repositorio, inicia la API y el frontend con `npm run dev`.
 Si cambias `apps/api/.env` mientras la API está ejecutándose, reiníciala
 para que cargue la nueva configuración.
 
+### Login compartido de desarrollo
+
+El seed incluye una cuenta reproducible para el equipo, exclusivamente para
+desarrollo con datos sintéticos:
+
+- Correo: `dev@viviendas-leon.test`.
+- Contraseña: `ViviendasLeon-Dev-2026!`.
+- Rol: `Rol Sintético Técnico` (no es una cuenta administradora).
+- Acceso: `http://localhost:5173/login`.
+
+Después de actualizar una rama o integrar un merge, cada compañero debe aplicar
+las migraciones indicadas arriba y ejecutar, desde la raíz:
+
+```powershell
+npm run db:seed -w @viviendas-leon/api
+```
+
+Git comparte el código del seed, no las cuentas de una base de datos local.
+El seed crea o actualiza esta cuenta sin duplicarla y restablece su contraseña
+al valor documentado en cada ejecución. También crea o actualiza los demás
+datos sintéticos; úsalo únicamente en bases de desarrollo.
+Los otros tres usuarios sintéticos conservan contraseñas ficticias y no sirven
+para iniciar sesión.
+
+La API también requiere `SESSION_SECRET` en `apps/api/.env`, con al menos 32
+caracteres. Genera un secreto propio para cada entorno con:
+
+```powershell
+node -e "console.log(require('node:crypto').randomBytes(48).toString('hex'))"
+```
+
+Copia el resultado como `SESSION_SECRET` en tu `.env` y reinicia la API.
+No compartas ni subas a Git ese archivo. No uses el marcador de `.env.example`
+como secreto real.
+
+Estas credenciales son públicas dentro del repositorio: no deben utilizarse en
+producción ni con datos reales. El seed se niega a ejecutar cuando
+`NODE_ENV=production`; esto no elimina cuentas previamente creadas, por lo que
+no se debe reutilizar una base de desarrollo en producción.
+
 ## URL de la API y despliegue
 
 El frontend utiliza `/api` por defecto. En desarrollo, Vite redirige esas
