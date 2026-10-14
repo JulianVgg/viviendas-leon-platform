@@ -748,3 +748,13 @@ model Bitacora {
   @@index([entidad, registroId])
   @@map("bitacora")
 }
+
+// OFF-06: bitácora de notas FICTICIAS. No almacena visitas reales.
+model OfflineDemoNote {
+  operationId String   @id @map("operation_id") @db.Uuid
+  kind        String
+  payload     Json
+  receivedAt  DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
+
+  @@map("offline_demo_note")
+}
