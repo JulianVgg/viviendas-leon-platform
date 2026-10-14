@@ -1,4 +1,5 @@
 import "dotenv/config";
+import argon2 from "argon2";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client.js";
 
@@ -31,6 +32,10 @@ async function ensure(
 }
 
 async function main() {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("The synthetic seed must not run in production.");
+  }
+
   const municipioNorte = await ensure(
     prisma.municipio,
     { nombre: "Municipio Sintético Norte" },
@@ -281,6 +286,23 @@ async function main() {
   await prisma.usuarioRol.upsert({ where: { usuarioId_rolId: { usuarioId: usuarioTecnico.id, rolId: rolTecnico.id } }, update: {}, create: { usuarioId: usuarioTecnico.id, rolId: rolTecnico.id } });
   await prisma.usuarioRol.upsert({ where: { usuarioId_rolId: { usuarioId: usuarioCoordinador.id, rolId: rolCoordinador.id } }, update: {}, create: { usuarioId: usuarioCoordinador.id, rolId: rolCoordinador.id } });
   await prisma.usuarioRol.upsert({ where: { usuarioId_rolId: { usuarioId: usuarioAuditor.id, rolId: rolAuditor.id } }, update: {}, create: { usuarioId: usuarioAuditor.id, rolId: rolAuditor.id } });
+  // Public, development-only credentials. Re-running the seed restores this account.
+  const developmentUser = await ensure(
+    prisma.usuario,
+    { correo: "dev@viviendas-leon.test" },
+    {
+      nombre: "Development User",
+      correo: "dev@viviendas-leon.test",
+      passwordHash: await argon2.hash("ViviendasLeon-Dev-2026!"),
+      estado: "ACTIVO",
+      fechaCreacion: moment("2026-01-01"),
+    },
+  );
+  await prisma.usuarioRol.upsert({
+    where: { usuarioId_rolId: { usuarioId: developmentUser.id, rolId: rolTecnico.id } },
+    update: {},
+    create: { usuarioId: developmentUser.id, rolId: rolTecnico.id },
+  });
   await prisma.rolPermiso.upsert({ where: { rolId_permisoId: { rolId: rolTecnico.id, permisoId: permisoAgricultura.id } }, update: {}, create: { rolId: rolTecnico.id, permisoId: permisoAgricultura.id } });
   await prisma.rolPermiso.upsert({ where: { rolId_permisoId: { rolId: rolTecnico.id, permisoId: permisoVisitas.id } }, update: {}, create: { rolId: rolTecnico.id, permisoId: permisoVisitas.id } });
   await prisma.rolPermiso.upsert({ where: { rolId_permisoId: { rolId: rolCoordinador.id, permisoId: permisoFamilias.id } }, update: {}, create: { rolId: rolCoordinador.id, permisoId: permisoFamilias.id } });
@@ -339,7 +361,7 @@ async function main() {
   await ensure(prisma.bitacora, { usuarioId: usuarioAuditor.id, entidad: "familia", registroId: String(familiaLoma.id), accion: "CREATE", fecha: moment("2026-03-01") }, { usuarioId: usuarioAuditor.id, entidad: "familia", registroId: String(familiaLoma.id), accion: "CREATE", fecha: moment("2026-03-01"), datosNuevos: "synthetic-seed", descripcion: "Auditoría ficticia generada por el seed." });
   await ensure(prisma.bitacora, { usuarioId: usuarioAuditor.id, entidad: "evaluacion_cultivo", registroId: String(evaluacionLoma.id), accion: "UPDATE", fecha: moment("2026-03-15") }, { usuarioId: usuarioAuditor.id, entidad: "evaluacion_cultivo", registroId: String(evaluacionLoma.id), accion: "UPDATE", fecha: moment("2026-03-15"), datosAnteriores: "synthetic-before", datosNuevos: "synthetic-after", descripcion: "Auditoría ficticia generada por el seed." });
 
-  console.log("Synthetic seed completed: 3 communities, 3 families, 4 members, 3 cycles, 2 productions, 2 sales, 3 evaluations, 3 inputs, 2 trainings, 2 evidences, 2 alerts, 3 users.");
+  console.log("Synthetic seed completed: 3 communities, 3 families, 4 members, 3 cycles, 2 productions, 2 sales, 3 evaluations, 3 inputs, 2 trainings, 2 evidences, 2 alerts, 4 users (including the development login account).");
 }
 
 main()
