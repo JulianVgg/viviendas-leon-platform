@@ -1,0 +1,11 @@
+
+export const crops = ['Acelga', 'Apio', 'Brócoli', 'Cebolla', 'Chile pimiento', 'Cilantro', 'Coliflor', 'Espinaca', 'Frijol bolonillo', 'Lechuga', 'Rábano', 'Remolacha', 'Repollo', 'Tomate', 'Zanahoria']
+export const stages = ['Almácigo', 'Trasplantado']
+export const qualities = ['Excelente', 'Bueno', 'Regular/Medio', 'Malo']
+export const weatherOptions = ['Claro', 'Nublado', 'Lluvia ligera', 'Lluvia pesada', 'Viento ligero', 'Viento pesado']
+export const diseases = ['Alternaria', 'Antracnosis', 'Botritis', 'Cercospora', 'Mal de talluelo', 'Mildiu', 'Damping-off', 'Hernia de las crucíferas', 'Mancha de anillo u ojo de sapo', 'Necrosis', 'Oídio', 'Phytophthora capsici (marchitez)', 'Royas y carbones', 'Sigatoka', 'Tizón tardío', 'Tizón temprano', 'Virosis']
+export const pests = ['Ácaro', 'Araña roja', 'Aves', 'Caracoles y babosas', 'Chinche', 'Cogollero', 'Gallina ciega', 'Hormigas', 'Larvas o gusanos', 'Mildiu', 'Minador de hoja', 'Mosca blanca', 'Mosca gusano', 'Pulgón', 'Trips']
+export const damage = ['1', '3', '5', '10', '20']
+export const organicInsecticides = ['Ajo', 'Cal', 'Cebolla, ajo y vinagre', 'Clavo de olor', 'Corteza de sauce', 'Crisantemos, margaritas o gerberas', 'Eucalipto', 'Flor de muerto y ruda', 'Jabón', 'Manzanilla', 'Nim', 'Té de tabaco']
+export const fertilizers = ['Bocashi', 'Foliar de chichicaste, apasote y albahaca', 'Foliar de encino', 'Foliar de sauco, aliso y hierba mora', 'Té de estiércol o compost']
+export const chemicalInsecticides = ['Sipermetrina', 'Lodam', 'Triple 15', 'Urea', 'Triple 20']
