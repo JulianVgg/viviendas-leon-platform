@@ -5,19 +5,26 @@ import { useSidebar } from '@/app/providers/SidebarContext'
 import { navigationForRole, type NavigationItem } from '@/app/navigation/navigation'
 import { cn } from '@/app/lib/cn'
 
-function activePath(pathname: string, path: string) {
-  return path === '/' ? pathname === '/' : pathname === path || pathname.startsWith(`${path}/`)
+function activePath(pathname: string, path?: string, exact = false) {
+  if (!path) return false
+  return path === '/' || exact ? pathname === path : pathname === path || pathname.startsWith(`${path}/`)
 }
 
 export default function AppSidebar() {
   const { currentRole } = useRole()
   const { isExpanded, isHovered, setIsHovered, isMobileOpen, closeMobileSidebar } = useSidebar()
   const { pathname } = useLocation()
-  const groups = useMemo(() => navigationForRole(currentRole.id), [currentRole.id])
+  const groups = useMemo(() => navigationForRole(currentRole.id).map((group) => ({ ...group, items: group.items.filter((item) => !item.sidebarHidden) })).filter((group) => group.items.length > 0), [currentRole.id])
   const sidebarRef = useRef<HTMLElement>(null)
-  const [submenu, setSubmenu] = useState<{ route: string; role: string; id: string | null } | null>(null)
-  const activeParentId = groups.flatMap((group) => group.items).find((item) => item.children && activePath(pathname, item.path))?.id
-  const open = submenu?.route === pathname && submenu.role === currentRole.id ? submenu.id : activeParentId
+  const [submenu, setSubmenu] = useState<{ route: string; role: string; expanded: Record<string, boolean> } | null>(null)
+  // Match the most specific child so the inventory route does not open agriculture.
+  const activeParentId = groups.flatMap((group) => group.items).flatMap((item) => item.children
+    ? [item, ...item.children].filter((child) => activePath(pathname, child.path)).map((child) => ({ id: item.id, length: child.path?.length ?? 0 }))
+    : []).sort((a, b) => b.length - a.length)[0]?.id
+  const open = {
+    ...(submenu?.role === currentRole.id ? submenu.expanded : {}),
+    ...(activeParentId && (submenu?.route !== pathname || submenu.role !== currentRole.id) ? { [activeParentId]: true } : {}),
+  }
   const showLabels = isExpanded || isHovered || isMobileOpen
 
   useEffect(() => {
@@ -63,19 +70,21 @@ export default function AppSidebar() {
   function renderItems(items: NavigationItem[]) {
     return <ul className="space-y-1">
       {items.map((item) => {
-        const active = activePath(pathname, item.path)
-        const expanded = open === item.id
+        const active = item.children ? activeParentId === item.id : activePath(pathname, item.path, item.exact)
+        const expanded = open[item.id] ?? false
         const menuClass = cn('layout-menu-item layout-focus', active || expanded ? 'layout-menu-active' : 'layout-menu-inactive', !showLabels && 'xl:justify-center')
         return <li key={item.id}>
           {item.children ? <>
-            <button type="button" aria-label={item.name} aria-expanded={expanded && showLabels} aria-controls={`submenu-${item.id}`} title={!showLabels ? item.name : undefined} onClick={() => setSubmenu({ route: pathname, role: currentRole.id, id: expanded ? null : item.id })} className={menuClass}>
+            <button type="button" aria-label={item.name} aria-expanded={expanded && showLabels} aria-controls={`submenu-${item.id}`} title={!showLabels ? item.name : undefined} onClick={() => setSubmenu({ route: pathname, role: currentRole.id, expanded: { ...open, [item.id]: !expanded } })} className={menuClass}>
               <span aria-hidden="true" className="shrink-0">{item.icon}</span><span className={cn('min-w-0 flex-1', !showLabels && 'xl:hidden')}>{item.name}</span><svg aria-hidden="true" viewBox="0 0 20 20" fill="none" className={cn('size-4 shrink-0 transition-transform motion-reduce:transition-none', expanded && 'rotate-180', !showLabels && 'xl:hidden')}><path d="m5 7.5 5 5 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </button>
             <ul id={`submenu-${item.id}`} hidden={!expanded || !showLabels} className="ms-6 mt-2 space-y-1 border-s border-slate-200 ps-3 dark:border-slate-800">
-              <li><Link to={item.path} onClick={closeMobileSidebar} aria-current={pathname === item.path ? 'page' : undefined} className={cn('layout-menu-item layout-focus', pathname === item.path ? 'layout-menu-active' : 'layout-menu-inactive')}>Vista general</Link></li>
-              {item.children.map((child) => <li key={child.id}><Link onClick={closeMobileSidebar} to={child.path} aria-current={activePath(pathname, child.path) ? 'page' : undefined} className={cn('layout-menu-item layout-focus', activePath(pathname, child.path) ? 'layout-menu-active' : 'layout-menu-inactive')}><span>{child.name}</span></Link></li>)}
+              {item.path && <li><Link to={item.path} onClick={closeMobileSidebar} aria-current={pathname === item.path ? 'page' : undefined} className={cn('layout-menu-item layout-focus', pathname === item.path ? 'layout-menu-active' : 'layout-menu-inactive')}>Vista general</Link></li>}
+              {item.children.map((child) => <li key={child.id}>{child.path
+                ? <Link onClick={closeMobileSidebar} to={child.path} aria-current={activePath(pathname, child.path, child.exact) ? 'page' : undefined} className={cn('layout-menu-item layout-focus', activePath(pathname, child.path, child.exact) ? 'layout-menu-active' : 'layout-menu-inactive')}><span>{child.name}</span></Link>
+                : <span aria-disabled="true" className="layout-menu-item flex-wrap text-slate-500 dark:text-slate-400"><span>{child.name}</span><span className="text-xs font-normal">En preparación</span></span>}</li>)}
             </ul>
-          </> : <Link onClick={closeMobileSidebar} to={item.path} aria-label={item.name} aria-current={active ? 'page' : undefined} title={!showLabels ? item.name : undefined} className={menuClass}><span aria-hidden="true" className="shrink-0">{item.icon}</span><span className={cn(!showLabels && 'xl:hidden')}>{item.name}</span></Link>}
+          </> : item.path && <Link onClick={closeMobileSidebar} to={item.path} aria-label={item.name} aria-current={active ? 'page' : undefined} title={!showLabels ? item.name : undefined} className={menuClass}><span aria-hidden="true" className="shrink-0">{item.icon}</span><span className={cn(!showLabels && 'xl:hidden')}>{item.name}</span></Link>}
         </li>
       })}
     </ul>
@@ -92,7 +101,7 @@ export default function AppSidebar() {
       </Link>
       <button type="button" onClick={closeMobileSidebar} aria-label="Cerrar navegación" className="layout-icon-button layout-focus size-9 xl:hidden"><span aria-hidden="true">×</span></button>
     </div>
-    <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-1 -mx-1"><nav aria-label="Navegación principal" className="space-y-7">{groups.map((group) => <section key={group.id}><h2 className="mb-3 px-3 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400"><span className={cn(!showLabels && 'xl:sr-only')}>{group.name}</span>{!showLabels && <span aria-hidden="true" className="hidden text-center xl:block">···</span>}</h2>{renderItems(group.items)}</section>)}</nav></div>
+    <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-1 -mx-1"><nav aria-label="Navegación principal" className="space-y-7">{groups.map((group) => <section key={group.id}>{group.name && <h2 className="mb-3 px-3 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400"><span className={cn(!showLabels && 'xl:sr-only')}>{group.name}</span>{!showLabels && <span aria-hidden="true" className="hidden text-center xl:block">···</span>}</h2>}{renderItems(group.items)}</section>)}</nav></div>
     <div className={cn('mt-5 border-t border-slate-200 pt-4 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400', !showLabels && 'xl:hidden')}><p className="font-medium text-slate-700 dark:text-slate-300">{currentRole.label}</p><p className="mt-1">Rol simulado · Vista de interfaz</p></div>
   </aside>
 }
