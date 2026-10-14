@@ -477,3 +477,95 @@ Se conservaron **municipio 1, comunidad 1 y familias 1–26** en QA, claramente 
 - No se ejecutó SQL de prueba ni escritura contra `viviendas_leon` o el contenedor habitual. Sus IDs/configuración/montajes y los archivos `.env` se comprobaron sin cambios. Esta afirmación se refiere a las operaciones de esta tarea; no audita actividad independiente de otros procesos del usuario.
 
 **Recomendación:** GO de N01 y cierre del bloqueo técnico de integración de familias; se recomienda fusionar las Etapas 1–3 tras revisión del diff y aceptación/documentación de N02–N05. No equivale a un GO para producción con datos reales: autenticación/autorización siguen pendientes y no se certificaron seguridad, PWA productiva ni compatibilidad multinavegador. No se hizo commit, push ni merge.
+
+## Sidebar institucional — Reorganización posterior a Etapas 1–3
+
+**Fecha:** 2026-10-13. **Base:** `feat/tailadmin-pro-families`, commit `9b3ffe4` (`feat: pruebas QA y correcciones`). **Rama de revisión:** `feat/sidebar-institutional-navigation`. Estado inicial limpio; sin commit, push ni merge.
+
+### Jerarquía, rutas e iconografía
+
+Orden institucional completo visible para `coordination`; otros roles reciben únicamente las opciones autorizadas. «Panel principal» es un enlace independiente, sin encabezado repetido. Los otros seis títulos son botones de submenú, sin enlace general adicional.
+
+| Sección / SVG conceptual | Subopción | Destino existente / estado |
+|---|---|---|
+| Panel principal / Dashboard | Panel principal (enlace único) | `/` |
+| Familias / Users | Listado de familias | `/familias` |
+| | Registrar familia | `/familias/nueva` |
+| Gestión agrícola / Sprout | Huertos y cultivos | `/gestion-agricola` |
+| | Producción y cosechas | `/gestion-agricola/produccion` |
+| | Costos y ventas | En preparación |
+| Visitas técnicas / ClipboardList | Agenda de visitas | `/actividades/visitas` |
+| | Registrar visita | En preparación |
+| | Historial de visitas | En preparación |
+| Capacitaciones / GraduationCap | Programación | `/actividades/capacitaciones` |
+| | Participantes y asistencia | En preparación |
+| Insumos e inventario / Package | Inventario | `/gestion-agricola/insumos` |
+| | Movimientos | En preparación |
+| Seguimiento y reportes / Chart | Seguimiento de familias | En preparación |
+| | Indicadores | `/reportes/indicadores` |
+| | Reportes | `/reportes/reportes` |
+
+Las seis opciones pendientes son texto con `aria-disabled="true"`, sin `href`, manejador de navegación ni `tabIndex`. No se incorporaron rutas ficticias, páginas demo, servicios, fixtures ni dependencias. Las rutas base distintas de familias ya existían como pantallas base; habilitar un enlace no implica implementar su funcionalidad.
+
+Los siete SVG reutilizables están en `components/icons/index.tsx`, mediante `NavigationIcon`: `size-6`, `currentColor`, trazo de 1.5 y ocultos al árbol accesible porque el control ya tiene nombre. Se conserva `AppIcon` para usos heredados y para no rediseñar Auditoría/Administración. No se recibió una imagen adjunta en esta sesión: se siguió la organización/iconografía textual solicitada, no estilos de una referencia externa.
+
+### Diseño PRO y comportamiento
+
+- Se conservan `layout-menu-item`, `layout-menu-active`, `layout-menu-inactive`, `layout-focus`, tokens brand, fondos claros/oscuros, espaciados, transiciones, ancho 290/90px y breakpoint de escritorio de 1280px. Sin cambios en `index.css`, header, layout ni providers.
+- Los submenús tienen estado independiente: abrir uno no cierra los otros. Pueden colapsarse manualmente; al cambiar de ruta se abre el grupo correspondiente, manteniendo los demás estados del mismo rol. Cambiar de rol descarta estados de otro rol.
+- Se selecciona el grupo por la ruta hija más específica: `/gestion-agricola/insumos` corresponde a inventario, no al enlace agrícola general. Las hojas `/familias` y `/gestion-agricola` se resaltan solo por coincidencia exacta, evitando dos hojas activas. Un expediente `/familias/:id` mantiene abierto Familias, sin atribuirle una hoja incorrecta.
+- Se mantienen hover, expansión por foco, `aria-expanded`, `aria-controls`, botones nativos para Enter/Espacio y `hidden` en submenús no visibles para excluir enlaces del orden de Tab.
+- Se conserva el efecto móvil existente: foco después de dos frames, Escape, ciclo Tab/Shift+Tab, backdrop, cierre al navegar, restauración de foco y del valor anterior de `body.style.overflow`.
+- H01/H03/H04 permanecen sin cambios en sus archivos originales; H02 se conserva en AppSidebar. Se revalidaron foco/Escape y overflow de H02/H03. No se repitió la prueba específica del control de fecha H04 ni toda la suite histórica de familias/N01.
+
+### Roles y diferencias con AUTH-01
+
+El filtro conserva el mecanismo mock y añade evaluación de restricciones hijas dentro del acceso permitido por el padre; un hijo nunca autoriza un padre denegado. Esto es visibilidad, **no autenticación ni autorización backend**.
+
+| Rol mock | Visibilidad institucional |
+|---|---|
+| `fieldWorker` | Panel principal, Familias, Gestión agrícola, Visitas técnicas, Capacitaciones, Insumos e inventario; Seguimiento y reportes muestra solo Seguimiento de familias pendiente. No Costos y ventas, Indicadores ni Reportes. |
+| `coordination` | Las siete secciones y todas sus subopciones. |
+| `operationsDirector` | Panel principal; Seguimiento y reportes con Indicadores y Reportes, sin Seguimiento de familias. |
+| `administration` | Solo Panel principal en el sidebar; Configuración de cuenta en el header conserva su acceso anterior. |
+| `audit` | Panel principal y navegación heredada de Auditoría (Vista general y Bitácora). |
+
+Seguimiento de familias hereda el alcance operativo de familias/visitas, **no** el permiso de reportes; agruparlo no concede reportes al personal de campo ni familias a la dirección. Costos y ventas permanece deshabilitado y se restringe conservadoramente a coordinación, excluyendo personal de campo según AUTH-01 para contabilidad. No se introduce acceso operativo a roles que antes no lo tenían.
+
+**Conflictos a resolver por el equipo AUTH-01:** los IDs mock no equivalen todavía a los roles de negocio. La matriz prevé acceso operativo completo para Directora y acceso administrativo parcial para Coordinadora; el frontend heredado es más restrictivo. También faltan alcances limitados/solo lectura para Contadora/Auditor en familias, insumos y reportes. No se amplían estos permisos en esta entrega. El significado contable de Costos y ventas y su autorización definitiva deben confirmarse antes de habilitarlo; tampoco se implementan restricciones por registros propios/asignados.
+
+### Exclusiones y futura Etapa 4
+
+**Administración queda excluida únicamente del sidebar reorganizado** mediante `sidebarHidden`; su configuración original sigue disponible para `navigationForRole` y para el enlace del header. No se cambian sus rutas, componentes ni permisos. Su visibilidad futura deberá coordinarse con el responsable del módulo. Auditoría conserva su grupo heredado para `audit`, fuera de la jerarquía operativa nueva, sin rediseño ni cambios de rutas/permisos.
+
+Voluntariado, vistas agrícolas separadas, asistencia técnica y alertas dejan de figurar en la jerarquía solicitada, pero **todas sus rutas existentes se conservan** en `routes.tsx`. No se interviene en backend, Prisma, PostgreSQL QA, familias funcionales, IndexedDB, offline, VitePWA, autenticación, visitas ni capacitaciones funcionales.
+
+Etapa 4 puede sustituir opciones pendientes por destinos reales y permisos aprobados sin reemplazar el sidebar ni el sistema visual. No habilitar una opción únicamente porque se cree su ruta: confirmar representación funcional, autorización y pruebas primero.
+
+### Pruebas de esta entrega
+
+- `npm run build` inicial y posterior: aprobado (workspaces API/web, TypeScript/Vite/PWA).
+- `npm run lint` inicial y posterior: aprobado.
+- `git diff --check`: aprobado; avisos LF/CRLF no bloqueantes.
+- Brave real en modo headless, perfil temporal aislado, CDP; ejecutable `Brave Browser 155.1.97.56`, motor reportado `Chrome/155.0.8059.40`. **17 casos aprobados, 0 fallidos en la ejecución final.**
+- Jerarquía/textos/orden exactos, siete SVG, diez destinos institucionales, seis opciones pendientes no navegables; submenús independientes y Enter/Espacio/Tab; navegación de familias y resaltado sin duplicaciones; visibilidad de los cinco roles; configuración heredada y bitácora; ancho colapsado/expandido, hover y foco; ausencia de excepciones JavaScript.
+- Diez combinaciones de **320, 375, 768, 1024 y 1440px × claro/oscuro**, altura 900px: ausencia de scroll horizontal del documento/sidebar, scroll vertical propio y fondos del tema. En móvil: foco inicial, ciclo de teclado, Escape, restauración de scroll/foco e `inert`; prueba adicional del backdrop, Tab por todos los controles y cierre al navegar.
+- Veinte capturas (parte superior/inferior de cada combinación). Revisión visual directa de 320 claro/oscuro, 375 claro, 768 oscuro, 1024 claro, 1440 oscuro y parte inferior de 320 claro: sin recortes ni cambio del lenguaje PRO; títulos largos se ajustan a dos líneas.
+- Evidencia local, no versionada: `C:\Users\calde\AppData\Local\Temp\opencode\sidebar-institutional-qa\results.json` y PNG; script `C:\Users\calde\AppData\Local\Temp\opencode\sidebar-institutional-qa.cjs`. Ejecución: `node <script>` con Vite frontend en `127.0.0.1:5186`. El script utiliza perfil/CDP dedicados; comprobar que sus puertos estén libres antes de repetirlo.
+- Solicitudes API y externas bloqueadas mediante CDP; no se inició backend ni se accedió a PostgreSQL, no se crearon datos de ejemplo. Las rutas de familias se comprobaron como navegación, no como integración GET/POST. El aviso «Servidor no disponible» en capturas es esperado por ese aislamiento.
+
+Las primeras ejecuciones sirvieron para corregir el arnés CDP (clics separados por render, alcance local de variables, envío de Enter y comparación de colores OKLCH), no produjeron correcciones adicionales en archivos de aplicación. La ejecución final incluye los 17 casos completos. Limitaciones: sin certificación multinavegador, lector de pantalla, dispositivos físicos ni repetición de N01; la evidencia temporal depende de esta máquina.
+
+### Ajuste posterior — Visitas técnicas fuera del sidebar
+
+Por solicitud del usuario, se oculta el apartado completo **Visitas técnicas** mediante `sidebarHidden`, ya que lo implementará otro integrante. No se modifican sus rutas, componentes ni permisos; se conserva la configuración de navegación para coordinar su futura visibilidad con el responsable.
+
+La jerarquía visible queda: **Panel principal → Familias → Gestión agrícola → Capacitaciones → Insumos e inventario → Seguimiento y reportes**, sujeta al mismo filtrado por roles. Agenda de visitas, Registrar visita e Historial de visitas ya no aparecen en el sidebar. Administración continúa excluida y Auditoría conserva su navegación heredada.
+
+La evidencia de 17 casos y las capturas anteriores corresponden a la versión con Visitas técnicas visible; no validan este ajuste posterior. Para este ajuste se ejecutan build, lint y `git diff --check`, sin repetir las pruebas en navegador.
+
+### Ajuste posterior — Retiro de la ruta de visitas
+
+Por autorización posterior del usuario, se elimina también la ruta frontend `/actividades/visitas` de `apps/web/src/app/routes.tsx` y se retira completamente la configuración de Visitas técnicas y sus subopciones de `navigation.tsx`, en lugar de mantenerla oculta. Era la única ruta de visitas registrada; Registrar visita e Historial de visitas no tenían rutas. El compañero responsable implementará el módulo y sus destinos.
+
+Este ajuste sustituye la decisión anterior de conservar esa ruta/configuración. `/actividades`, `/actividades/asistencia-tecnica` y `/actividades/capacitaciones` permanecen intactas por ser rutas compartidas o de otras funciones. No se modifican backend, componentes funcionales, autenticación, Administración ni Auditoría. Se verifican build, lint, `git diff --check` y ausencia de referencias a la ruta retirada en `apps/web/src`; sin nuevas pruebas de navegador.
