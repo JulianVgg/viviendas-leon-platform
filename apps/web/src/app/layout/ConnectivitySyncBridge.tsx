@@ -1,5 +1,7 @@
 import { useEffect } from 'react'
-import { subscribeConnectionRecovery } from '@/services/connectivity'
+import { useAuth } from '@/features/auth/AuthProvider'
+import { syncPendingVisits } from '@/features/visits/services/visitService'
+import { getConnectivitySnapshot, subscribeConnectivity, subscribeConnectionRecovery } from '@/services/connectivity'
 import { listPendingOperations } from '@/services/pendingOperations'
 import { syncDemoPendingOperations } from '@/services/offlineSync'
 
@@ -11,6 +13,19 @@ export const SYNC_FINISHED_EVENT = 'viviendas-leon:sync-finished'
  * únicamente de notas sintéticas en DEV. No se procesan operaciones de negocio.
  */
 export default function ConnectivitySyncBridge() {
+  const { usuario } = useAuth()
+  // Procesa una vez al abrir una sesión que ya tiene la API disponible.
+  useEffect(() => {
+    if (!usuario) return
+    let started = false
+    const startOnce = () => {
+      if (started || getConnectivitySnapshot().status !== 'connected') return
+      started = true
+      void syncPendingVisits(usuario.id).catch(() => { /* conservar cola */ })
+    }
+    startOnce()
+    return subscribeConnectivity(startOnce)
+  }, [usuario])
   useEffect(() => subscribeConnectionRecovery(async () => {
     try {
       const outstanding = await listPendingOperations()
@@ -23,6 +38,9 @@ export default function ConnectivitySyncBridge() {
       }))
     }
 
+    if (usuario) {
+      try { await syncPendingVisits(usuario.id) } catch { /* Pendientes conservados */ }
+    }
     if (!import.meta.env.DEV) return
     try {
       const summary = await syncDemoPendingOperations()
@@ -30,7 +48,7 @@ export default function ConnectivitySyncBridge() {
     } catch {
       window.dispatchEvent(new CustomEvent(SYNC_FINISHED_EVENT, { detail: null }))
     }
-  }), [])
+  }), [usuario])
 
   return null
 }

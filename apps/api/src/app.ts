@@ -7,6 +7,7 @@ import type { ErrorRequestHandler } from 'express';
 import { familiesRouter } from './modules/families/families.routes.js';
 import { communitiesRouter } from './modules/catalogs/catalogs.routes.js';
 import { offlineDemoRouter } from './modules/offline/offline.routes.js';
+import { visitsRouter } from './modules/visits/visits.routes.js';
 
 // AUTH-02: Autenticación
 import { authRouter } from './modules/auth/auth.routes.js';
@@ -43,6 +44,7 @@ app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/familias', familiesRouter);
 app.use('/api/v1/comunidades', communitiesRouter);
 app.use('/api/v1/offline', offlineDemoRouter);
+app.use('/api/v1/visitas', visitsRouter);
 
 // Manejo global de errores
 const handleRequestError: ErrorRequestHandler = (

@@ -1,0 +1,8 @@
+@keyframes visit-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.visits-enter { animation: visit-enter 220ms ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .visits-enter { animation: none; }
+}
