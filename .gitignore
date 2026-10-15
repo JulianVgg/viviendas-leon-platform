@@ -7,11 +7,11 @@ build/
 
 # Environment variables
 .env
-.env.local
-.env.development
-.env.production
-
+.env.*
 !.env.example
+
+# Vercel local configuration
+.vercel/
 
 # Logs
 *.log

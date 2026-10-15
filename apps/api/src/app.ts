@@ -15,6 +15,11 @@ import { createSessionMiddleware } from './config/session.js';
 
 export const app = express();
 
+// Confiar en el proxy HTTPS de Vercel en producción
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 // Configuración CORS
 app.use(
   cors({
@@ -84,3 +89,5 @@ const handleRequestError: ErrorRequestHandler = (
 };
 
 app.use(handleRequestError);
+
+export default app;
