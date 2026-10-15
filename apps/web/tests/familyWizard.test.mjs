@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { buildIntegralPayload, createMemberDraft, createProgramDraft, integralErrorMessage, mapServerErrors, memberField, programField, stepForField, validDate, validateWizardStep } from '../src/features/families/services/familyWizard.ts'
+import { buildIntegralPayload, createMemberDraft, createProgramDraft, integralErrorMessage, mapServerErrors, memberField, memberRelationshipOptions, memberSexOptions, programField, stepForField, validDate, validateWizardStep } from '../src/features/families/services/familyWizard.ts'
 
 const communities = [{ id: 1, nombre: 'QA COMMUNITY', municipio: { id: 1, nombre: 'QA MUNICIPALITY' } }]
 const options = [1, 2].map((id) => ({ id, nombre: `QA PROGRAM ${id}`, estado: 'ACTIVO', descripcion: null }))
-const valid = () => ({ nombreReferencia: ' QA FAMILY ', comunidadId: '1', fechaIngreso: '', observaciones: '', integrantes: [{ ...createMemberDraft('member-a'), nombreCompleto: ' QA PERSON ' }], programas: [{ ...createProgramDraft('program-a'), programaId: '1' }] })
+const valid = () => ({ nombreReferencia: ' QA FAMILY ', comunidadId: '1', fechaIngreso: '2026-10-14', observaciones: '', integrantes: [{ ...createMemberDraft('member-a'), nombreCompleto: ' QA PERSON ', fechaNacimiento: '2000-01-15', sexo: 'Femenino', parentesco: 'Madre' }], programas: [{ ...createProgramDraft('program-a'), programaId: '1' }] })
 
 test('all three input steps accept valid synthetic data without mutation', () => {
   const draft = valid()
@@ -20,6 +20,7 @@ for (const [name, value, field] of [
   ['unknown community', { comunidadId: '99' }, 'comunidadId'],
   ['long observations', { observaciones: 'a'.repeat(2001) }, 'observaciones'],
   ['invalid family date', { fechaIngreso: '2026-02-30' }, 'fechaIngreso'],
+  ['missing family date', { fechaIngreso: '' }, 'fechaIngreso'],
 ]) test(name, () => assert.ok(validateWizardStep(0, { ...valid(), ...value }, communities, options)[field]))
 
 test('at least one member and every member name are mandatory', () => {
@@ -38,6 +39,55 @@ test('member dates use stable error keys', () => {
   assert.ok(validateWizardStep(1, draft, communities, options)[memberField('member-a', 'fechaNacimiento')])
 })
 
+test('member sex and relationship accept only the requested required values', () => {
+  assert.deepEqual(memberSexOptions, ['Masculino', 'Femenino'])
+  assert.deepEqual(memberRelationshipOptions, ['Padre', 'Madre', 'Hijo', 'Hija', 'Abuela', 'Abuelo', 'Cuñado', 'Cuñada'])
+  const draft = valid()
+  for (const sexo of memberSexOptions) {
+    for (const parentesco of memberRelationshipOptions) {
+      Object.assign(draft.integrantes[0], { sexo, parentesco })
+      assert.deepEqual(validateWizardStep(1, draft, communities, options), {})
+      const member = buildIntegralPayload(draft).integrantes[0]
+      assert.equal(member.sexo, sexo || null)
+      assert.equal(member.parentesco, parentesco || null)
+    }
+  }
+  Object.assign(draft.integrantes[0], { sexo: 'Unavailable', parentesco: 'Unavailable' })
+  const errors = validateWizardStep(1, draft, communities, options)
+  assert.ok(errors[memberField('member-a', 'sexo')])
+  assert.ok(errors[memberField('member-a', 'parentesco')])
+})
+
+test('birth date, sex and relationship are required for every member with stable field errors', () => {
+  const draft = valid()
+  draft.integrantes.push({ ...createMemberDraft('member-b'), nombreCompleto: 'QA PERSON TWO' })
+  let errors = validateWizardStep(1, draft, communities, options)
+  assert.ok(errors[memberField('member-b', 'fechaNacimiento')])
+  assert.ok(errors[memberField('member-b', 'sexo')])
+  assert.ok(errors[memberField('member-b', 'parentesco')])
+  Object.assign(draft.integrantes[1], { fechaNacimiento: '2001-02-28', sexo: 'Masculino', parentesco: 'Hijo' })
+  Object.assign(draft.integrantes[0], { fechaNacimiento: '', sexo: '', parentesco: '' })
+  errors = validateWizardStep(1, draft, communities, options)
+  assert.ok(errors[memberField('member-a', 'fechaNacimiento')])
+  assert.ok(errors[memberField('member-a', 'sexo')])
+  assert.ok(errors[memberField('member-a', 'parentesco')])
+  assert.equal(errors[memberField('member-b', 'fechaNacimiento')], undefined)
+  assert.equal(errors[memberField('member-b', 'sexo')], undefined)
+  assert.equal(errors[memberField('member-b', 'parentesco')], undefined)
+})
+
+test('only family observations and member phone/observations may be omitted', () => {
+  const draft = valid()
+  assert.deepEqual(validateWizardStep(0, draft, communities, options), {})
+  assert.deepEqual(validateWizardStep(1, draft, communities, options), {})
+  const payload = buildIntegralPayload(draft)
+  assert.equal(payload.observaciones, null)
+  assert.equal(payload.integrantes[0].telefono, null)
+  assert.equal(payload.integrantes[0].observaciones, null)
+  assert.equal(payload.programas[0].fechaIngreso, null)
+  assert.equal(payload.programas[0].fechaSalida, null)
+})
+
 test('requires actual program options and at least one selection', () => {
   assert.ok(validateWizardStep(2, valid(), communities, []).programas)
   assert.ok(validateWizardStep(2, { ...valid(), programas: [] }, communities, options).programas)
@@ -48,7 +98,7 @@ test('requires actual program options and at least one selection', () => {
 
 test('multiple members/programs work, duplicated IDs do not', () => {
   const draft = valid()
-  draft.integrantes.push({ ...createMemberDraft('member-b'), nombreCompleto: 'QA PERSON TWO' })
+  draft.integrantes.push({ ...createMemberDraft('member-b'), nombreCompleto: 'QA PERSON TWO', fechaNacimiento: '2001-02-28', sexo: 'Masculino', parentesco: 'Hijo' })
   draft.programas.push({ ...createProgramDraft('program-b'), programaId: '2' })
   assert.deepEqual(validateWizardStep(1, draft, communities, options), {})
   assert.deepEqual(validateWizardStep(2, draft, communities, options), {})
@@ -197,6 +247,11 @@ test('browser wizard: controlled rows, validation, errors, single POST, themes a
           payload = status === 400 ? { error: { details: [{ field: 'integrantes[1].nombreCompleto', message: 'QA indexed member error' }] } } : status === 201 ? { data: { id: 987654 } } : { error: { message: 'Internal data must not be displayed' } }
           await new Promise((resolve) => setTimeout(resolve, 150))
         } else if (path === '/api/v1/familias/987654') payload = { data: { id: 987654, nombreReferencia: 'QA FAMILY', comunidad: communities[0], estado: 'ACTIVA', fechaIngreso: null, observaciones: null } }
+        else if (path === '/api/v1/familias/987654/expediente') payload = { data: {
+          id: 987654, nombreReferencia: 'QA FAMILY', comunidad: communities[0], estado: 'ACTIVA', fechaIngreso: null, observaciones: null,
+          integrantes: posts.at(-1).integrantes.map((member, index) => ({ ...member, id: index + 1, activo: true })),
+          programas: posts.at(-1).programas.map((program, index) => ({ ...program, id: index + 10, programa: { id: program.programaId, nombre: `QA PROGRAM ${program.programaId}` } })),
+        } }
         else { status = 404; payload = { error: { message: 'Mock route unavailable' } } }
         await command('Fetch.fulfillRequest', { requestId: event.requestId, responseCode: status, responseHeaders: [{ name: 'Content-Type', value: 'application/json' }], body: Buffer.from(JSON.stringify(payload)).toString('base64') })
       })().catch((error) => {
@@ -228,13 +283,35 @@ test('browser wizard: controlled rows, validation, errors, single POST, themes a
     await fill('wizard-comunidadId', '1')
     await fill('wizard-observaciones', 'QA SYNTHETIC NOTES')
     await click('Continuar')
+    await wait(`document.activeElement?.id === 'wizard-fechaIngreso'`)
+    assert.equal(await evaluate(`document.getElementById('wizard-fechaIngreso').required`), true)
+    await fill('wizard-fechaIngreso', '2026-10-14')
+    await click('Continuar')
     await wait(`document.body.innerText.includes('Paso 2 de 4')`)
     await click('Continuar')
     await wait(`document.activeElement?.id === 'wizard-integrantes.member-1.nombreCompleto'`)
     await fill('wizard-integrantes.member-1.nombreCompleto', 'QA PERSON ONE')
+    await click('Continuar')
+    await wait(`document.activeElement?.id === 'wizard-integrantes.member-1.fechaNacimiento'`)
+    assert.equal(await evaluate(`document.getElementById('wizard-integrantes.member-1.fechaNacimiento').required`), true)
+    await fill('wizard-integrantes.member-1.fechaNacimiento', '2000-01-15')
+    await click('Continuar')
+    await wait(`document.activeElement?.id === 'wizard-integrantes.member-1.sexo'`)
+    assert.equal(await evaluate(`document.getElementById('wizard-integrantes.member-1.sexo').required`), true)
+    assert.deepEqual(await evaluate(`Array.from(document.getElementById('wizard-integrantes.member-1.sexo').options, option => option.value)`), ['', 'Masculino', 'Femenino'])
+    assert.deepEqual(await evaluate(`Array.from(document.getElementById('wizard-integrantes.member-1.parentesco').options, option => option.value)`), ['', 'Padre', 'Madre', 'Hijo', 'Hija', 'Abuela', 'Abuelo', 'Cuñado', 'Cuñada'])
+    await fill('wizard-integrantes.member-1.sexo', 'Femenino')
+    await click('Continuar')
+    await wait(`document.activeElement?.id === 'wizard-integrantes.member-1.parentesco'`)
+    assert.equal(await evaluate(`document.getElementById('wizard-integrantes.member-1.parentesco').required`), true)
+    assert.equal(await evaluate(`document.getElementById('wizard-integrantes.member-1.telefono').required`), false)
+    await fill('wizard-integrantes.member-1.parentesco', 'Madre')
     await click('Agregar integrante')
     await wait(`document.activeElement?.id === 'wizard-integrantes.member-3.nombreCompleto'`)
     await fill('wizard-integrantes.member-3.nombreCompleto', 'QA PERSON TWO')
+    await fill('wizard-integrantes.member-3.fechaNacimiento', '2001-02-28')
+    await fill('wizard-integrantes.member-3.sexo', 'Masculino')
+    await fill('wizard-integrantes.member-3.parentesco', 'Hijo')
     await auditLayout()
     await click('Agregar integrante')
     await wait(`document.activeElement?.id === 'wizard-integrantes.member-4.nombreCompleto'`)
@@ -244,6 +321,9 @@ test('browser wizard: controlled rows, validation, errors, single POST, themes a
     await wait(`document.getElementById('wizard-nombreReferencia')?.value === 'QA FAMILY'`)
     await click('Continuar')
     await wait(`document.getElementById('wizard-integrantes.member-3.nombreCompleto')?.value === 'QA PERSON TWO'`)
+    assert.equal(await evaluate(`document.getElementById('wizard-integrantes.member-1.sexo').value`), 'Femenino')
+    assert.equal(await evaluate(`document.getElementById('wizard-integrantes.member-1.fechaNacimiento').value`), '2000-01-15')
+    assert.equal(await evaluate(`document.getElementById('wizard-integrantes.member-1.parentesco').value`), 'Madre')
     await click('Continuar')
     await wait(`document.body.innerText.includes('Paso 3 de 4')`)
     await fill('wizard-programas.program-2.programaId', '1')
@@ -269,6 +349,9 @@ test('browser wizard: controlled rows, validation, errors, single POST, themes a
     await wait(`document.activeElement?.id === 'wizard-integrantes.member-3.nombreCompleto' && document.body.innerText.includes('QA indexed member error')`)
     assert.equal(posts.length, 1)
     assert.equal(posts[0].integrantes.length, 2)
+    assert.equal(posts[0].integrantes[0].sexo, 'Femenino')
+    assert.equal(posts[0].integrantes[0].fechaNacimiento, '2000-01-15')
+    assert.equal(posts[0].integrantes[0].parentesco, 'Madre')
     assert.equal(posts[0].programas.length, 2)
     assert.equal('localId' in posts[0].integrantes[0], false)
     await click('Continuar')
@@ -290,6 +373,7 @@ test('browser wizard: controlled rows, validation, errors, single POST, themes a
     postMode = '201'
     await click('Confirmar y registrar')
     await wait(`location.pathname === '/familias/987654'`)
+    await wait(`document.querySelector('[role=tablist]') !== null && document.querySelector('main').innerText.includes('QA FAMILY')`)
     assert.equal(posts.length, 6)
     // Separate mount to check catalog retry and ambiguous POST blocking.
     catalogMode = 'empty'
@@ -297,8 +381,12 @@ test('browser wizard: controlled rows, validation, errors, single POST, themes a
     await wait(`document.getElementById('wizard-nombreReferencia') !== null`)
     await fill('wizard-nombreReferencia', 'QA SECOND FAMILY')
     await fill('wizard-comunidadId', '1')
+    await fill('wizard-fechaIngreso', '2026-10-14')
     await click('Continuar')
     await fill('wizard-integrantes.member-1.nombreCompleto', 'QA PERSON')
+    await fill('wizard-integrantes.member-1.fechaNacimiento', '2000-01-15')
+    await fill('wizard-integrantes.member-1.sexo', 'Femenino')
+    await fill('wizard-integrantes.member-1.parentesco', 'Madre')
     await click('Continuar')
     await wait(`document.body.innerText.includes('No hay programas disponibles')`)
     assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(b => b.textContent === 'Continuar').disabled`), true)

@@ -6,7 +6,7 @@ import Button from '@/components/ui/Button'
 import LoadingState from '@/components/ui/LoadingState'
 import FormField, { formControlClassName } from '@/components/ui/FormField'
 import { createIntegralFamily, FamilyApiError, fetchFamilyProgramOptions } from '../services/familyService'
-import { buildIntegralPayload, createMemberDraft, createProgramDraft, integralErrorMessage, mapServerErrors, memberField, programField, stepForField, validateWizardStep } from '../services/familyWizard'
+import { buildIntegralPayload, createMemberDraft, createProgramDraft, integralErrorMessage, mapServerErrors, memberField, memberRelationshipOptions, memberSexOptions, programField, stepForField, validateWizardStep } from '../services/familyWizard'
 import type { CommunityOption } from '../types/family'
 import type { FamilyProgramOption, FamilyWizardInput, IntegralFamilyRecord, MemberDraft, ProgramDraft, WizardErrors } from '../types/familyIntegral'
 
@@ -175,7 +175,7 @@ export default function FamilyWizard({ communities, onCreated }: { communities: 
       <span role="status" className="self-center text-sm text-slate-600 dark:text-slate-300">{saving ? 'Guardando expediente...' : ''}</span>
     </div>}>
       {generalError && <div id="wizard-submission-error" tabIndex={-1} className="layout-focus rounded-xl"><Alert variant="error" title="No se pudo confirmar el registro"><p>{generalError}</p>{uncertain && <Link to="/familias" className="layout-focus mt-2 inline-block underline">Verificar el listado de familias</Link>}</Alert></div>}
-      {step === 0 && <FormSection title="Información familiar" description="El estado inicial será ACTIVA y lo asignará el servidor." variant="card">
+      {step === 0 && <FormSection title="Información familiar" description="Completa todos los campos, salvo observaciones, que es opcional. El municipio se deriva de la comunidad y el servidor asignará el estado ACTIVA." variant="card">
         <div className="space-y-5"><FormGrid>
           {textField('nombreReferencia', 'Nombre de referencia', draft.nombreReferencia, (value) => changeGeneral('nombreReferencia', value), 'text', true, 150)}
           <FormField id="wizard-comunidadId" label="Comunidad" required error={errors.comunidadId}>
@@ -185,17 +185,27 @@ export default function FamilyWizard({ communities, onCreated }: { communities: 
             </select>
           </FormField>
           <FormField id="wizard-municipio" label="Municipio" hint="Derivado de la comunidad seleccionada."><input className={controlClass} readOnly value={community?.municipio.nombre ?? ''} /></FormField>
-          {textField('fechaIngreso', 'Fecha de ingreso', draft.fechaIngreso, (value) => changeGeneral('fechaIngreso', value), 'date')}
+          {textField('fechaIngreso', 'Fecha de ingreso', draft.fechaIngreso, (value) => changeGeneral('fechaIngreso', value), 'date', true)}
         </FormGrid>{notes('observaciones', draft.observaciones, (value) => changeGeneral('observaciones', value), 2000)}</div>
       </FormSection>}
-      {step === 1 && <FormSection title="Integrantes de la familia" description="Registra al menos una persona. Sexo y parentesco son textos opcionales, sin catálogo institucional definido." variant="card">
+      {step === 1 && <FormSection title="Integrantes de la familia" description="El nombre completo, la fecha de nacimiento, el sexo y el parentesco son obligatorios para cada integrante. Solo el teléfono y las observaciones son opcionales." variant="card">
         <div className="space-y-5">{collectionError('integrantes')}{draft.integrantes.map((row, index) => <fieldset key={row.localId} className="min-w-0 space-y-4 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
           <legend className="px-1 text-sm font-semibold text-slate-900 dark:text-white">Integrante {index + 1}</legend>
           {collectionError(`integrantes.${row.localId}`)}
           <FormGrid>{textField(memberField(row.localId, 'nombreCompleto'), 'Nombre completo', row.nombreCompleto, (value) => changeMember(row.localId, 'nombreCompleto', value), 'text', true)}
-            {textField(memberField(row.localId, 'fechaNacimiento'), 'Fecha de nacimiento', row.fechaNacimiento, (value) => changeMember(row.localId, 'fechaNacimiento', value), 'date')}
-            {textField(memberField(row.localId, 'sexo'), 'Sexo', row.sexo, (value) => changeMember(row.localId, 'sexo', value))}
-            {textField(memberField(row.localId, 'parentesco'), 'Parentesco', row.parentesco, (value) => changeMember(row.localId, 'parentesco', value))}
+            {textField(memberField(row.localId, 'fechaNacimiento'), 'Fecha de nacimiento', row.fechaNacimiento, (value) => changeMember(row.localId, 'fechaNacimiento', value), 'date', true)}
+            <FormField id={`wizard-${memberField(row.localId, 'sexo')}`} label="Sexo" required error={errors[memberField(row.localId, 'sexo')]}>
+              <select className={controlClass} required value={row.sexo} onChange={(event) => changeMember(row.localId, 'sexo', event.target.value)}>
+                <option value="">Selecciona el sexo</option>
+                {memberSexOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+            </FormField>
+            <FormField id={`wizard-${memberField(row.localId, 'parentesco')}`} label="Parentesco" required error={errors[memberField(row.localId, 'parentesco')]}>
+              <select className={controlClass} required value={row.parentesco} onChange={(event) => changeMember(row.localId, 'parentesco', event.target.value)}>
+                <option value="">Selecciona el parentesco</option>
+                {memberRelationshipOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+            </FormField>
             {textField(memberField(row.localId, 'telefono'), 'Teléfono', row.telefono, (value) => changeMember(row.localId, 'telefono', value), 'tel')}
           </FormGrid>
           {notes(memberField(row.localId, 'observaciones'), row.observaciones, (value) => changeMember(row.localId, 'observaciones', value))}

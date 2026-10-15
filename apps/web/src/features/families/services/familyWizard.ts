@@ -1,6 +1,9 @@
 import type { CommunityOption } from '../types/family'
 import type { FamilyProgramOption, FamilyWizardInput, IntegralFamilyInput, MemberDraft, ProgramDraft, WizardErrors } from '../types/familyIntegral'
 
+export const memberSexOptions: readonly string[] = ['Masculino', 'Femenino']
+export const memberRelationshipOptions: readonly string[] = ['Padre', 'Madre', 'Hijo', 'Hija', 'Abuela', 'Abuelo', 'Cuñado', 'Cuñada']
+
 export const createMemberDraft = (localId: string): MemberDraft => ({ localId, nombreCompleto: '', fechaNacimiento: '', sexo: '', parentesco: '', telefono: '', observaciones: '' })
 export const createProgramDraft = (localId: string): ProgramDraft => ({ localId, programaId: '', fechaIngreso: '', fechaSalida: '', observaciones: '' })
 
@@ -39,6 +42,7 @@ export function validateWizardStep(step: number, draft: FamilyWizardInput, commu
     if (!draft.nombreReferencia.trim() || draft.nombreReferencia.trim().length > 150) errors.nombreReferencia = 'Introduce un nombre de hasta 150 caracteres.'
     if (!communities.some(({ id }) => id === Number(draft.comunidadId))) errors.comunidadId = 'Selecciona una comunidad disponible.'
     checkDate('fechaIngreso', draft.fechaIngreso)
+    if (!draft.fechaIngreso) errors.fechaIngreso = 'La fecha de ingreso es obligatoria.'
     if (draft.observaciones.trim().length > 2000) errors.observaciones = 'Las observaciones admiten hasta 2000 caracteres.'
   }
   if (step === 1) {
@@ -46,6 +50,9 @@ export function validateWizardStep(step: number, draft: FamilyWizardInput, commu
     draft.integrantes.forEach((row) => {
       if (!row.nombreCompleto.trim()) errors[memberField(row.localId, 'nombreCompleto')] = 'El nombre completo es obligatorio.'
       checkDate(memberField(row.localId, 'fechaNacimiento'), row.fechaNacimiento)
+      if (!row.fechaNacimiento) errors[memberField(row.localId, 'fechaNacimiento')] = 'La fecha de nacimiento es obligatoria.'
+      if (!memberSexOptions.includes(row.sexo)) errors[memberField(row.localId, 'sexo')] = 'Selecciona Masculino o Femenino.'
+      if (!memberRelationshipOptions.includes(row.parentesco)) errors[memberField(row.localId, 'parentesco')] = 'Selecciona un parentesco disponible.'
     })
   }
   if (step === 2) {

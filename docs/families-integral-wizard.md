@@ -66,22 +66,41 @@ Fechas de entrada: `YYYY-MM-DD`, sin convertirlas a instantes en el payload.
 Opcionales vacíos: `null`. El serializador enumera propiedades permitidas:
 no envía claves locales, IDs de familia/persona/asociación ni `activo` o estado
 inicial. El estado de participación se omite visualmente y se envía `null`, ya que
-no existe catálogo institucional. No se inventan opciones de sexo/parentesco:
-son textos opcionales admitidos por el contrato actual.
+no existe catálogo institucional de participación. Por solicitud posterior del
+usuario, el paso Integrantes exige fecha de nacimiento y sexo `Masculino`/`Femenino`
+y parentesco `Padre`, `Madre`, `Hijo`, `Hija`, `Abuela`, `Abuelo`, `Cuñado`, `Cuñada`.
+El parentesco también es obligatorio. Solo el teléfono y las observaciones del
+integrante pueden omitirse y se envían como `null`. Los campos requeridos se
+validan por cada fila antes de avanzar. Estas restricciones se validan en
+frontend; no cambian el contrato ni restringen registros históricos
+en el backend o en el expediente de solo lectura.
 
 ## Validaciones por paso y accesibilidad
 
 1. **Familia:** nombre recortado obligatorio, máximo 150; comunidad del catálogo;
-   municipio de solo lectura; fecha existente opcional; observaciones máximo 2000.
+   municipio de solo lectura; fecha de ingreso existente obligatoria;
+   observaciones opcionales, máximo 2000.
    ACTIVA es informativo, asignado por backend.
-2. **Integrantes:** mínimo uno, nombre obligatorio en todas las filas, nacimiento
-   opcional válido; agregar y quitar conservando al menos una fila. El resto de
-   campos son opcionales y no se introducen límites no definidos por el contrato.
+2. **Integrantes:** mínimo uno; nombre, nacimiento válido, sexo y parentesco
+   obligatorios en todas las filas; agregar y quitar conservando al menos una
+   fila. Solo teléfono y observaciones son opcionales. No se introducen límites
+   de longitud no definidos por el contrato.
 3. **Programas:** mínimo uno, IDs del catálogo sin duplicados (opciones ya elegidas
    deshabilitadas y validación adicional); fechas reales; salida no anterior al
    ingreso. Catálogo vacío/error: aviso, reintento GET y bloqueo del avance.
 4. **Confirmar:** resumen y navegación correctiva; vuelve a validar los tres pasos
    antes de enviar. Ninguna escritura al avanzar o retroceder.
+
+Ajuste posterior solicitado: todos los campos editables de Familia e Integrantes
+son obligatorios salvo observaciones y, en integrantes, teléfono. Programas
+conserva sus reglas anteriores. Se marcan y validan en controles y por cada fila.
+La suite actualizada aprobó **21/21**, incluida Brave con HTTP simulado y
+validación de ingreso/parentesco obligatorios y teléfono/observaciones opcionales. Se adaptaron
+también las fixtures del runner QA; no se repitieron sus escrituras para este ajuste.
+Diagnóstico local del catálogo: el proxy devolvió `404 / NOT_FOUND` por el gate
+integral deshabilitado. El `.env` habitual no define las variables de habilitación
+y apunta al puerto 5432; no se modificó ni se habilitó sobre esa base. El flujo
+integral requiere un arranque QA aislado y verificado, no quitar el gate.
 
 El borrador solo vive en memoria React. No se guarda información personal en
 localStorage, IndexedDB ni colas offline. Recargar, cerrar o abandonar la página

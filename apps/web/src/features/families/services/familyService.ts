@@ -6,12 +6,14 @@ const API_BASE_URL = import.meta.env.VITE_API_URL?.trim() || '/api'
 export class FamilyApiError extends Error {
   status: number
   details: Array<{ field: string; message: string }>
+  code?: string
 
-  constructor(message: string, status: number, details: Array<{ field: string; message: string }> = []) {
+  constructor(message: string, status: number, details: Array<{ field: string; message: string }> = [], code?: string) {
     super(message)
     this.name = 'FamilyApiError'
     this.status = status
     this.details = details
+    this.code = code
   }
 }
 
@@ -21,7 +23,7 @@ async function requestData<T>(path: string, options: RequestInit = {}): Promise<
   const response = await fetch(url, { credentials: 'same-origin', ...options, headers: { Accept: 'application/json', ...(options.body ? { 'Content-Type': 'application/json' } : {}) } })
   const payload = await response.json().catch(() => null)
   if (!response.ok) {
-    throw new FamilyApiError(payload?.error?.message ?? 'No fue posible completar la operación.', response.status, payload?.error?.details ?? [])
+    throw new FamilyApiError(payload?.error?.message ?? 'No fue posible completar la operación.', response.status, payload?.error?.details ?? [], payload?.error?.code)
   }
   if (options.method === 'POST' && path === 'v1/familias/registro-integral' && response.status !== 201) throw new Error('No se pudo confirmar el registro.')
   if (!payload || !('data' in payload)) throw new Error('La respuesta del servidor no es válida.')
@@ -38,6 +40,14 @@ export function fetchFamily(id: string, signal?: AbortSignal) {
 
 export function saveFamily(input: FamilyCreateInput) {
   return requestData<FamilyDetail>('v1/familias', { method: 'POST', body: JSON.stringify(input) })
+}
+
+export async function fetchIntegralFamily(id: string, signal?: AbortSignal) {
+  // Reuse the existing AUTH session. The temporary integral gate alone does not
+  // validate identity; do not clear AuthProvider or introduce a parallel store.
+  const session = await fetch('/api/v1/auth/me', { credentials: 'same-origin', cache: 'no-store', signal })
+  if (!session.ok) throw new FamilyApiError('', session.status)
+  return requestData<IntegralFamilyRecord>(`v1/familias/${encodeURIComponent(id)}/expediente`, { signal, cache: 'no-store' })
 }
 
 export function fetchFamilyProgramOptions(signal?: AbortSignal) {
