@@ -16,8 +16,8 @@ function LayoutContent() {
   }, [pathname, closeMobileSidebar])
 
   return (
-    <div className="min-h-dvh bg-slate-50 text-slate-700 dark:bg-slate-950 dark:text-slate-300 xl:flex">
-      <a href="#main-content" className="layout-focus fixed start-4 top-4 z-60 -translate-y-24 rounded-lg bg-white px-4 py-3 text-sm font-medium text-brand-600 shadow-theme-lg focus:translate-y-0 dark:bg-slate-900 dark:text-brand-300">
+    <div className="min-h-dvh bg-gray-50 text-gray-700 dark:bg-gray-950 dark:text-gray-300 xl:flex">
+      <a href="#main-content" className="layout-focus fixed start-4 top-4 z-60 -translate-y-24 rounded-lg bg-white px-4 py-3 text-sm font-medium text-brand-600 shadow-theme-lg focus:translate-y-0 dark:bg-gray-900 dark:text-brand-300">
         Saltar al contenido
       </a>
       <AppSidebar />
