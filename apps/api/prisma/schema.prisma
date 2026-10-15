@@ -311,6 +311,7 @@ model Visita {
   usuarioResponsable Usuario             @relation(fields: [usuarioResponsableId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   condicionClimatica CondicionClimatica? @relation(fields: [condicionClimaticaId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
+  captura      VisitaCaptura?
   evaluaciones EvaluacionCultivo[]
   evidencias   VisitaEvidencia[]
   alertas      Alerta[]
@@ -320,6 +321,21 @@ model Visita {
   @@index([condicionClimaticaId])
   @@index([fecha])
   @@map("visita")
+}
+
+// Captura de formulario con identificador único para sincronización idempotente.
+model VisitaCaptura {
+  id          Int      @id @default(autoincrement())
+  visitaId    Int      @unique @map("visita_id")
+  usuarioId   Int      @map("usuario_id")
+  operationId String   @unique @map("operation_id") @db.Uuid
+  payloadHash String   @map("payload_hash")
+  datos       Json
+  creadoEn    DateTime @default(now()) @map("creado_en")
+
+  visita Visita @relation(fields: [visitaId], references: [id], onDelete: Cascade)
+  @@index([usuarioId])
+  @@map("visita_captura")
 }
 
 model Calidad {

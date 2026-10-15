@@ -43,6 +43,7 @@ export default function AppRoutes() {
 )}
   <Route path="visitas" element={<Navigate to="/visitas/agenda" replace />} />
   <Route path="visitas/agenda" element={<VisitAgendaPage />} />
+  <Route path="actividades/visitas" element={<Navigate to="/visitas/agenda" replace />} />
   <Route path="visitas/nueva" element={<VisitRegisterPage />} />
   <Route path="visitas/historial" element={<VisitHistoryPage />} />
   <Route path="familias/nueva" element={<FamilyCreatePage />} />

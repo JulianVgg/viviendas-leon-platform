@@ -81,7 +81,6 @@ export const navigationGroups: { id: string; name: string; items: NavigationItem
         { id: 'visits-history', name: 'Historial de visitas', path: '/visitas/historial', icon: icons.history },
       ] },
       { id: 'activities', name: 'Actividades de campo', path: '/actividades', icon: icons.activities, roles: ['fieldWorker', 'coordination'], children: [
-        { id: 'visits', name: 'Visitas', path: '/actividades/visitas', icon: icons.visits },
         { id: 'technical-assistance', name: 'Asistencia técnica', path: '/actividades/asistencia-tecnica', icon: icons.documents },
         { id: 'training', name: 'Capacitaciones', path: '/actividades/capacitaciones', icon: icons.training },
       ] },
