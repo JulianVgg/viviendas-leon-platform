@@ -111,7 +111,7 @@ se confunden al eliminar filas. Un error previo devuelve al paso correspondiente
 El bloqueo local no garantiza idempotencia de red ni evita dos altas desde
 pestañas diferentes. La idempotencia persistente sigue pendiente en backend.
 
-## Evidencia ejecutada
+## Evidencia inicial (anterior a la verificación real)
 
 | Comprobación | Resultado |
 |---|---|
@@ -149,7 +149,7 @@ o comparación de capturas. La prueba Tab no sustituye una pasada manual complet
 del asistente exclusivamente con teclado. Tampoco se afirma cobertura E2E real
 de los demás módulos; permanecen sin modificar y se compilaron con el proyecto.
 
-### Reproducir sin instalar dependencias
+### Reproducir las pruebas con HTTP simulado
 
 Con Node 25 (entorno verificado; soporte nativo de tipos TS):
 
@@ -168,7 +168,8 @@ terminal iniciar Vite:
 npm run dev -w @viviendas-leon/web -- --host 127.0.0.1 --port 5174 --strictPort
 ```
 
-En otra terminal, con Edge instalado en su ubicación Windows habitual:
+En otra terminal, con Brave instalado en su ubicación Windows habitual
+(el runner se actualizó de Edge a Brave durante la verificación posterior):
 
 ```powershell
 $env:RUN_FAMILY_WIZARD_BROWSER = 'true'
@@ -185,7 +186,7 @@ que la medición responsive debía esperar la transición del layout existente;
 se incorporó esa espera al test, sin alterar el layout. El resultado anterior corresponde
 a la ejecución final aprobada, no a esos intentos fallidos.
 
-## PostgreSQL QA y seguridad pendiente
+## Estado inicial de PostgreSQL QA (histórico)
 
 Inspección **solo de metadatos Docker**, sin lectura de secretos:
 
@@ -216,7 +217,273 @@ No se usarán datos reales ni despliegue público. Si la sesión real o permisos
 impiden probar, debe resolverlo el equipo AUTH en el entorno autorizado, sin
 usuarios simulados para integración ni eliminación de controles.
 
-Pendientes de otra entrega: autorización real por rol, pruebas E2E con sesión y
-persistencia QA, idempotencia, definición institucional de estados de participación,
+En ese momento quedaban pendientes las pruebas E2E con sesión y persistencia QA;
+su resultado actualizado aparece a continuación. Siguen pendientes de otra entrega:
+autorización real por rol, idempotencia, definición institucional de estados de participación,
 presentación integral de `/familias/:id`, edición de expediente y modales. Nada de
 ello se anticipa aquí. Sin commit, push ni merge automáticos.
+
+## Verificación real posterior — Brave y PostgreSQL QA
+
+**Estado vigente:** verificación realizada el 2026-10-14, hora local Guatemala;
+los prefijos de fixtures usan fecha UTC `20261015`. Rama
+`feat/families-integral-wizard`, HEAD inicial `26aa86b`; árbol inicial limpio.
+Se ejecutó `git fetch origin`: `origin/main` apunta a `9fea22f`. La comparación
+`git diff origin/main -- apps/api/src apps/web/src/features/auth` está vacía:
+las pruebas ejecutan el backend y AUTH actuales de main, sin parches de aplicación.
+El asistente no se reimplementó ni se modificó su lógica o presentación.
+
+### Archivos de esta verificación
+
+- `apps/api/tests/families-integral.test.mjs`: configuración aislada antes del
+  import dinámico de `app`; secreto aleatorio y barrera de conexiones PostgreSQL.
+- `apps/api/tests/families-integral.qa.test.mjs`: configura un secreto de sesión
+  aleatorio en su propio proceso, antes de importar la aplicación.
+- `apps/api/tests/families-wizard.qa.test.mjs`: nuevo runner reproducible de
+  integración real, Brave/CDP, SQL independiente, aislamiento y conservación.
+- `apps/web/tests/familyWizard.test.mjs`: usa Brave instalado (o `BRAVE_PATH`)
+  para repetir las pruebas con HTTP simulado. Sin instalaciones nuevas.
+- Este documento. Sin cambios en AUTH, asistente, API de producción, expediente,
+  navegación, offline, dependencias, configuración habitual ni migraciones.
+
+### Desbloqueo de sesiones y pruebas unitarias
+
+El import estático de `app` construía `createSessionMiddleware()` antes de que
+las pruebas definieran `DATABASE_URL` y `SESSION_SECRET`. El middleware exige URL
+y secreto de al menos 32 caracteres, correctamente también al arrancar pruebas.
+
+La suite unitaria ahora configura, **solo en su proceso**:
+
+- `NODE_ENV=test`.
+- URL centinela sin credenciales reales a `127.0.0.1:1/unit_test`, que no es una
+  base operativa ni pretende acreditar integración.
+- `SESSION_SECRET`: 48 bytes aleatorios convertidos a hex, generado en memoria.
+- `pg.Pool.prototype.connect` y `pg.Client.prototype.connect`: barreras que
+  fallan ante cualquier intento de conexión; un hook final exige **cero intentos**
+  y restaura los métodos. No se reemplaza el middleware de sesiones.
+- Solo después se importa la aplicación real de main.
+
+Resultado: **40/40 aprobadas**, cero accesos PostgreSQL, sin cargar `.env` ni
+credenciales habituales. No se añadieron defaults de producción ni se eliminaron
+controles para obtener ese resultado.
+
+### Aislamiento real confirmado antes de escribir
+
+1. Docker: contenedor `viviendas-leon-qa-postgres`, imagen `postgres:17`, ID
+   `c9878fa14e02cabacc4503a076f53cc3aeab03a401c0a49b94696d875f84f815`.
+2. Volumen `viviendas-leon-qa-data` exclusivo: se inspeccionaron **todos** los
+   contenedores y ninguno más monta su origen. Volumen y contenedor distintos del
+   entorno habitual `viviendas-leon-postgres` en puerto host 5432.
+3. Se inició únicamente el contenedor QA, que estaba detenido. Puerto efectivo
+   `127.0.0.1:5433` → 5432 interno.
+4. Conexión SQL independiente inicialmente `default_transaction_read_only=on`:
+   `current_database()=viviendas_leon_qa`, `current_user=viviendas_qa`, puerto
+   interno 5432, PostgreSQL **17.11**.
+5. Se asignó `DATABASE_URL` de destino fijo QA al proceso de pruebas antes del
+   import de la API. Identidad efectiva de **Prisma** comparada con la conexión SQL.
+   Solo después se permitió escritura para las fixtures autorizadas.
+6. API y Vite ligados a loopback, puertos locales administrados por el runner,
+   proxy `/api` a esa API, `VITE_API_URL=/api`. La URL no puede heredarse de una
+   base habitual. El archivo privado de contraseña se leyó sin imprimir su contenido.
+7. Huella de metadatos del contenedor habitual y hash de `apps/api/.env` antes y
+   después: iguales. No se abrió ninguna conexión SQL a la base habitual.
+8. Se tomaron fingerprints de **todas las filas públicas preexistentes** en QA;
+   al terminar, todas permanecen idénticas. Incluye N01, QA anteriores, usuarios,
+   roles y fixtures de ejecuciones previas. No se imprimen datos de esas filas.
+
+Sin seed general, migrate reset, db push, migraciones, borrados ni reseteos.
+Los procesos API/Vite/Brave propios se cierran al finalizar cada runner. El
+contenedor QA se deja iniciado; el contenedor habitual no se modifica.
+
+### Sesión real y cuenta sintética
+
+La consulta inicial de solo lectura encontró **cero** cuentas activas
+`qa%@example.invalid`. Cada ejecución crea una cuenta sintética única con correo
+`example.invalid`, contraseña criptográficamente aleatoria solo en memoria y hash
+**Argon2** compatible con `validateCredentials`. No se imprimen contraseña, hash,
+cookie, ID de sesión ni secreto; tampoco se crean archivos con credenciales.
+Las cuentas de ejecuciones anteriores no se resetean ni se reutilizan sin conocer
+sus credenciales. No se asignan roles o permisos institucionales inventados.
+
+Se usa el formulario de login real en Brave, `POST /api/v1/auth/login`, posterior
+`GET /api/v1/auth/me` y `ProtectedRoute`. Se verifican `ultimo_acceso`, cookie
+`viviendas_leon.sid` HttpOnly/SameSite=Lax y fila de sesión real PostgreSQL.
+La tabla `session`, ausente inicialmente, fue creada por el middleware existente
+`connect-pg-simple` al guardar la primera sesión, mediante su configuración
+`createTableIfMissing`; no se ejecutó ninguna migración ni se alteró AUTH.
+
+La sesión QA utiliza secreto aleatorio de 48 bytes por proceso, `NODE_ENV=qa` y
+`ENABLE_FAMILY_INTEGRAL_API=true`. Cookie sin Secure solo para HTTP loopback QA,
+tal como define el middleware actual. No se cambian opciones de producción.
+El logout final se ejecuta desde el menú real de usuario: sesión eliminada,
+`auth/me` responde 401 y la ruta protegida redirige al login.
+
+**Sesión autenticada no equivale a autorización definitiva por rol.** El gate
+integral sigue siendo solo desarrollo/QA. El 401 probado procede de AUTH/preflight;
+no se afirma que el POST integral ya implemente autorización backend completa.
+
+### Evidencia funcional real
+
+Brave headless con perfil temporal aislado y CDP **sin `Fetch.enable` ni respuestas
+interceptadas**. Login, comunidades, programas, familia, detalle y consultas se
+ejecutan contra Express/Prisma/PostgreSQL reales.
+
+- Login y cookie de sesión reales; comunidades activas y municipio derivado;
+  programas reales seleccionables (se reutilizaron programas 1 y 2).
+- Cuatro pasos; campos conservados al retroceder; validación de integrante y
+  programa obligatorios; dos integrantes y dos programas; opción duplicada
+  deshabilitada; resumen de nombres, fechas, programas y observaciones.
+- Doble clic en confirmar: **un POST integral**, **HTTP 201**, una sola familia
+  con ese nombre, ID generado por PostgreSQL y navegación al expediente básico.
+- Recarga del navegador, consulta básica y expediente integral posteriores al commit.
+- **400 real:** desactivar únicamente la comunidad sintética propia después de
+  completar el borrador. El servidor devuelve error de campo, el asistente vuelve
+  a Familia/enfoca comunidad y conserva datos. La fixture se restaura en `finally`.
+- **404 real:** deshabilitar temporalmente el flag en el proceso QA; no producción.
+- **500 real inducido:** inyección de dependencia solo en el runner sobre
+  `$transaction`; se realizan las escrituras y se provoca una excepción dentro
+  de la transacción. HTTP real 500, mensaje seguro y rollback comprobado en SQL.
+  No es una avería espontánea ni una respuesta HTTP simulada.
+- Recuperación tras resolver 400/404/500: el mismo borrador obtiene 201 una sola
+  vez, sin perder integrantes o asociaciones.
+- **401 real:** logout real mientras el borrador está abierto; preflight rechaza
+  la confirmación, no se ejecuta POST y el resumen permanece en memoria.
+- **Corte real de transporte inducido:** se destruye el socket del POST en el
+  servidor de desarrollo antes de reenviarlo a Express, sin sustituir una respuesta
+  HTTP. La UI informa resultado incierto, bloquea otro envío y no reintenta.
+  Se verifica cero filas y un único intento. **No acredita pérdida de una respuesta
+  201 después del commit**: ese escenario y la idempotencia de red siguen pendientes.
+
+Evidencia SQL independiente final (sin datos personales):
+
+| Familia | Estado | Ingreso | Integrantes (IDs) | Programas | Familias con el mismo nombre |
+|---|---|---|---|---|---|
+| 58 | ACTIVA | 2026-10-14 | 31, 32 | 1, 2 | 1 |
+| 60, recuperación | ACTIVA | null | 34 | 1 | 1 |
+
+Comunidad final 18, municipio 14, cuenta sintética 5. La fecha de nacimiento
+`2000-01-15`, teléfono sintético `00000000`, observaciones y estado null de las
+participaciones se compararon con SQL dentro del test. Sesiones restantes de la
+cuenta final después del logout: **0**.
+
+### Regresiones
+
+- Listado real, búsqueda por prefijo, filtro ACTIVA/RETIRADA, limpiar filtros,
+  cambio real a página 2, paginación HTTP, detalle básico y recarga: aprobados.
+- Sidebar visible, colapsar/expandir y navegar mediante su enlace Familias:
+  aprobados. Login y logout desde sus controles reales: aprobados.
+- Smoke de rutas `/visitas/agenda`, `/visitas/nueva`, `/gestion-agricola/huertos`,
+  `/actividades`, `/offline-queue-test`: aprobados, sin afirmar cobertura funcional
+  completa de esos módulos, varios aún son vistas iniciales.
+- IndexedDB real: consulta con conexión y posterior recuperación de caché con red
+  offline. Cola existente: guardar una nota sintética sin red, conservar estado
+  pendiente y pasar a fallida/reintentable mediante un procesador de fallo
+  **simulado**. No se simula una confirmación del servidor para acreditarla.
+- **No ejecutado:** sincronización real offline/deduplicación UUID en SQL:
+  QA no contiene `offline_demo_note`. La prueba se omite explícitamente; no se
+  aplicaron migraciones de otro módulo para forzarla. El 404 de ese endpoint al
+  recuperar conexión refleja su gate deshabilitado, no un fallo de Familias.
+- PWA: generación aprobada en build; instalación/service worker en dispositivo y
+  auditoría completa de todas las rutas no ejecutadas en esta tarea.
+
+### Resultados vigentes, fallos e intentos anteriores
+
+| Suite / comprobación | Aprobadas | Fallidas finales | Omitidas |
+|---|---:|---:|---:|
+| Backend unitario/HTTP sin PostgreSQL | 40 | 0 | 0 |
+| API integral con PostgreSQL QA real | 26 | 0 | 0 |
+| Frontend lógica + Brave, HTTP simulado | 17 | 0 | 0 |
+| Asistente Brave con API/SQL reales y regresiones | 16 | 0 | 1 |
+| **Total de ejecuciones finales** | **99** | **0** | **1** |
+
+Los conteos son los de `node:test` e incluyen tests contenedores cuando existen;
+no suman las repeticiones históricas. El caso omitido es exclusivamente la
+sincronización offline real por tabla ausente. La suite API previa se ejecuta
+sin sesión por contrato actual; la sesión real del navegador se acredita en el
+runner nuevo, no en las 26 pruebas API.
+
+`npm run build`, `npm run lint`, lint adicional de `apps/api/tests` y
+`git diff --check`: aprobados. Git puede avisar de conversión LF/CRLF; sin errores
+de whitespace. Se mantuvieron las cuatro advertencias preexistentes descritas abajo.
+
+Intentos anteriores de esta tarea, sin ocultarlos:
+
+1. Primer runner real: 1 fallo de harness antes del navegador. Prisma generado
+   publica `globalThis.__dirname`; al compartir proceso con Vite, el plugin PWA
+   buscaba su `package.json` en el directorio de Prisma. El runner elimina ese
+   global antes de cargar Vite; no se modificó Prisma generado ni código productivo.
+2. Un runner inicial de alcance menor aprobó 14/14. Después se amplió la regresión.
+3. Primera ejecución ampliada: dos casos offline fallaron (caché y cola), más el
+   test contenedor; 13 aprobadas, 3 fallidas y 1 omitida. Se añadieron esperas de
+   disponibilidad de los controles y diagnóstico sanitizado al harness. Las dos
+   ejecuciones finales ampliadas aprobaron esos casos sin cambiar lógica offline.
+   No se atribuye un defecto productivo a esos fallos de sincronización del test.
+
+Fixtures conservadas de **todos** los intentos (prefijos UTC `QA_WIZARD_20261015_…`):
+
+| Sufijo UUID | Usuario | Municipio | Comunidad | Familias |
+|---|---:|---:|---:|---|
+| `2eb34f85-dac4-4090-a18a-007da80ec5a2` | 1 | 8 | 11 | ninguna; fallo inicial del harness |
+| `3ea52d8f-10bf-4768-9589-5cfc15f8dbb5` | 2 | 9 | 12 | 44 |
+| `865b26a9-f289-4416-8508-ec27f3083008` | 3 | 12 | 16 | 52, 54 |
+| `1b8fa556-089d-4588-83d1-01e581848fae` | 4 | 13 | 17 | 55, 57 |
+| `c450dfdd-9a43-4091-b8ee-78612f09c047` | 5 | 14 | 18 | 58, 60 |
+
+La suite API real conservó prefijo `QA_INTEGRAL_20261015_0a4c2687-561e-4688-9732-ecd96ea31ea3`:
+municipios 10/11, comunidades 13/14/15, familias 46/47/50/51. No se crearon
+programas adicionales. Los saltos de secuencia son esperables por rollbacks.
+Las credenciales efímeras no se conservan; no se resetean estas cuentas para repetir.
+
+### Investigación de las cuatro advertencias de lint
+
+| Ubicación | Regla y causa concreta | Decisión |
+|---|---|---|
+| `apps/web/src/features/auth/AuthProvider.tsx:98` | `react/only-export-components`: el archivo exporta `AuthProvider` y el hook `useAuth`; Fast Refresh recomienda separar exports no componentes | No afecta el build ni demuestra fallo de sesión; no reorganizar AUTH ajeno |
+| `apps/web/src/features/offline/pages/OfflineSyncTestPage.tsx:50` | `react/set-state-in-effect`: el efecto llama a `refresh`, que consulta IndexedDB y llama a `setRecords`; el análisis transitivo señala actualización iniciada desde efecto, aunque hay un `await` de una fuente externa | Es sincronización externa existente; no hay prueba de regresión del asistente; no tocar offline |
+| `apps/web/src/features/visits/pages/VisitRegisterPage.tsx:59` | `react/set-state-in-effect`: `setFamiliesLoading(true)` y limpieza de error se ejecutan sincrónicamente al iniciar el efecto de carga/reintento, produciendo otro render | Patrón previo de carga; fuera del alcance de Familias |
+| `apps/web/src/features/visits/pages/VisitAgendaPage.tsx:20` | `react/purity`: `localIso(new Date())` se calcula durante cada render; el reloj es una fuente impura que cambia entre renders | Requiere acordar actualización de “hoy” con visitas; no cambiar comportamiento sin esa definición |
+
+No se silenciaron reglas ni se añadieron excepciones para presentar un lint limpio.
+
+### Reproducir la verificación real
+
+Requiere Docker, Brave ya instalado y el contenedor QA iniciado. No instalar nada
+ni cargar `.env` habitual. Terminal de pruebas, secretos mediante archivo privado:
+
+```powershell
+npm run build
+npm run test -w @viviendas-leon/api
+
+$env:QA_PASSWORD_FILE = 'C:\ruta-protegida\postgres-password.txt'
+$env:RUN_FAMILY_INTEGRAL_QA = 'true'
+npm run test:qa -w @viviendas-leon/api
+
+$env:RUN_FAMILY_WIZARD_REAL_QA = 'true'
+node --test apps/api/tests/families-wizard.qa.test.mjs
+
+npm run lint
+npm exec --no -- oxlint apps/api/tests
+git diff --check
+```
+
+El runner real configura la URL QA y los secretos efímeros **antes** de importar
+`app`, inicia y cierra su API/Vite/Brave propios; no requiere un servidor manual.
+Usa Brave en `%LOCALAPPDATA%\BraveSoftware\Brave-Browser\Application\brave.exe`
+o `BRAVE_PATH`. Cada repetición agrega fixtures con otro prefijo y conserva datos
+anteriores. Si no puede confirmar aislamiento, falla antes de escribir.
+
+Las 17 pruebas con HTTP simulado se reproducen con los comandos de la sección
+anterior y Vite en otra terminal; no deben confundirse con el runner SQL real.
+
+### Recomendación
+
+**GO funcional para continuar revisión del asistente en QA aislada, con datos
+sintéticos:** sesión real, flujo integral, persistencia, recuperación y regresiones
+indicadas comprobadas. **NO-GO para producción o datos reales:** autorización
+backend por rol, protección de endpoints integrales e idempotencia siguen pendientes.
+No se concede un GO global a sincronización offline real: falta su tabla en QA y
+esa regresión permanece omitida. Auditoría manual completa de accesibilidad,
+lector de pantalla y pérdida de respuesta posterior al commit tampoco se acreditan.
+
+Sin commit, push ni merge automáticos. Cambios limitados a pruebas y documentación,
+listos para revisión; el expediente visual permanece intacto.

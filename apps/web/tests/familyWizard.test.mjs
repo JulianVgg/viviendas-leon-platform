@@ -114,14 +114,15 @@ test('safe error messages distinguish session, permissions, gate, server and amb
   assert.match(integralErrorMessage(undefined), /catálogo/)
 })
 
-// Optional browser checks use the existing Edge executable and native CDP.
+// Optional browser checks use the existing Brave executable and native CDP.
 // All /api requests are intercepted: this is UI evidence, NOT real integration.
 test('browser wizard: controlled rows, validation, errors, single POST, themes and widths (mock HTTP)', { skip: process.env.RUN_FAMILY_WIZARD_BROWSER !== 'true', timeout: 120000 }, async () => {
   const { spawn } = await import('node:child_process')
   const { mkdtemp } = await import('node:fs/promises')
   const { join } = await import('node:path')
-  const profile = await mkdtemp(join(process.env.LOCALAPPDATA, 'Temp', 'opencode', 'family-wizard-edge-'))
-  const browser = spawn('C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe', ['--headless=new', '--disable-gpu', '--no-first-run', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] })
+  const profile = await mkdtemp(join(process.env.LOCALAPPDATA, 'Temp', 'opencode', 'family-wizard-brave-'))
+  const executable = process.env.BRAVE_PATH || join(process.env.LOCALAPPDATA, 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe')
+  const browser = spawn(executable, ['--headless=new', '--disable-gpu', '--no-first-run', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] })
   let socket
   try {
     const endpoint = await new Promise((resolve, reject) => {
@@ -132,7 +133,7 @@ test('browser wizard: controlled rows, validation, errors, single POST, themes a
         if (match) resolve(match[1])
       })
       browser.on('error', reject)
-      browser.on('exit', (code) => reject(new Error(`Edge exited: ${code}`)))
+      browser.on('exit', (code) => reject(new Error(`Brave exited: ${code}`)))
     })
     socket = new WebSocket(endpoint)
     await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject })
