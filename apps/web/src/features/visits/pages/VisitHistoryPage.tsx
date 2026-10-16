@@ -6,7 +6,8 @@ import PageHeader from '@/components/common/PageHeader'
 import PageMeta from '@/components/common/PageMeta'
 import Button from '@/components/ui/Button'
 import { useAuth } from '@/features/auth/AuthProvider'
-import { getVisitList, type VisitListItem } from '@/features/visits/services/visitService'
+import VisitDetailDialog from '@/features/visits/components/VisitDetailDialog'
+import { getVisitList, syncPendingVisits, type VisitListItem } from '@/features/visits/services/visitService'
 
 const card = 'rounded-2xl border border-gray-200 bg-white shadow-theme-xs dark:border-gray-800 dark:bg-gray-900'
 const statusName = (item: VisitListItem) => item.syncStatus && item.syncStatus !== 'synced'
@@ -21,11 +22,13 @@ export default function VisitHistoryPage() {
   const [local, setLocal] = useState(false)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('TODAS')
-  const [expanded, setExpanded] = useState<string | null>(null)
+  const [selected, setSelected] = useState<VisitListItem | null>(null)
   const refresh = useCallback(async () => {
     if (!usuario) { setLoading(false); return }
     setLoading(true)
     try {
+      // Reintenta las operaciones pendientes o fallidas antes de refrescar el historial.
+      await syncPendingVisits(usuario.id)
       const result = await getVisitList(usuario.id)
       setRows(result.items); setLocal(result.local); setError('')
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'No se pudo cargar el historial.') }
@@ -59,12 +62,13 @@ export default function VisitHistoryPage() {
       </div>
       <div className="overflow-x-auto"><table className="w-full min-w-[690px] text-left text-sm"><thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500 dark:bg-gray-800/40"><tr><th className="px-5 py-3">Familia</th><th className="px-5 py-3">Comunidad</th><th className="px-5 py-3">Fecha</th><th className="px-5 py-3">Estado</th><th className="px-5 py-3">Detalle</th></tr></thead>
         <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-          {visible.map(row=>{ const key=row.operationId??`visit-${row.id}`; const open=expanded===key; return <tr key={key} className="align-top text-gray-700 dark:text-gray-300"><td className="px-5 py-4 font-medium text-gray-900 dark:text-white">{row.familyName}</td><td className="px-5 py-4">{row.community}</td><td className="px-5 py-4">{new Date(`${row.date}T12:00:00`).toLocaleDateString('es-GT')}</td><td className="px-5 py-4"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.syncStatus && row.syncStatus!=='synced' ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-200' : 'bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-200'}`}>{statusName(row)}</span></td><td className="px-5 py-4"><button type="button" aria-expanded={open} onClick={()=>setExpanded(open?null:key)} className="text-sm font-semibold text-brand-600 hover:underline dark:text-brand-400">{open?'Cerrar':'Ver detalle'}</button>{open && <div className="mt-3 w-[min(68vw,350px)] max-w-full space-y-2 rounded-lg border border-gray-200 p-3 font-normal dark:border-gray-700"><p><strong>Referencia:</strong> {row.id??'Local'}</p><p><strong>Clima:</strong> {row.capture?.weather||'—'}</p><p><strong>Cultivos:</strong> {row.capture?.crops.map(c=>c.name).join(', ')||'—'}</p><p><strong>Recomendaciones:</strong> {row.capture?.recommendation||'—'}</p><p><strong>Observaciones:</strong> {row.capture?.observations||'—'}</p><p><strong>Compromisos:</strong> {row.capture?.commitments.length??0}</p></div>}</td></tr> })}
+          {visible.map(row=>{ const key=row.operationId??`visit-${row.id}`; return <tr key={key} className="align-top text-gray-700 dark:text-gray-300"><td className="px-5 py-4 font-medium text-gray-900 dark:text-white">{row.familyName}</td><td className="px-5 py-4">{row.community}</td><td className="px-5 py-4">{new Date(`${row.date}T12:00:00`).toLocaleDateString('es-GT')}</td><td className="px-5 py-4"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.syncStatus && row.syncStatus!=='synced' ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-200' : 'bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-200'}`}>{statusName(row)}</span></td><td className="px-5 py-4"><button type="button" onClick={()=>setSelected(row)} className="text-sm font-semibold text-brand-600 hover:underline focus-visible:outline-2 focus-visible:outline-brand-500 dark:text-brand-400">Ver detalle</button></td></tr> })}
         </tbody></table>
         {!loading && visible.length===0 && <div className="px-5 py-14 text-center text-sm text-gray-500">No se encontraron visitas</div>}
         {loading && <div className="px-5 py-14 text-center text-sm text-gray-500">Cargando visitas…</div>}
       </div>
       <footer className="border-t border-gray-200 px-5 py-4 text-xs text-gray-500 dark:border-gray-800">{visible.length} visita(s)</footer>
     </section>
+    <VisitDetailDialog key={selected?.operationId ?? selected?.id ?? 'none'} visit={selected} onClose={() => setSelected(null)} />
   </div>
 }

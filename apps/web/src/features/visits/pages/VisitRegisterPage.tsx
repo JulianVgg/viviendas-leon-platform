@@ -9,7 +9,8 @@ import FormField, { formControlClassName } from '@/components/ui/FormField'
 import { FamilyApiError, fetchFamilies } from '@/features/families/services/familyService'
 import { getOfflineData, saveOfflineData } from '@/db/offlineDb'
 import { useAuth } from '@/features/auth/AuthProvider'
-import { saveVisitCapture, type VisitCapture, type CropCapture } from '@/features/visits/services/visitService'
+import { saveVisitCapture, type VisitCapture, type CropCapture, type VisitPhotoFile } from '@/features/visits/services/visitService'
+import VisitEvidencePicker from '@/features/visits/components/VisitEvidencePicker'
 import type { FamilyListItem } from '@/features/families/types/family'
 import { crops, stages, qualities, weatherOptions, diseases, pests, damage, organicInsecticides, fertilizers, chemicalInsecticides } from '@/features/visits/data/visitCatalogs'
 
@@ -51,6 +52,7 @@ export default function VisitRegisterPage() {
   const [treatmentGroup, setTreatmentGroup] = useState('orgánico')
   const [recommendation, setRecommendation] = useState('')
   const [observations, setObservations] = useState('')
+  const [photos, setPhotos] = useState<VisitPhotoFile[]>([])
   const [familyOptions, setFamilyOptions] = useState<FamilyListItem[]>([])
   const [familiesLoading, setFamiliesLoading] = useState(true)
   const [familiesError, setFamiliesError] = useState('')
@@ -131,7 +133,7 @@ export default function VisitRegisterPage() {
     }
     setError(''); setSaving(true)
     try {
-      const result = await saveVisitCapture(usuario.id, selectedFamily.nombreReferencia, selectedFamily.comunidad.nombre, payload)
+      const result = await saveVisitCapture(usuario.id, selectedFamily.nombreReferencia, selectedFamily.comunidad.nombre, payload, photos)
       setSaved({ ...result, type })
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : 'No se pudo guardar la visita en este dispositivo.')
@@ -211,7 +213,8 @@ export default function VisitRegisterPage() {
           <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700"><h3 className="mb-3 font-medium text-slate-900 dark:text-white">Audio técnico</h3><Button type="button" variant="secondary" disabled>Grabar audio</Button></div>
           <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700"><h3 className="mb-3 font-medium text-slate-900 dark:text-white">Audio para la familia</h3><Button type="button" variant="secondary" disabled>Grabar audio</Button></div>
         </div>
-        <div className="flex flex-wrap items-center gap-3 rounded-xl bg-slate-50 p-4 text-sm dark:bg-slate-800/40"><strong>{selectedFamily?.nombreReferencia ?? 'Sin familia'}</strong><span>{date}</span><span>{cropsState.length} cultivo(s)</span><span>{commitments.length} compromiso(s)</span></div>
+        <VisitEvidencePicker photos={photos} onChange={setPhotos} disabled={saving || Boolean(saved)} />
+        <div className="flex flex-wrap items-center gap-3 rounded-xl bg-slate-50 p-4 text-sm dark:bg-slate-800/40"><strong>{selectedFamily?.nombreReferencia ?? 'Sin familia'}</strong><span>{date}</span><span>{cropsState.length} cultivo(s)</span><span>{commitments.length} compromiso(s)</span><span>{photos.length} foto(s)</span></div>
       </section>}
       {saved && <div role="status" className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">
         <strong>{saved.status === 'synced' ? 'Visita guardada en el servidor.' : 'Visita guardada en este dispositivo.'}</strong>

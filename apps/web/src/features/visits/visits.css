@@ -6,3 +6,30 @@
 @media (prefers-reduced-motion: reduce) {
   .visits-enter { animation: none; }
 }
+
+/* Modal accesible de TailAdmin: carta amplia con entrada suave y fondo desenfocado. */
+dialog.visit-detail-modal {
+  width: min(960px, calc(100% - 1.5rem));
+  max-width: 960px;
+  max-height: calc(100dvh - 1.5rem);
+}
+dialog.visit-detail-modal[open] {
+  animation: visit-modal-show 260ms cubic-bezier(.2,.8,.25,1) both;
+}
+dialog.visit-detail-modal::backdrop {
+  background: rgba(15, 23, 42, .62);
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+  animation: visit-modal-backdrop 250ms ease-out both;
+}
+@keyframes visit-modal-show {
+  from { opacity: 0; transform: translateY(18px) scale(.965); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes visit-modal-backdrop {
+  from { opacity: 0; backdrop-filter: blur(0); }
+  to { opacity: 1; backdrop-filter: blur(7px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  dialog.visit-detail-modal[open], dialog.visit-detail-modal::backdrop { animation: none; }
+}

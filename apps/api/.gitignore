@@ -3,3 +3,6 @@ node_modules
 .env
 
 /src/generated/prisma
+
+# Fotografías privadas guardadas por el servidor (persistir/respaldar fuera de Git)
+/storage/
