@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import Button from './Button'
+import { cn } from '@/app/lib/cn'
 
 // Multiple dialogs share the lock so closing one cannot unlock another.
 let scrollLockCount = 0
@@ -23,7 +24,7 @@ function lockBackgroundScroll() {
   }
 }
 
-export default function Dialog({ open, title, description, onClose, children, actions }: { open: boolean; title: string; description?: string; onClose: () => void; children: ReactNode; actions?: ReactNode }) {
+export default function Dialog({ open, title, description, onClose, children, actions, className }: { open: boolean; title: string; description?: string; onClose: () => void; children: ReactNode; actions?: ReactNode; className?: string }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const titleId = useId()
@@ -50,7 +51,7 @@ export default function Dialog({ open, title, description, onClose, children, ac
     aria-modal="true"
     aria-labelledby={titleId}
     aria-describedby={description ? descriptionId : undefined}
-    className="custom-scrollbar fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-3xl border border-slate-200 bg-white p-0 text-slate-700 shadow-theme-lg backdrop:bg-slate-950/50 backdrop:backdrop-blur-xs dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300"
+    className={cn('custom-scrollbar fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-3xl border border-slate-200 bg-white p-0 text-slate-700 shadow-theme-lg backdrop:bg-slate-950/50 backdrop:backdrop-blur-xs dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300', className)}
     onCancel={(event) => { event.preventDefault(); onClose() }}
     onClick={(event) => {
       if (event.target !== event.currentTarget) return

@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto'
-import { Router, type Request, type Response } from 'express'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { Router, raw, type Request, type Response } from 'express'
 import { getPrismaClient } from '../../config/prisma.js'
 import { requireAuth } from '../auth/auth.middleware.js'
 import { getAuthenticatedUser } from '../auth/auth.service.js'
@@ -17,6 +20,9 @@ visitsRouter.use(async (req, res, next) => {
   } catch (error) { next(error) }
 })
 
+const evidenceRoot = resolve(process.env.VISIT_EVIDENCE_DIR || fileURLToPath(new URL('../../../storage/visits/', import.meta.url)))
+const maxPhotoBytes = 2 * 1024 * 1024
+const expressRawPhoto = raw({ type: 'image/jpeg', limit: maxPhotoBytes })
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const dateRe = /^\d{4}-\d{2}-\d{2}$/
 const clean = (v: unknown, max: number) => typeof v === 'string' ? v.trim().slice(0, max) : ''
@@ -68,12 +74,13 @@ function validate(input: unknown): { familyId: number; date: string; status: 'PR
 
 function serialize(row: {
   id: number; fecha: Date; estado: string; familia: { id: number; nombreReferencia: string; comunidad: { nombre: string } };
-}, captura: { operation_id: string; datos: unknown } | null) {
+}, captura: { operation_id: string; datos: unknown } | null, evidences: { id: number; name: string }[]) {
   return {
     id: row.id, operationId: captura?.operation_id ?? null,
     date: row.fecha.toISOString().slice(0,10), status: row.estado,
     familyId: row.familia.id, familyName: row.familia.nombreReferencia,
     community: row.familia.comunidad.nombre, capture: captura?.datos ?? null,
+    evidences: evidences.map(item => ({ ...item, url: `/api/v1/visitas/${row.id}/evidencias/${item.id}` })),
   }
 }
 
@@ -91,8 +98,14 @@ visitsRouter.get('/', async (req: Request, res: Response) => {
       SELECT "visita_id", "operation_id"::text, "datos" FROM "visita_captura" WHERE "usuario_id" = ${userId}
     `
     const byVisit = new Map(captures.map(c => [c.visita_id, c]))
+    const evidenceRows = rows.length ? await prisma.visitaEvidencia.findMany({
+      where: { visitaId: { in: rows.map(row => row.id) } },
+      include: { evidencia: { select: { id: true, nombreArchivo: true } } },
+    }) : []
+    const byEvidence = new Map<number, { id: number; name: string }[]>()
+    for (const e of evidenceRows) byEvidence.set(e.visitaId, [...(byEvidence.get(e.visitaId) ?? []), { id: e.evidencia.id, name: e.evidencia.nombreArchivo }])
     res.setHeader('Cache-Control','no-store')
-    res.json({ data: rows.map(row => serialize(row, byVisit.get(row.id) ?? null)) })
+    res.json({ data: rows.map(row => serialize(row, byVisit.get(row.id) ?? null, byEvidence.get(row.id) ?? [])) })
   } catch (error) { console.error('Error consultando visitas:',error); res.status(503).json({ error: 'No se pudieron consultar las visitas.' }) }
 })
 
@@ -149,3 +162,88 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
     res.status(503).json({ error: 'No se pudo guardar la visita.' })
   }
 })
+
+
+// Evidencia privada: ruta autenticada, ligada a la visita del usuario y nunca servida como carpeta pública.
+visitsRouter.get('/:visitId/evidencias/:evidenceId', async (req: Request, res: Response) => {
+  const visitId = Number(req.params.visitId)
+  const evidenceId = Number(req.params.evidenceId)
+  if (!Number.isSafeInteger(visitId) || visitId <= 0 || !Number.isSafeInteger(evidenceId) || evidenceId <= 0) {
+    res.status(400).json({ error: 'Identificador inválido.' }); return
+  }
+  try {
+    const prisma = getPrismaClient()
+    const relation = await prisma.visitaEvidencia.findFirst({
+      where: { visitaId: visitId, evidenciaId: evidenceId, visita: { usuarioResponsableId: req.session.userId! } },
+      include: { evidencia: { select: { rutaArchivo: true } } },
+    })
+    const pathMatch = /^visits\/([0-9a-f-]{36})\/([0-9a-f-]{36})\.jpg$/.exec(relation?.evidencia.rutaArchivo ?? '')
+    if (!pathMatch || !uuid.test(pathMatch[1]) || !uuid.test(pathMatch[2])) { res.status(404).end(); return }
+    const bytes = await readFile(join(evidenceRoot, pathMatch[1], `${pathMatch[2]}.jpg`))
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.type('image/jpeg').send(bytes)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') { res.status(404).end(); return }
+    console.error('No se pudo consultar la evidencia:', error)
+    res.status(503).json({ error: 'No se pudo consultar la fotografía.' })
+  }
+})
+
+// Express.raw limita el tamaño y evita convertir fotos a Base64 en el JSON del formulario.
+visitsRouter.post('/:operationId/evidencias/:photoId',
+  expressRawPhoto, async (req: Request, res: Response) => {
+    if (req.get('X-Requested-With') !== 'XMLHttpRequest') { res.status(403).json({ error: 'Solicitud no autorizada.' }); return }
+    const operationId = String(req.params.operationId ?? '').toLowerCase()
+    const photoId = String(req.params.photoId ?? '').toLowerCase()
+    if (!uuid.test(operationId) || !uuid.test(photoId)) { res.status(400).json({ error: 'Identificador inválido.' }); return }
+    const bytes = req.body
+    if (!Buffer.isBuffer(bytes) || bytes.length === 0 || bytes.length > maxPhotoBytes ||
+      bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes.at(-2) !== 0xff || bytes.at(-1) !== 0xd9) {
+      res.status(415).json({ error: 'Se requiere una imagen JPEG válida de máximo 2 MB.' }); return
+    }
+    const relativePath = `visits/${operationId}/${photoId}.jpg`
+    const fileDir = join(evidenceRoot, operationId)
+    const filePath = join(fileDir, `${photoId}.jpg`)
+    let name = 'Fotografía.jpg'
+    try { name = decodeURIComponent(req.get('X-File-Name') ?? name).replace(/[\\/\x00-\x1f]/g, '').slice(0, 120) || name }
+    catch { /* Usar nombre genérico */ }
+    const prisma = getPrismaClient()
+    try {
+      const capture = await prisma.visitaCaptura.findUnique({ where: { operationId }, select: { visitaId: true, usuarioId: true } })
+      if (!capture || capture.usuarioId !== req.session.userId) { res.status(404).json({ error: 'Visita no encontrada.' }); return }
+      const count = await prisma.visitaEvidencia.count({ where: { visitaId: capture.visitaId } })
+      const already = await prisma.evidencia.findFirst({ where: { rutaArchivo: relativePath }, select: { id: true } })
+      if (!already && count >= 4) { res.status(422).json({ error: 'Se admiten hasta 4 fotos por visita.' }); return }
+
+      await mkdir(fileDir, { recursive: true, mode: 0o700 })
+      try { await writeFile(filePath, bytes, { flag: 'wx', mode: 0o600 }) }
+      catch (err) { if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err }
+      // Un reintento no puede reemplazar una foto previa con un contenido diferente.
+      const currentBytes = await readFile(filePath)
+      if (!currentBytes.equals(bytes)) { res.status(409).json({ error: 'Foto con ID ya existente y otro contenido.' }); return }
+      const evidence = await prisma.$transaction(async tx => {
+        // Serializa los reintentos concurrentes del mismo archivo (sin una migración nueva).
+        await tx.$queryRaw<{ acquired: number }[]>`SELECT 1::integer AS acquired FROM pg_advisory_xact_lock(hashtext(${relativePath})::bigint)`
+        const existing = await tx.evidencia.findFirst({ where: { rutaArchivo: relativePath }, select: { id: true } })
+        if (existing) {
+          const linked = await tx.visitaEvidencia.findUnique({ where: { visitaId_evidenciaId: { visitaId: capture.visitaId, evidenciaId: existing.id } } })
+          if (!linked) throw new Error('Evidencia asociada a otra visita.')
+          return existing
+        }
+        // El límite se vuelve a comprobar dentro del bloqueo por visita en la transacción.
+        await tx.$queryRaw<{ acquired: number }[]>`SELECT 1::integer AS acquired FROM pg_advisory_xact_lock(${capture.visitaId}::bigint)`
+        if (await tx.visitaEvidencia.count({ where: { visitaId: capture.visitaId } }) >= 4) throw new Error('Límite de cuatro fotografías alcanzado.')
+        const created = await tx.evidencia.create({ data: {
+          nombreArchivo: name, rutaArchivo: relativePath, tipoArchivo: 'image/jpeg', fechaRegistro: new Date(),
+        } })
+        await tx.visitaEvidencia.create({ data: { visitaId: capture.visitaId, evidenciaId: created.id } })
+        return created
+      })
+      res.status(already ? 200 : 201).json({ accepted: true, evidenceId: evidence.id })
+    } catch (error) {
+      console.error('Error guardando evidencia:', error)
+      res.status(503).json({ error: 'No fue posible guardar la fotografía; se reintentará.' })
+    }
+  },
+)

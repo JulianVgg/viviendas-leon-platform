@@ -1,0 +1,83 @@
+# VIS-03 — Evidencias fotográficas de visitas técnicas
+
+## Resultado
+
+- Paso 3 del registro de visitas: sección **Evidencia fotográfica** con **Abrir cámara**, **Elegir de galería**, vista previa y opción de quitar fotografías antes de guardar.
+- Hasta cuatro fotos por visita; JPG, PNG y WebP de entrada, normalizadas a JPEG (lado mayor máximo 1600 px, calidad 78 %, máximo 2 MB por fotografía). En algunos teléfonos, HEIC requiere convertir a JPG o PNG antes de usarlo.
+- La cámara del móvil se solicita con el atributo HTML `capture="environment"` (es una sugerencia al navegador para la cámara trasera, no una garantía del sistema operativo).
+- El detalle del historial ahora abre el `Dialog` existente de TailAdmin en formato ancho, con foto a la izquierda y datos de visita a la derecha; incluye miniaturas, zoom, fondo desenfocado y animación con respeto por `prefers-reduced-motion`.
+- Visita y fotografías se almacenan en **una misma operación** de IndexedDB (`visits.create.v1`), con los archivos como `Blob`. La visita se sincroniza primero y las fotos se envían después por HTTP binario. Si alguna foto falla, **toda la operación permanece pendiente/error** para un nuevo intento con el mismo UUID. La API evita duplicar la visita y su evidencia al reintentar.
+- Fotos y metadatos remotos solo son accesibles mediante rutas API autenticadas y restringidas al técnico responsable de la visita.
+
+## Archivos incluidos
+
+- `apps/web/src/features/visits/components/VisitEvidencePicker.tsx` **nuevo**
+- `apps/web/src/features/visits/components/VisitDetailDialog.tsx` **nuevo**
+- `apps/web/src/features/visits/pages/VisitRegisterPage.tsx`
+- `apps/web/src/features/visits/pages/VisitHistoryPage.tsx`
+- `apps/web/src/features/visits/services/visitService.ts`
+- `apps/web/src/features/visits/visits.css`
+- `apps/web/src/components/ui/Dialog.tsx` (prop `className` opcional, compatible con otros usos)
+- `apps/api/src/modules/visits/visits.routes.ts`
+- `apps/api/.gitignore` (no versionar el almacenamiento de imágenes)
+
+## Preparación en Windows
+
+Partir de la rama donde está el trabajo VIS-03 y hacer copia/respaldo de los cambios que no estén en Git. Extraer el paquete **en la raíz del monorepo**, conservando las rutas `apps/...` y `docs/...` (el ZIP no contiene `node_modules`, `.git` ni secretos). Ejecutar, desde la raíz:
+
+```powershell
+npm install
+npm run dev
+```
+
+Para comprobación de TypeScript/build:
+
+```powershell
+npm run build
+```
+
+**Migración de datos:** VIS-03 utiliza las tablas ya definidas `evidencia` y `visita_evidencia`; **no necesita una migración nueva**. Sin embargo, sí es imprescindible que la migración previa `20261015120000_visita_captura` ya esté aplicada. En caso de que aún esté pendiente, revisar y aplicar las migraciones normales, sin borrar datos:
+
+```powershell
+cd apps/api
+npx prisma migrate status --config prisma7.config.ts
+npx prisma migrate deploy --config prisma7.config.ts
+npx prisma generate --config prisma7.config.ts
+cd ../..
+```
+
+**Almacenamiento de fotos:** el backend las guarda de manera privada (fuera de la carpeta pública del frontend), por defecto en `apps/api/storage/visits/`. Esta carpeta se ignora en Git. Para producción, apuntar `VISIT_EVIDENCE_DIR` a una carpeta **persistente**, con permisos restringidos al proceso de la API y respaldo periódico. Ejemplo de variable de entorno, apuntando a una carpeta previamente aprovisionada:
+
+```dotenv
+VISIT_EVIDENCE_DIR=C:\datos-viviendas-leon\evidencias
+```
+
+No configurar esta ubicación bajo `public`, ni depender de un disco efímero sin respaldos. El diseño actual requiere que todas las instancias de la API compartan el mismo almacenamiento persistente; para escalado horizontal sería preferible usar almacenamiento privado de objetos.
+
+## Pruebas VIS-03 (aceptación)
+
+1. En `/visitas/nueva`, completar familia/fecha, llegar al **paso 3**, elegir **Abrir cámara** desde un móvil. Tomar una fotografía y confirmar miniatura. Probar **Elegir de galería** y **Quitar**.
+2. Guardar una visita **realizada** con 1–4 fotos; consultar `/visitas/historial`. El botón **Ver detalle** abre modal con imagen, contenido y miniaturas. Cambiar foto, activar/desactivar zoom y cerrar con Escape, botón Cerrar o fuera del cuadro.
+3. Comprobar mediante DevTools que `POST /api/v1/visitas/sync` envía solo JSON y los `POST /api/v1/visitas/:operationId/evidencias/:photoId` envían `image/jpeg` binario. Las imágenes se descargan mediante `GET /api/v1/visitas/:visitId/evidencias/:evidenceId` autenticado.
+4. Con DevTools Network **Offline** (sin cerrar sesión ni recargar), guardar una visita con fotos. Debe aparecer en historial como **Pendiente** y ser visible con sus fotos locales. Recuperar Internet, esperar sincronización, actualizar y confirmar el registro remoto.
+5. Interrumpir red durante la subida de la segunda foto; recuperar y reintentar la operación. Verificar que **no** se duplicaron visita ni fotos y que se completa el acuse de sincronización.
+6. Con otra sesión/usuario sin propiedad de la visita, intentar abrir la URL privada de la imagen: debe responder 404/403 según permisos. Sin sesión: 401.
+7. Probar formato móvil 360–390 px, escritorio, dark mode, teclas Tab/Escape, interacción táctil y `prefers-reduced-motion`.
+8. Comprobar en PostgreSQL que existe relación entre `visita`, `visita_evidencia` y `evidencia`:
+
+```sql
+SELECT v.id AS visita_id, e.id AS evidencia_id, e.nombre_archivo, e.ruta_archivo
+FROM visita v
+JOIN visita_evidencia ve ON ve.visita_id = v.id
+JOIN evidencia e ON e.id = ve.evidencia_id
+ORDER BY v.id DESC, e.id DESC;
+```
+
+## Consideraciones importantes
+
+- **La prueba de cámara real, permisos, almacenamiento PostgreSQL y sincronización debe hacerse en el equipo/entorno de desarrollo:** no están verificados aquí contra un servidor y teléfono reales.
+- Los archivos que nacen en este dispositivo se pueden volver a visualizar offline desde su `Blob` guardado en la cola. Las fotos de visitas registradas **en otros dispositivos** requieren conexión (aún no se implementa un caché de medios remotos para acceso offline).
+- La aplicación actual sigue necesitando sesión activa para acceder a pantallas offline después de recargar desde cero; ese límite ya existía.
+- Las operaciones completadas conservan copias locales de sus fotos mientras no exista una estrategia de limpieza/retención. Debe definirse cifrado local, retención, política de consentimiento y purga segura antes de capturar información sensible en producción.
+- No se implementó evidencia de audio, transcripción, WhatsApp ni adjuntos PDF: ese trabajo corresponde a posteriores historias.
+- No se añadieron bibliotecas visuales ni migraciones a este cambio. Se reutilizaron `Dialog`, `Button`, Tailwind/TailAdmin y `lucide-react` ya integrados.
