@@ -4,6 +4,7 @@ import {
   Bell,
   Bug,
   CalendarDays,
+  ContactRound,
   ChartNoAxesColumnIncreasing,
   ClipboardCheck,
   ClipboardPenLine,
@@ -40,6 +41,9 @@ const strokeWidth = 1.8
 const icons = {
   dashboard: <LayoutDashboard size={size} strokeWidth={strokeWidth} />,
   families: <UsersRound size={size} strokeWidth={strokeWidth} />,
+  familyList: <FileText size={size} strokeWidth={strokeWidth} />,
+  familyCreate: <ClipboardPenLine size={size} strokeWidth={strokeWidth} />,
+  familyEdit: <ContactRound size={size} strokeWidth={strokeWidth} />,
   agriculture: <Sprout size={size} strokeWidth={strokeWidth} />,
   gardens: <House size={size} strokeWidth={strokeWidth} />,
   crops: <Leaf size={size} strokeWidth={strokeWidth} />,
@@ -67,7 +71,11 @@ export const navigationGroups: { id: string; name: string; items: NavigationItem
     name: 'Navegación',
     items: [
       { id: 'dashboard', name: 'Dashboard', path: '/', icon: icons.dashboard, roles: ['fieldWorker', 'coordination', 'operationsDirector', 'administration', 'audit'] },
-      { id: 'families', name: 'Familias y beneficiarios', path: '/familias', icon: icons.families, roles: ['fieldWorker', 'coordination'] },
+      { id: 'families', name: 'Familias y beneficiarios', path: '/familias', icon: icons.families, roles: ['fieldWorker', 'coordination'], children: [
+        { id: 'families-list', name: 'Listado de familias', path: '/familias', icon: icons.familyList, exact: true },
+        { id: 'families-create', name: 'Registrar familias', path: '/familias/nueva', icon: icons.familyCreate, exact: true },
+        { id: 'families-edit', name: 'Editar familias', path: '/familias/editar', icon: icons.familyEdit, exact: true },
+      ] },
       { id: 'agriculture', name: 'Gestión agrícola', path: '/gestion-agricola', icon: icons.agriculture, roles: ['fieldWorker', 'coordination'], children: [
         { id: 'gardens', name: 'Huertos', path: '/gestion-agricola/huertos', icon: icons.gardens },
         { id: 'crops', name: 'Cultivos', path: '/gestion-agricola/cultivos', icon: icons.crops },

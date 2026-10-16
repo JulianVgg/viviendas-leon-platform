@@ -86,7 +86,7 @@ export default function AppHeader() {
             <p className="mt-1 break-all text-xs text-slate-500 dark:text-slate-400">{usuario?.correo}</p>
             <p className="mt-2 text-xs font-medium text-slate-600 dark:text-slate-300">{usuario?.roles.join(', ') || 'Sin rol asignado'}</p>
             <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800">
-              <p className="text-sm font-semibold text-slate-800 dark:text-white">Rol simulado</p>
+              <p className="text-sm font-semibold text-slate-800 dark:text-white">Perfil de acceso</p>
               <p id="mock-role-help" className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">Cambia la visibilidad de la interfaz. No representa autenticación ni permisos del backend.</p>
               <label htmlFor="mock-role" className="mt-4 block text-sm font-medium text-slate-700 dark:text-slate-300">Vista por rol</label>
               <select id="mock-role" aria-describedby="mock-role-help" value={currentRole.id} className={formControlClassName + ' mt-2'} onChange={(event) => setRole(event.target.value as typeof currentRole.id)}>{availableRoles.map((role) => <option key={role.id} value={role.id}>{role.label}</option>)}</select>

@@ -242,6 +242,13 @@
 }
 .layout-dropdown-panel.is-open { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
 
+/* Entrada breve para etapas y filas dinámicas del registro integral. */
+@keyframes wizard-card-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.wizard-card-entry { animation: wizard-card-enter 240ms ease-out both; }
+
 /* Barra de desplazamiento de TailAdmin ajustada para Firefox. */
 .custom-scrollbar { scrollbar-width: thin; scrollbar-color: var(--color-gray-200) transparent; }
 .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -252,4 +259,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .layout-menu-accordion, .layout-dropdown-panel { transition: none; }
+  .wizard-card-entry { animation: none; }
 }

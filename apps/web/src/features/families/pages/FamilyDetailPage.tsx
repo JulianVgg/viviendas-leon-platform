@@ -52,7 +52,7 @@ export default function FamilyDetailPage() {
     <PageMeta title="Expediente integral de familia | Viviendas León Guatemala" description="Consulta de información general, integrantes y programas de una familia." />
     <PageHeader title="Expediente familiar" description="Información general, integrantes y programas. Consulta de solo lectura." actions={<Link to="/familias" className="layout-focus inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-theme-xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">Volver al listado</Link>} />
     <div className="min-w-0 space-y-5">
-      <Alert variant="warning" title="Consulta habilitada solo para desarrollo / QA">Utiliza exclusivamente datos sintéticos. La autorización integral por rol está pendiente; este expediente no está preparado para datos reales.</Alert>
+      <Alert variant="warning" title="Protección de datos">Consulta únicamente expedientes autorizados y evita compartir información personal fuera de la plataforma.</Alert>
       {!isOnline ? <Alert variant="warning" title="Sin conexión">Conéctate a la red para consultar el expediente integral. No se guarda una copia local con datos personales. La consulta se reanudará al recuperar la conexión.</Alert> : <FamilyDetailRequest key={`${id}-${version}`} id={id} onRetry={() => setVersion((value) => value + 1)} />}
     </div>
   </>
