@@ -1,8 +1,10 @@
 import '../visits.css'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarDays, CheckCheck, ChevronLeft, ChevronRight, ClipboardList, Clock3, Edit3, Plus, RefreshCw } from 'lucide-react'
+import { CalendarDays, CheckCheck, ChevronLeft, ChevronRight, ClipboardList, Clock3, Edit3, RefreshCw } from 'lucide-react'
 import { Link } from 'react-router'
 import PageHeader from '@/components/common/PageHeader'
+import Dialog from '@/components/ui/Dialog'
+import ScheduleVisitDialog from '@/features/visits/components/ScheduleVisitDialog'
 import PageMeta from '@/components/common/PageMeta'
 import Button from '@/components/ui/Button'
 import { useAuth } from '@/features/auth/AuthProvider'
@@ -17,7 +19,8 @@ const dateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth()+
 const dateLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('es-GT',{ day:'numeric', month:'short', year:'numeric' })
 const card = 'rounded-2xl border border-gray-200 bg-white shadow-theme-xs dark:border-gray-800 dark:bg-gray-900'
 const visitKey = (visit: VisitListItem) => visit.operationId ?? `visit-${visit.id}`
-type Reminder = { key: string; date: string; family: string; description: string; type: 'visit' | 'followup'; visit?: VisitListItem; followup?: VisitFollowUp }
+type Reminder = { key: string; date: string | null; sortDate: string; family: string; description: string; type: 'visit' | 'followup'; visit?: VisitListItem; followup?: VisitFollowUp }
+type CalendarEvent = { key: string; label: string; kind: 'visit' | 'followup'; visit?: VisitListItem; followup?: VisitFollowUp }
 
 export default function VisitAgendaPage() {
   const { usuario } = useAuth()
@@ -31,6 +34,8 @@ export default function VisitAgendaPage() {
   const [editing, setEditing] = useState<VisitFollowUp | null>(null)
   const [rescheduling, setRescheduling] = useState<VisitListItem | null>(null)
   const [slide, setSlide] = useState(0)
+  const [schedulingDate, setSchedulingDate] = useState<string | null>(null)
+  const [expandedDay, setExpandedDay] = useState<string | null>(null)
   const carousel = useRef<HTMLDivElement>(null)
   const today = dateKey(new Date())
 
@@ -57,12 +62,19 @@ export default function VisitAgendaPage() {
     for (const item of items) map.set(item.date, [...(map.get(item.date) ?? []), item])
     return map
   }, [items])
-  const dueByDate = useMemo(() => {
-    const map = new Map<string, VisitFollowUp[]>()
-    for (const item of followups) if (item.due && item.status !== 'CUMPLIDO')
-      map.set(item.due, [...(map.get(item.due) ?? []), item])
+  const eventsByDate = useMemo(() => {
+    const map = new Map<string, CalendarEvent[]>()
+    for (const [day, visits] of byDate) {
+      map.set(day, visits.map(visit => ({ key: `visit-${visitKey(visit)}`, label: visit.familyName, kind: 'visit', visit })))
+    }
+    for (const followup of followups) {
+      if (followup.status === 'CUMPLIDO' || !followup.due) continue
+      const list = map.get(followup.due) ?? []
+      list.push({ key: `followup-${followup.id}`, label: followup.text, kind: 'followup', followup })
+      map.set(followup.due, list)
+    }
     return map
-  }, [followups])
+  }, [byDate, followups])
   const cells = useMemo(() => {
     const first = new Date(month.getFullYear(), month.getMonth(), 1)
     const offset = (first.getDay() + 6) % 7
@@ -74,14 +86,14 @@ export default function VisitAgendaPage() {
   }, [month])
   const reminders = useMemo<Reminder[]>(() => {
     const scheduled: Reminder[] = items.filter(v => v.status === 'PROGRAMADA' && v.date >= today).map(v => ({
-      key:visitKey(v),date:v.date,family:v.familyName,description:`Visita programada · ${v.community}`,type:'visit',visit:v,
+      key:visitKey(v),date:v.date,sortDate:v.date,family:v.familyName,description:`Visita programada · ${v.community}${v.capture?.timeSlot ? ` · ${v.capture.timeSlot === 'MANANA' ? 'Mañana' : 'Tarde'}` : ''}`,type:'visit',visit:v,
     }))
     const followUpReminders: Reminder[] = followups.filter(f => f.status !== 'CUMPLIDO').map(f => ({
-      key:f.id,date:f.due ?? f.date, family:f.familyName,
+      key:f.id,date:f.due, sortDate:f.due ?? '9999-12-31', family:f.familyName,
       description:f.text,type:'followup',followup:f,
     }))
     // Los seguimientos vencidos siguen visibles: no desaparecen al pasar la fecha.
-    return [...scheduled,...followUpReminders].sort((a,b) => a.date.localeCompare(b.date)).slice(0,24)
+    return [...scheduled,...followUpReminders].sort((a,b) => a.sortDate.localeCompare(b.sortDate)).slice(0,24)
   }, [items,followups,today])
   const pendingCount = followups.filter(f => f.status !== 'CUMPLIDO').length
   const detailsFollowUps = selected ? followups.filter(f => f.familyId === selected.familyId && (f.status !== 'CUMPLIDO' || f.sourceVisitId === selected.id)) : []
@@ -95,8 +107,8 @@ export default function VisitAgendaPage() {
   const openReschedule = (v: VisitListItem) => { setSelected(null); setRescheduling(v) }
   return <div className="visits-enter">
     <PageMeta title="Agenda de visitas | Viviendas León" description="Agenda y compromisos de visitas técnicas" />
-    <PageHeader title="Agenda de visitas" description=""
-      actions={<Link to="/visitas/nueva" className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-brand-500 px-5 text-sm font-medium text-white transition hover:bg-brand-600"><Plus size={16}/> Programar visita</Link>}/>
+    <PageHeader title="Agenda de visitas" description="" />
+    <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">Haz doble clic en un día vacío para agendar una visita. En teléfono o con teclado, pulsa el número del día. Cada casilla muestra hasta tres registros.</p>
     {error && <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-500/10 dark:text-red-300">{error}</div>}
     {local && !error && <p className="mb-3 text-xs font-medium text-amber-700 dark:text-amber-300">Mostrando datos guardados en este dispositivo. Editar pendientes requiere conexión.</p>}
     <div className="mb-4 flex flex-wrap items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
@@ -114,18 +126,30 @@ export default function VisitAgendaPage() {
         </header>
         <div className="overflow-x-auto"><div className="min-w-[560px]">
           <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50 text-center text-xs font-semibold text-gray-500 dark:border-gray-800 dark:bg-gray-800/40 dark:text-gray-400">{weekdays.map(day=><span key={day} className="py-3">{day}</span>)}</div>
-          <div className="grid grid-cols-7">{cells.map((cell,index) => <div key={cell.key}
-            className={`min-h-28 border-b border-r border-gray-100 p-1.5 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-white/5 md:min-h-36 ${index%7===0 ? 'border-l border-gray-100 dark:border-gray-800' : ''} ${!cell.currentMonth ? 'bg-gray-50/70 dark:bg-gray-950/30' : ''}`}>
-            <Link to={`/visitas/nueva?fecha=${cell.key}`} title={`Programar visita para ${cell.key}`} className={`mb-2 inline-flex size-7 items-center justify-center rounded-full text-xs font-semibold hover:bg-brand-100 ${cell.key===today?'bg-brand-500 text-white':cell.currentMonth?'text-gray-800 dark:text-gray-200':'text-gray-400'}`}>{cell.date}</Link>
-            <div className="space-y-1">
-              {(byDate.get(cell.key) ?? []).slice(0,3).map(v=><button key={visitKey(v)} type="button" onClick={()=>setSelected(v)} title={`Ver detalle: ${v.familyName}`}
-                className={`block w-full truncate rounded-md border-l-[3px] px-1.5 py-1 text-left text-[11px] font-medium transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-brand-500 ${v.status==='REALIZADA'?'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300':'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-200'}`}>{v.familyName}</button>)}
-              {(byDate.get(cell.key)?.length ?? 0)>3 && <span className="block text-[11px] text-gray-500">+{(byDate.get(cell.key)?.length ?? 0)-3} visitas</span>}
-              {(dueByDate.get(cell.key) ?? []).slice(0,2).map(f=><button key={f.id} type="button" onClick={()=>openFollowUp(f)} title={f.text}
-                className="block w-full truncate rounded-md border-l-[3px] border-amber-500 bg-amber-50 px-1.5 py-1 text-left text-[11px] font-medium text-amber-800 hover:bg-amber-100 dark:bg-amber-500/10 dark:text-amber-300"><Clock3 size={10} className="mr-1 inline"/>{f.text}</button>)}
-              {(dueByDate.get(cell.key)?.length ?? 0)>2 && <span className="block text-[11px] text-amber-700">+{(dueByDate.get(cell.key)?.length ?? 0)-2} pendientes</span>}
+          <div className="grid grid-cols-7">{cells.map((cell,index) => {
+            const daily = eventsByDate.get(cell.key) ?? []
+            return <div key={cell.key} onDoubleClick={() => setSchedulingDate(cell.key)}
+              title={`Doble clic para agendar una visita el ${cell.key}`}
+              className={`min-h-28 border-b border-r border-gray-100 p-1.5 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-white/5 md:min-h-36 ${index%7===0 ? 'border-l border-gray-100 dark:border-gray-800' : ''} ${!cell.currentMonth ? 'bg-gray-50/70 dark:bg-gray-950/30' : ''}`}>
+              <button type="button" onClick={() => setSchedulingDate(cell.key)}
+                aria-label={`Agendar visita el ${cell.key}`}
+                className={`mb-2 inline-flex size-7 items-center justify-center rounded-full text-xs font-semibold hover:bg-brand-100 focus-visible:outline-2 focus-visible:outline-brand-500 ${cell.key===today?'bg-brand-500 text-white':cell.currentMonth?'text-gray-800 dark:text-gray-200':'text-gray-400'}`}>{cell.date}</button>
+              <div className="space-y-1">
+                {daily.slice(0,3).map(event => <button key={event.key} type="button"
+                  onClick={() => event.visit ? setSelected(event.visit) : event.followup && openFollowUp(event.followup)}
+                  onDoubleClick={e => e.stopPropagation()}
+                  title={event.kind === 'visit' ? `Ver visita: ${event.label}` : `Editar seguimiento: ${event.label}`}
+                  className={`block w-full truncate rounded-md border-l-[3px] px-1.5 py-1 text-left text-[11px] font-medium transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-brand-500 ${event.kind==='followup'?'border-amber-500 bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300':event.visit?.status==='REALIZADA'?'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300':'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-200'}`}>
+                  {event.kind === 'followup' && <Clock3 size={10} className="mr-1 inline"/>}{event.label}
+                </button>)}
+                {daily.length > 3 && <button type="button" onClick={() => setExpandedDay(cell.key)}
+                  onDoubleClick={e => e.stopPropagation()}
+                  className="w-full rounded-md border border-dashed border-gray-300 px-1.5 py-1 text-left text-[11px] font-semibold text-brand-600 hover:bg-brand-50 dark:border-gray-700 dark:text-brand-300 dark:hover:bg-brand-500/10">
+                  +{daily.length-3} más · Ver todos
+                </button>}
+              </div>
             </div>
-          </div>)}</div>
+          })}</div>
         </div></div>
       </section>
       <section className={`${card} self-start`} aria-label="Próximas visitas y recordatorios">
@@ -140,7 +164,7 @@ export default function VisitAgendaPage() {
           }} className="custom-scrollbar max-h-[450px] min-w-0 flex-1 snap-y snap-mandatory space-y-3 overflow-y-auto overscroll-contain">
             {loading ? <p className="py-8 text-center text-sm text-gray-500">Cargando…</p> : reminders.length === 0 ? <div className="py-9 text-center text-sm text-gray-500"><CheckCheck className="mx-auto mb-2 text-emerald-500" size={27}/>No hay visitas programadas ni seguimientos abiertos.</div>
             : reminders.map(item => <article key={item.key} data-reminder className="snap-start rounded-xl border border-gray-200 bg-gray-50/30 p-3 dark:border-gray-800 dark:bg-white/5">
-              <div className="mb-2 flex items-center gap-2 text-xs font-semibold"><span className={`rounded-full px-2 py-1 ${item.type==='visit'?'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300':'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'}`}>{item.type==='visit'?'Visita':'Seguimiento'}</span><span className={item.date<today?'text-rose-600':'text-gray-500'}>{dateLabel(item.date)}{item.date<today?' · Vencido':''}</span></div>
+              <div className="mb-2 flex items-center gap-2 text-xs font-semibold"><span className={`rounded-full px-2 py-1 ${item.type==='visit'?'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300':'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'}`}>{item.type==='visit'?'Visita':'Seguimiento'}</span><span className={item.date && item.date<today?'text-rose-600':'text-gray-500'}>{item.date ? dateLabel(item.date) : 'Sin fecha de revisión'}{item.date && item.date<today?' · Vencido':''}</span></div>
               <p className="text-sm font-semibold text-gray-900 dark:text-white">{item.family}</p>
               <p className="mt-1 line-clamp-3 text-sm leading-5 text-gray-600 dark:text-gray-300">{item.description}</p>
               <div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold text-brand-600 dark:text-brand-400">
@@ -160,7 +184,21 @@ export default function VisitAgendaPage() {
         <footer className="flex flex-wrap gap-3 border-t border-gray-200 px-5 py-4 text-xs dark:border-gray-800"><ClipboardList size={16} className="text-amber-500"/><span className="text-gray-600 dark:text-gray-400">{pendingCount} compromiso(s) por revisar</span><Link to="/visitas/historial" className="ml-auto font-medium text-brand-600 hover:underline dark:text-brand-400">Ver historial →</Link></footer>
       </section>
     </div>
-    <VisitDetailDialog key={selected?.operationId ?? selected?.id ?? 'empty'} visit={selected} onClose={()=>setSelected(null)} extra={selected ? <section className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+    <Dialog open={Boolean(expandedDay)} onClose={() => setExpandedDay(null)} title="Registros del día"
+      description={expandedDay ? new Date(`${expandedDay}T12:00:00`).toLocaleDateString('es-GT', {weekday:'long', day:'numeric', month:'long', year:'numeric'}) : undefined}
+      className="visit-followup-modal">
+      <div className="space-y-2">
+        {(expandedDay ? eventsByDate.get(expandedDay) ?? [] : []).map(event => <button type="button" key={event.key}
+          onClick={() => { setExpandedDay(null); if (event.visit) setSelected(event.visit); else if (event.followup) openFollowUp(event.followup) }}
+          className="flex w-full items-start gap-3 rounded-lg border border-gray-200 p-3 text-left transition hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-brand-500 dark:border-gray-700 dark:hover:bg-gray-800">
+          <span className={`mt-1 size-2.5 shrink-0 rounded-full ${event.kind==='followup'?'bg-amber-500':event.visit?.status==='REALIZADA'?'bg-emerald-500':'bg-brand-500'}`}/>
+          <span className="min-w-0"><span className="block break-words text-sm font-semibold text-gray-900 dark:text-white">{event.label}</span>
+          <span className="mt-1 block text-xs text-gray-500">{event.kind==='followup'?'Seguimiento pendiente':event.visit?.status==='REALIZADA'?'Visita realizada':'Visita programada'} · Abrir detalle</span></span>
+        </button>)}
+      </div>
+    </Dialog>
+    <ScheduleVisitDialog date={schedulingDate} onClose={() => setSchedulingDate(null)} onSaved={() => { setSchedulingDate(null); void refresh() }}/>
+    <VisitDetailDialog key={selected?.operationId ?? selected?.id ?? 'dialog-visit'} visit={selected} onClose={()=>setSelected(null)} extra={selected ? <section className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
       <h3 className="mb-3 font-semibold text-gray-900 dark:text-white">Seguimientos de esta familia</h3>
       {detailsFollowUps.length===0 ? <p className="text-sm text-gray-500">Sin compromisos pendientes.</p> : <div className="space-y-2">{detailsFollowUps.map(f=><div key={f.id} className="rounded-lg bg-gray-50 p-3 text-sm dark:bg-gray-800">
         <p className="break-words text-gray-800 dark:text-gray-200">{f.text}</p><p className="mt-1 text-xs text-gray-500">{f.status==='CUMPLIDO'?'Cumplido':f.status==='NO_CUMPLIDO'?'No cumplido':'Pendiente'}{f.due?` · ${dateLabel(f.due)}`:''}</p>
@@ -171,7 +209,7 @@ export default function VisitAgendaPage() {
         <Link className="text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400" to={`/visitas/nueva?familia=${selected.familyId}`}>Registrar siguiente visita ↗</Link>
       </div>
     </section> : undefined}/>
-    <RescheduleVisitDialog key={rescheduling?.operationId ?? 'empty'} visit={rescheduling} onClose={()=>setRescheduling(null)} onSaved={()=>{setRescheduling(null);void refresh()}}/>
-    <FollowUpEditDialog key={editing?.id ?? 'empty'} item={editing} onClose={()=>setEditing(null)} onSaved={()=>{setEditing(null); void refresh()}} />
+    <RescheduleVisitDialog key={rescheduling?.operationId ?? rescheduling?.id ?? 'dialog-reschedule'} visit={rescheduling} onClose={()=>setRescheduling(null)} onSaved={()=>{setRescheduling(null);void refresh()}}/>
+    <FollowUpEditDialog key={editing?.id ?? 'dialog-followup'} item={editing} onClose={()=>setEditing(null)} onSaved={()=>{setEditing(null); void refresh()}} />
   </div>
 }

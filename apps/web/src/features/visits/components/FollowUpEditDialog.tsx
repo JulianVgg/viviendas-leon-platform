@@ -36,8 +36,15 @@ export default function FollowUpEditDialog({ item, onClose, onSaved }: { item: V
       <FormField id="followup-text" label="Compromiso"><textarea id="followup-text" className={`${formControlClassName} min-h-24`} value={text} maxLength={500} onChange={e => setText(e.target.value)} /></FormField>
       <div className="grid gap-4 sm:grid-cols-2">
         <FormField id="followup-status" label="Estado"><select id="followup-status" className={formControlClassName} value={status} onChange={e=>setStatus(e.target.value as FollowUpStatus)}>{statuses.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></FormField>
-        <FormField id="followup-due" label="Fecha de seguimiento"><input id="followup-due" type="date" className={formControlClassName} value={due} onChange={e=>setDue(e.target.value)}/></FormField>
+        <FormField id="followup-due" label={status === 'NO_CUMPLIDO' ? 'Nueva fecha de revisión (opcional)' : 'Fecha de seguimiento (opcional)'}><input id="followup-due" type="date" className={formControlClassName} value={due} onChange={e=>setDue(e.target.value)}/></FormField>
       </div>
+      {status === 'NO_CUMPLIDO' && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-500/10 dark:text-amber-200">
+        <p className="font-semibold">Compromiso no cumplido</p>
+        <p className="mt-1">Puedes elegir una nueva fecha de revisión arriba o dejarla vacía. En ambos casos el seguimiento seguirá abierto hasta que se marque como cumplido.</p>
+        <button type="button" className="mt-2 font-semibold text-brand-600 underline dark:text-brand-300" onClick={() => setDue('')}>
+          Dejar pendiente sin fecha
+        </button>
+      </div>}
       <FormField id="followup-observation" label="Observación de seguimiento"><textarea id="followup-observation" maxLength={2000} className={`${formControlClassName} min-h-20`} value={observation} onChange={e=>setObservation(e.target.value)} /></FormField>
       {item.local && <p className="text-sm text-amber-700 dark:text-amber-300">Este compromiso está guardado en el dispositivo. Para editarlo desde la agenda, primero debe sincronizarse.</p>}
       {error && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>}

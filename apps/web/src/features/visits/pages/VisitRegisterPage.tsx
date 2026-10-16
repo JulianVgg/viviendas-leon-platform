@@ -51,6 +51,8 @@ export default function VisitRegisterPage() {
   const [followUps, setFollowUps] = useState<VisitFollowUp[]>([])
   const [followUpLoading, setFollowUpLoading] = useState(true)
   const [followUpLocal, setFollowUpLocal] = useState(false)
+  const [followUpError, setFollowUpError] = useState('')
+  const [followUpRefresh, setFollowUpRefresh] = useState(0)
   const [reviewStates, setReviewStates] = useState<Record<string, FollowUpStatus>>({})
   const [cropsState, setCrops] = useState<CropEntry[]>([])
   const [commitments, setCommitments] = useState<Commitment[]>([])
@@ -100,11 +102,22 @@ export default function VisitRegisterPage() {
     if (!usuario) { setFollowUpLoading(false); return }
     let active = true
     setFollowUpLoading(true)
-    getVisitFollowUps(usuario.id).then(result => { if (active) { setFollowUps(result.items); setFollowUpLocal(result.local) } })
-      .catch(() => { if (active) { setFollowUps([]); setFollowUpLocal(true) } })
-      .finally(() => { if (active) setFollowUpLoading(false) })
+    setFollowUpError('')
+    getVisitFollowUps(usuario.id).then(result => {
+      if (active) { setFollowUps(result.items); setFollowUpLocal(result.local) }
+    }).catch(cause => {
+      if (active) {
+        setFollowUps([])
+        setFollowUpError(cause instanceof Error ? cause.message : 'No se pudieron consultar los compromisos.')
+      }
+    }).finally(() => { if (active) setFollowUpLoading(false) })
     return () => { active = false }
-  }, [usuario])
+  }, [usuario, familyId, followUpRefresh])
+  useEffect(() => {
+    const recheck = () => setFollowUpRefresh(n => n + 1)
+    window.addEventListener('focus', recheck)
+    return () => window.removeEventListener('focus', recheck)
+  }, [])
   const previousFollowUps = useMemo(() => followUps.filter(item =>
     String(item.familyId) === familyId && item.status !== 'CUMPLIDO' && item.date <= date
   ).sort((a,b) => (a.due ?? a.date).localeCompare(b.due ?? b.date)), [followUps, familyId, date])
@@ -178,9 +191,14 @@ export default function VisitRegisterPage() {
             <h3 className="font-semibold text-gray-900 dark:text-white">¿Cómo le ha ido desde la última visita?</h3>
             <p className="mt-1 text-xs text-gray-500">Revisa los compromisos anteriores de la familia. Puedes marcarlos ahora o dejarlos pendientes para otra visita.</p>
             {followUpLocal && <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">Consultando datos locales: pueden faltar compromisos que todavía no se han descargado en este dispositivo.</p>}
+            {followUpError && <div role="alert" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-500/10 dark:text-amber-200">
+              No fue posible consultar los seguimientos: {followUpError}. No significa que la familia no tenga compromisos.
+              <button type="button" className="ml-2 font-semibold underline" onClick={() => setFollowUpRefresh(n => n + 1)}>Reintentar</button>
+            </div>}
             {!familyId ? <p className="mt-3 text-sm text-gray-500">Selecciona una familia para consultar los pendientes.</p>
+              : followUpError ? null
               : followUpLoading ? <p className="mt-3 text-sm text-gray-500">Consultando compromisos anteriores…</p>
-              : previousFollowUps.length === 0 ? <p className="mt-3 rounded-lg bg-white p-3 text-sm text-gray-500 dark:bg-gray-900">No hay compromisos anteriores pendientes para esta familia. En la primera visita podrás agregarlos en el paso 3.</p>
+              : previousFollowUps.length === 0 ? <p className="mt-3 rounded-lg bg-white p-3 text-sm text-gray-500 dark:bg-gray-900">{followUpLocal ? 'No hay seguimientos de esta familia disponibles en el caché de este dispositivo. Conecta con la API y vuelve a intentar para confirmar los pendientes.' : 'No hay compromisos anteriores pendientes para esta familia. En la primera visita podrás agregarlos en el paso 3.'}</p>
               : <div className="mt-3 space-y-3">{previousFollowUps.map(f => <div key={f.id} className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">{f.text}</p>
                 <p className="mt-1 text-xs text-gray-500">Responsable: {f.category}{f.due ? ` · Revisar: ${f.due}` : ''}{f.local ? ' · Pendiente de sincronizar' : ''}</p>

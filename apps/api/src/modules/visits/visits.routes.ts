@@ -29,7 +29,7 @@ const statusOptions = ['PENDIENTE','CUMPLIDO','NO_CUMPLIDO'] as const
 const validDate = (v: string) => dateRe.test(v) && !Number.isNaN(Date.parse(`${v}T12:00:00Z`)) && new Date(`${v}T12:00:00Z`).toISOString().slice(0,10) === v
 const clean = (v: unknown, max: number) => typeof v === 'string' ? v.trim().slice(0, max) : ''
 const positive = (v: unknown) => v === '' || v === null || v === undefined || (typeof v === 'number' && Number.isFinite(v) && v >= 0)
-function validate(input: unknown, operationId: unknown): { familyId: number; date: string; status: 'PROGRAMADA' | 'REALIZADA'; weather: string; checkIn: string; recommendation: string; observations: string; treatment: string; crops: Record<string, unknown>[]; commitments: Record<string, unknown>[]; reviews: { id: string; status: string }[] } | null {
+function validate(input: unknown, operationId: unknown): { familyId: number; date: string; status: 'PROGRAMADA' | 'REALIZADA'; timeSlot?: 'MANANA' | 'TARDE'; weather: string; checkIn: string; recommendation: string; observations: string; treatment: string; crops: Record<string, unknown>[]; commitments: Record<string, unknown>[]; reviews: { id: string; status: string }[] } | null {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return null
   const v = input as Record<string, unknown>
   const opId = typeof operationId === 'string' && uuid.test(operationId) ? operationId.toLowerCase() : ''
@@ -38,6 +38,7 @@ function validate(input: unknown, operationId: unknown): { familyId: number; dat
       Number.isNaN(Date.parse(`${date}T12:00:00Z`)) ||
       new Date(`${date}T12:00:00Z`).toISOString().slice(0, 10) !== date ||
       (v.status !== 'PROGRAMADA' && v.status !== 'REALIZADA')) return null
+  if (v.timeSlot !== undefined && !['MANANA', 'TARDE'].includes(String(v.timeSlot))) return null
   if (!Array.isArray(v.crops) || v.crops.length > 30 || !Array.isArray(v.commitments) || v.commitments.length > 30) return null
   const crops: Record<string, unknown>[] = []
   for (const item of v.crops) {
@@ -84,6 +85,7 @@ function validate(input: unknown, operationId: unknown): { familyId: number; dat
   if (new Set([...commitments.map(c => c.id), ...reviews.map(r => r.id)]).size !== commitments.length + reviews.length) return null
   return {
     familyId: Number(v.familyId), date, status: v.status,
+    ...(v.timeSlot ? { timeSlot: v.timeSlot as 'MANANA' | 'TARDE' } : {}),
     weather: clean(v.weather, 80), checkIn: clean(v.checkIn, 4000),
     recommendation: clean(v.recommendation, 4000), observations: clean(v.observations, 4000),
     treatment: clean(v.treatment, 120), crops, commitments, reviews,
@@ -91,11 +93,11 @@ function validate(input: unknown, operationId: unknown): { familyId: number; dat
 }
 
 function serialize(row: {
-  id: number; fecha: Date; estado: string; familia: { id: number; nombreReferencia: string; comunidad: { nombre: string } };
+  id: number; fecha: Date; estado: string; usuarioResponsable: { nombre: string }; familia: { id: number; nombreReferencia: string; comunidad: { nombre: string } };
 }, captura: { operation_id: string; datos: unknown } | null, evidences: { id: number; name: string }[]) {
   return {
     id: row.id, operationId: captura?.operation_id ?? null,
-    date: row.fecha.toISOString().slice(0,10), status: row.estado,
+    date: row.fecha.toISOString().slice(0,10), status: row.estado, responsibleName: row.usuarioResponsable.nombre,
     familyId: row.familia.id, familyName: row.familia.nombreReferencia,
     community: row.familia.comunidad.nombre, capture: captura?.datos ?? null,
     evidences: evidences.map(item => ({ ...item, url: `/api/v1/visitas/${row.id}/evidencias/${item.id}` })),
@@ -109,7 +111,7 @@ visitsRouter.get('/', async (req: Request, res: Response) => {
     const prisma = getPrismaClient()
     const rows = await prisma.visita.findMany({
       where: { usuarioResponsableId: userId },
-      include: { familia: { select: { id: true, nombreReferencia: true, comunidad: { select: { nombre: true } } } } },
+      include: { usuarioResponsable: { select: { nombre: true } }, familia: { select: { id: true, nombreReferencia: true, comunidad: { select: { nombre: true } } } } },
       orderBy: [{ fecha: 'desc' }, { id: 'desc' }], take: 300,
     })
     const captures = await prisma.$queryRaw<Array<{ visita_id: number; operation_id: string; datos: unknown }>>`
@@ -178,7 +180,7 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
         // La revisión solo puede resolver compromisos propios de la misma familia.
         for (const review of payload.reviews) {
           const updated = await tx.seguimientoVisita.updateMany({
-            where: { id: review.id, visitaOrigen: { familiaId: payload.familyId, usuarioResponsableId: userId, fecha: { lte: new Date(`${payload.date}T12:00:00Z`) } } },
+            where: { id: review.id, visitaOrigen: { familiaId: payload.familyId, fecha: { lte: new Date(`${payload.date}T12:00:00Z`) } } },
             data: { estado: review.status },
           })
           if (updated.count !== 1) throw new Error('El compromiso anterior no está sincronizado o no corresponde a esta familia.')
@@ -229,9 +231,10 @@ visitsRouter.patch('/agenda/:visitId', async (req: Request, res: Response) => {
 // VIS-04: Consultar compromisos, incluyendo su visita de origen.
 visitsRouter.get('/seguimientos', async (req: Request, res: Response) => {
   try {
-    const userId = req.session.userId!
     const rows = await getPrismaClient().seguimientoVisita.findMany({
-      where: { visitaOrigen: { usuarioResponsableId: userId } },
+      // Los compromisos pertenecen a la familia, no exclusivamente al técnico que los creó.
+      // Cualquier usuario con VISITAS_READ puede consultarlos (instancia de una ONG).
+      where: {},
       include: { visitaOrigen: { include: { familia: { include: { comunidad: { select: { nombre: true } } } } } } },
       orderBy: [{ fechaLimite: 'asc' }, { creadoEn: 'desc' }], take: 500,
     })
@@ -262,7 +265,7 @@ visitsRouter.patch('/seguimientos/:id', async (req: Request, res: Response) => {
   try {
     const prisma = getPrismaClient()
     const result = await prisma.seguimientoVisita.updateMany({
-      where: { id, visitaOrigen: { usuarioResponsableId: req.session.userId! } },
+      where: { id },
       data: { estado: status, fechaLimite: due ? new Date(`${due}T12:00:00Z`) : null,
         texto: text.trim(), observacionCierre: observation?.trim() || null },
     })

@@ -6,6 +6,7 @@ export const VISIT_SYNC_KIND = 'visits.create.v1'
 export const MAX_VISIT_PHOTOS = 4
 export const MAX_VISIT_PHOTO_BYTES = 2 * 1024 * 1024
 export type FollowUpStatus = 'PENDIENTE' | 'CUMPLIDO' | 'NO_CUMPLIDO'
+export type VisitTimeSlot = 'MANANA' | 'TARDE'
 export type VisitFollowUp = { id: string; sourceVisitId: number | null; familyId: number; familyName: string; community: string; date: string; text: string; category: 'Familia' | 'ONG'; due: string | null; status: FollowUpStatus; observation?: string | null; local?: boolean }
 export type FollowUpReview = { id: string; status: FollowUpStatus }
 export type VisitPhotoFile = { id: string; name: string; blob: Blob }
@@ -18,7 +19,7 @@ export type CropCapture = {
   priceBasis: 'unidad' | 'kg'
 }
 export type VisitCapture = {
-  familyId: number; date: string; status: 'PROGRAMADA' | 'REALIZADA'
+  familyId: number; date: string; status: 'PROGRAMADA' | 'REALIZADA'; timeSlot?: VisitTimeSlot
   weather: string; checkIn: string; crops: CropCapture[]
   recommendation: string; treatment: string; observations: string
   commitments: { id: string; text: string; category: 'Familia' | 'ONG'; due: string | null }[]
@@ -26,7 +27,7 @@ export type VisitCapture = {
 }
 type OwnedVisitCapture = { ownerId: number; familyName: string; community: string; capture: VisitCapture; photos?: VisitPhotoFile[] }
 export type VisitListItem = {
-  id: number | null; operationId: string | null; date: string; status: string
+  id: number | null; operationId: string | null; date: string; status: string; responsibleName?: string
   familyId: number; familyName: string; community: string
   capture: VisitCapture | null; evidences?: VisitEvidence[]; localPhotos?: VisitPhotoFile[]
   syncStatus?: 'pending' | 'syncing' | 'failed' | 'synced'
@@ -185,6 +186,8 @@ export async function updateVisitFollowUp(id: string, changes: Pick<VisitFollowU
     const body = await response.json().catch(() => null) as { error?: string } | null
     throw new Error(body?.error ?? `No se pudo actualizar el seguimiento (HTTP ${response.status}).`)
   }
+  // Invalidar cachés sería contraproducente sin red. La agenda/formulario
+  // releerán desde el servidor al volver a enfocarse.
 }
 
 export async function rescheduleVisit(visitId: number, date: string): Promise<void> {
