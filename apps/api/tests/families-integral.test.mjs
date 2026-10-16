@@ -1,9 +1,31 @@
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { after, test } from 'node:test'
 import { once } from 'node:events'
+import { randomBytes } from 'node:crypto'
+import pg from 'pg'
 import { validateIntegralFamilyInput } from '../dist/modules/families/families-integral.validation.js'
-import { app } from '../dist/app.js'
 import { createIntegralFamily, IntegralFamilyValidationError } from '../dist/modules/families/families-integral.service.js'
+
+// Test-process configuration BEFORE importing the app: never inherit a real DB.
+// No .env loader, no production defaults, and no PostgreSQL connections allowed.
+process.env.DATABASE_URL = 'postgresql://unit_test:unused@127.0.0.1:1/unit_test'
+process.env.SESSION_SECRET = randomBytes(48).toString('hex')
+process.env.NODE_ENV = 'test'
+let databaseConnectionAttempts = 0
+const originalPoolConnect = pg.Pool.prototype.connect
+const originalClientConnect = pg.Client.prototype.connect
+const denyDatabaseConnection = () => {
+  databaseConnectionAttempts++
+  throw new Error('Unit tests must not connect to PostgreSQL')
+}
+pg.Pool.prototype.connect = denyDatabaseConnection
+pg.Client.prototype.connect = denyDatabaseConnection
+const { app } = await import('../dist/app.js')
+after(() => {
+  pg.Pool.prototype.connect = originalPoolConnect
+  pg.Client.prototype.connect = originalClientConnect
+  assert.equal(databaseConnectionAttempts, 0, 'Unit suite unexpectedly attempted database access')
+})
 
 const valid = () => ({ nombreReferencia: ' QA FAMILY ', comunidadId: 1, integrantes: [{ nombreCompleto: ' QA PERSON ' }], programas: [{ programaId: 1 }] })
 

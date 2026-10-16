@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { once } from 'node:events'
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import pg from 'pg'
 
 pg.types.setTypeParser(1082, (value) => new Date(`${value}T00:00:00.000Z`))
@@ -68,6 +68,7 @@ test('isolated PostgreSQL QA integration', { skip: process.env.RUN_FAMILY_INTEGR
     process.env.DATABASE_URL = connectionString
     process.env.NODE_ENV = 'qa'
     process.env.ENABLE_FAMILY_INTEGRAL_API = 'true'
+    process.env.SESSION_SECRET = randomBytes(48).toString('hex')
     const { app } = await import('../dist/app.js')
     const { getPrismaClient } = await import('../dist/config/prisma.js')
     const { createIntegralFamily, IntegralFamilyValidationError } = await import('../dist/modules/families/families-integral.service.js')
