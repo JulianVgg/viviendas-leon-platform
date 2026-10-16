@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { CalendarDays, ChevronLeft, ChevronRight, CloudSun, ImageOff, Leaf, MapPin, Maximize2, Minimize2 } from 'lucide-react'
 import Dialog from '@/components/ui/Dialog'
 import Button from '@/components/ui/Button'
@@ -13,7 +13,7 @@ function DetailLine({ label, value }: { label: string; value?: string | number |
   </div>
 }
 
-export default function VisitDetailDialog({ visit, onClose }: { visit: VisitListItem | null; onClose: () => void }) {
+export default function VisitDetailDialog({ visit, onClose, extra }: { visit: VisitListItem | null; onClose: () => void; extra?: ReactNode }) {
   const [index, setIndex] = useState(0)
   const [zoom, setZoom] = useState(false)
   const [localUrls, setLocalUrls] = useState<string[]>([])
@@ -65,6 +65,7 @@ export default function VisitDetailDialog({ visit, onClose }: { visit: VisitList
             <DetailLine label="Compromisos" value={visit.capture?.commitments.length ?? 0}/></dl>
         </section>
         {visit.capture?.commitments && visit.capture.commitments.length > 0 && <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-700"><h3 className="mb-2 font-semibold text-slate-900 dark:text-white">Compromisos registrados</h3><ul className="space-y-2">{visit.capture.commitments.map((c,i) => <li key={i} className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-200"><strong>{c.category}:</strong> {c.text}{c.due ? ` · ${dateLabel(c.due)}` : ''}</li>)}</ul></section>}
+        {extra}
         <p className="flex items-center gap-2 text-xs text-slate-500"><CloudSun size={15}/> Referencia: {visit.id ? `Visita #${visit.id}` : 'Registro local'}</p>
       </div>
     </div>}

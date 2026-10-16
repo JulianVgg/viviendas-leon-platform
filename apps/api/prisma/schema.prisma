@@ -312,6 +312,7 @@ model Visita {
   condicionClimatica CondicionClimatica? @relation(fields: [condicionClimaticaId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   captura      VisitaCaptura?
+  compromisosVisita SeguimientoVisita[]
   evaluaciones EvaluacionCultivo[]
   evidencias   VisitaEvidencia[]
   alertas      Alerta[]
@@ -336,6 +337,27 @@ model VisitaCaptura {
   visita Visita @relation(fields: [visitaId], references: [id], onDelete: Cascade)
   @@index([usuarioId])
   @@map("visita_captura")
+}
+
+
+// VIS-04: Compromisos de visitas (no dependen de evaluación de un cultivo).
+// UUID creado en la PWA permite reintentos offline sin duplicar pendientes.
+model SeguimientoVisita {
+  id                   String    @id @db.Uuid
+  visitaOrigenId       Int       @map("visita_origen_id")
+  texto                String
+  responsable          String
+  fechaLimite          DateTime? @map("fecha_limite") @db.Date
+  estado               String    @default("PENDIENTE")
+  observacionCierre    String?   @map("observacion_cierre")
+  actualizadoEn        DateTime  @updatedAt @map("actualizado_en")
+  creadoEn             DateTime  @default(now()) @map("creado_en")
+
+  visitaOrigen Visita @relation(fields: [visitaOrigenId], references: [id], onDelete: Cascade)
+
+  @@index([visitaOrigenId])
+  @@index([estado, fechaLimite])
+  @@map("visita_seguimiento")
 }
 
 model Calidad {

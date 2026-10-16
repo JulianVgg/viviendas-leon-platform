@@ -5,6 +5,9 @@ import { listQueueOperations, processQueueOperation, queueOfflineOperation, reco
 export const VISIT_SYNC_KIND = 'visits.create.v1'
 export const MAX_VISIT_PHOTOS = 4
 export const MAX_VISIT_PHOTO_BYTES = 2 * 1024 * 1024
+export type FollowUpStatus = 'PENDIENTE' | 'CUMPLIDO' | 'NO_CUMPLIDO'
+export type VisitFollowUp = { id: string; sourceVisitId: number | null; familyId: number; familyName: string; community: string; date: string; text: string; category: 'Familia' | 'ONG'; due: string | null; status: FollowUpStatus; observation?: string | null; local?: boolean }
+export type FollowUpReview = { id: string; status: FollowUpStatus }
 export type VisitPhotoFile = { id: string; name: string; blob: Blob }
 export type VisitEvidence = { id: number; name: string; url: string }
 export type CropCapture = {
@@ -18,7 +21,8 @@ export type VisitCapture = {
   familyId: number; date: string; status: 'PROGRAMADA' | 'REALIZADA'
   weather: string; checkIn: string; crops: CropCapture[]
   recommendation: string; treatment: string; observations: string
-  commitments: { text: string; category: 'Familia' | 'ONG'; due: string | null }[]
+  commitments: { id: string; text: string; category: 'Familia' | 'ONG'; due: string | null }[]
+  reviews: FollowUpReview[]
 }
 type OwnedVisitCapture = { ownerId: number; familyName: string; community: string; capture: VisitCapture; photos?: VisitPhotoFile[] }
 export type VisitListItem = {
@@ -127,4 +131,70 @@ export async function saveVisitCapture(userId: number, familyName: string, commu
   if (getConnectivitySnapshot().status === 'connected') await syncPendingVisits(userId)
   const updated = (await listQueueOperations()).find(o => o.id === operation.id)
   return { status: updated?.status === 'synced' ? 'synced' : updated?.status === 'failed' ? 'failed' : 'pending', id: operation.id }
+}
+
+// La agenda consulta la tabla de seguimientos; IndexedDB mantiene copia para trabajo de campo.
+const followUpCacheKey = (userId: number) => `visits:followups:v1:user:${userId}`
+export async function getVisitFollowUps(userId: number): Promise<{ items: VisitFollowUp[]; local: boolean }> {
+  let items: VisitFollowUp[] = []
+  let local = false
+  try {
+    const response = await fetch('/api/v1/visitas/seguimientos', { credentials: 'same-origin', cache: 'no-store' })
+    if ([401, 403].includes(response.status)) throw new Error('Sesión no autorizada.')
+    if (!response.ok) throw new Error('No se pudieron consultar los seguimientos.')
+    const body = await response.json() as { data: VisitFollowUp[] }
+    items = body.data
+    try { await saveOfflineData(followUpCacheKey(userId), items) } catch { /* caché opcional */ }
+  } catch (err) {
+    if (err instanceof Error && err.message === 'Sesión no autorizada.') throw err
+    local = true
+    items = (await getOfflineData<VisitFollowUp[]>(followUpCacheKey(userId)))?.data ?? []
+  }
+  const queue = await listQueueOperations()
+  const own = queue.filter(o => o.kind === VISIT_SYNC_KIND && (o.payload as OwnedVisitCapture | undefined)?.ownerId === userId)
+  const merged = new Map(items.map(item => [item.id, item]))
+  for (const operation of own) {
+    const payload = operation.payload as OwnedVisitCapture
+    if (operation.status !== 'synced') {
+      for (const commitment of payload.capture.commitments ?? []) {
+        if (!commitment.id || merged.has(commitment.id)) continue
+        merged.set(commitment.id, {
+          id: commitment.id, familyId: payload.capture.familyId,
+          familyName: payload.familyName, community: payload.community,
+          sourceVisitId: null, date: payload.capture.date, text: commitment.text,
+          category: commitment.category, due: commitment.due, status: 'PENDIENTE', local: true,
+        })
+      }
+    }
+    // Revisiones aún no sincronizadas deben reflejarse en la consulta offline.
+    if (operation.status !== 'synced') for (const review of payload.capture.reviews ?? []) {
+      const current = merged.get(review.id)
+      if (current) merged.set(review.id, { ...current, status: review.status, local: true })
+    }
+  }
+  return { items: [...merged.values()], local }
+}
+
+export async function updateVisitFollowUp(id: string, changes: Pick<VisitFollowUp, 'status' | 'text' | 'due' | 'observation'>): Promise<void> {
+  const response = await fetch(`/api/v1/visitas/seguimientos/${encodeURIComponent(id)}`, {
+    method: 'PATCH', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+    body: JSON.stringify(changes),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => null) as { error?: string } | null
+    throw new Error(body?.error ?? `No se pudo actualizar el seguimiento (HTTP ${response.status}).`)
+  }
+}
+
+export async function rescheduleVisit(visitId: number, date: string): Promise<void> {
+  const response = await fetch(`/api/v1/visitas/agenda/${visitId}`, {
+    method: 'PATCH', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+    body: JSON.stringify({ date }),
+  })
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { error?: string } | null
+    throw new Error(payload?.error ?? `No se pudo cambiar la fecha (HTTP ${response.status}).`)
+  }
 }

@@ -25,11 +25,14 @@ const maxPhotoBytes = 2 * 1024 * 1024
 const expressRawPhoto = raw({ type: 'image/jpeg', limit: maxPhotoBytes })
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const dateRe = /^\d{4}-\d{2}-\d{2}$/
+const statusOptions = ['PENDIENTE','CUMPLIDO','NO_CUMPLIDO'] as const
+const validDate = (v: string) => dateRe.test(v) && !Number.isNaN(Date.parse(`${v}T12:00:00Z`)) && new Date(`${v}T12:00:00Z`).toISOString().slice(0,10) === v
 const clean = (v: unknown, max: number) => typeof v === 'string' ? v.trim().slice(0, max) : ''
 const positive = (v: unknown) => v === '' || v === null || v === undefined || (typeof v === 'number' && Number.isFinite(v) && v >= 0)
-function validate(input: unknown): { familyId: number; date: string; status: 'PROGRAMADA' | 'REALIZADA'; weather: string; checkIn: string; recommendation: string; observations: string; treatment: string; crops: Record<string, unknown>[]; commitments: Record<string, unknown>[] } | null {
+function validate(input: unknown, operationId: unknown): { familyId: number; date: string; status: 'PROGRAMADA' | 'REALIZADA'; weather: string; checkIn: string; recommendation: string; observations: string; treatment: string; crops: Record<string, unknown>[]; commitments: Record<string, unknown>[]; reviews: { id: string; status: string }[] } | null {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return null
   const v = input as Record<string, unknown>
+  const opId = typeof operationId === 'string' && uuid.test(operationId) ? operationId.toLowerCase() : ''
   const date = clean(v.date, 10)
   if (!Number.isSafeInteger(v.familyId) || Number(v.familyId) <= 0 || !dateRe.test(date) ||
       Number.isNaN(Date.parse(`${date}T12:00:00Z`)) ||
@@ -58,17 +61,32 @@ function validate(input: unknown): { familyId: number; date: string; status: 'PR
     })
   }
   const commitments: Record<string, unknown>[] = []
-  for (const item of v.commitments) {
+  for (const [position, item] of v.commitments.entries()) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) return null
     const c = item as Record<string, unknown>
-    if (!clean(c.text, 500) || !['Familia','ONG'].includes(String(c.category)) || (c.due && (!dateRe.test(String(c.due)) || Number.isNaN(Date.parse(String(c.due)))))) return null
-    commitments.push({ text: clean(c.text,500), category: c.category, due: c.due || null })
+    // Operaciones VIS-03 ya almacenadas en IndexedDB no incluían UUID por compromiso.
+    // Asignar uno reproducible para hacer el reintento seguro sin perder compromisos.
+    const h = createHash('md5').update(`${opId}:${position}`).digest('hex')
+    const legacyId = `${h.slice(0,8)}-${h.slice(8,12)}-4${h.slice(13,16)}-8${h.slice(17,20)}-${h.slice(20,32)}`
+    const commitmentId = typeof c.id === 'string' ? c.id.toLowerCase() : legacyId
+    if (!uuid.test(commitmentId) || !clean(c.text, 500) || !['Familia','ONG'].includes(String(c.category)) || (c.due && !validDate(String(c.due)))) return null
+    commitments.push({ id: commitmentId, text: clean(c.text,500), category: c.category, due: c.due || null })
   }
+  const inputReviews = v.reviews ?? []
+  if (!Array.isArray(inputReviews) || inputReviews.length > 100 || (v.status === 'PROGRAMADA' && inputReviews.length > 0)) return null
+  const reviews: { id: string; status: string }[] = []
+  for (const r of inputReviews) {
+    if (!r || typeof r !== 'object' || Array.isArray(r)) return null
+    const item = r as Record<string, unknown>
+    if (typeof item.id !== 'string' || !uuid.test(item.id) || !statusOptions.includes(item.status as (typeof statusOptions)[number])) return null
+    reviews.push({ id: item.id.toLowerCase(), status: String(item.status) })
+  }
+  if (new Set([...commitments.map(c => c.id), ...reviews.map(r => r.id)]).size !== commitments.length + reviews.length) return null
   return {
     familyId: Number(v.familyId), date, status: v.status,
     weather: clean(v.weather, 80), checkIn: clean(v.checkIn, 4000),
     recommendation: clean(v.recommendation, 4000), observations: clean(v.observations, 4000),
-    treatment: clean(v.treatment, 120), crops, commitments,
+    treatment: clean(v.treatment, 120), crops, commitments, reviews,
   }
 }
 
@@ -114,12 +132,23 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
   const userId = req.session.userId
   if (!userId) { res.status(401).json({ error: 'Sesión requerida.' }); return }
   const operationId: unknown = req.body?.operationId
-  const payload = validate(req.body?.payload)
+  const payload = validate(req.body?.payload, operationId)
   if (typeof operationId !== 'string' || !uuid.test(operationId) || req.body?.kind !== 'visits.create.v1' || !payload) {
     res.status(400).json({ error: 'Datos de visita no válidos.' }); return
   }
   const normalizedId = operationId.toLowerCase()
-  const hash = createHash('sha256').update(JSON.stringify(payload)).digest('hex')
+  // VIS-03 legacy: conservar el mismo hash que guardó el backend anterior.
+  // Permite reintentar fotografías de visitas creadas antes de VIS-04.
+  const legacy = req.body?.payload?.reviews === undefined &&
+    Array.isArray(req.body?.payload?.commitments) &&
+    req.body.payload.commitments.every((c: unknown) => c && typeof c === 'object' && !('id' in c))
+  const hashInput = legacy
+    ? { familyId: payload.familyId, date: payload.date, status: payload.status, weather: payload.weather,
+        checkIn: payload.checkIn, recommendation: payload.recommendation,
+        observations: payload.observations, treatment: payload.treatment, crops: payload.crops,
+        commitments: payload.commitments.map(c => ({ text: c.text, category: c.category, due: c.due })) }
+    : payload
+  const hash = createHash('sha256').update(JSON.stringify(hashInput)).digest('hex')
   const prisma = getPrismaClient()
   try {
     const persist = async () => {
@@ -140,6 +169,20 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
           condicionClimaticaId: climate?.id ?? null, tipo: 'TECNICA', estado: payload.status,
           observaciones: payload.observations || null,
         } })
+        if (payload.commitments.length) {
+          await tx.seguimientoVisita.createMany({ data: payload.commitments.map(c => ({
+            id: String(c.id), visitaOrigenId: visita.id, texto: String(c.text),
+            responsable: String(c.category), fechaLimite: c.due ? new Date(`${c.due}T12:00:00Z`) : null,
+          })) })
+        }
+        // La revisión solo puede resolver compromisos propios de la misma familia.
+        for (const review of payload.reviews) {
+          const updated = await tx.seguimientoVisita.updateMany({
+            where: { id: review.id, visitaOrigen: { familiaId: payload.familyId, usuarioResponsableId: userId, fecha: { lte: new Date(`${payload.date}T12:00:00Z`) } } },
+            data: { estado: review.status },
+          })
+          if (updated.count !== 1) throw new Error('El compromiso anterior no está sincronizado o no corresponde a esta familia.')
+        }
         await tx.$executeRaw`
           INSERT INTO "visita_captura" ("visita_id", "usuario_id", "operation_id", "payload_hash", "datos")
           VALUES (${visita.id}, ${userId}, CAST(${normalizedId} AS UUID), ${hash}, CAST(${JSON.stringify(payload)} AS JSONB))
@@ -163,6 +206,70 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
   }
 })
 
+
+// Cambiar fecha de una visita programada sin alterar el contenido original de la operación
+// de sincronización ni su hash idempotente.
+visitsRouter.patch('/agenda/:visitId', async (req: Request, res: Response) => {
+  if (req.get('X-Requested-With') !== 'XMLHttpRequest') { res.status(403).json({ error: 'Solicitud no autorizada.' }); return }
+  const visitId = Number(req.params.visitId)
+  const date = req.body?.date
+  if (!Number.isSafeInteger(visitId) || visitId <= 0 || typeof date !== 'string' || !validDate(date)) {
+    res.status(400).json({ error: 'Fecha o visita inválida.' }); return
+  }
+  try {
+    const result = await getPrismaClient().visita.updateMany({
+      where: { id: visitId, usuarioResponsableId: req.session.userId!, estado: 'PROGRAMADA' },
+      data: { fecha: new Date(`${date}T12:00:00Z`) },
+    })
+    if (result.count !== 1) { res.status(404).json({ error: 'Visita programada no encontrada o ya realizada.' }); return }
+    res.json({ accepted: true })
+  } catch (error) { console.error('Error reprogramando visita:', error); res.status(503).json({ error: 'No se pudo reprogramar la visita.' }) }
+})
+
+// VIS-04: Consultar compromisos, incluyendo su visita de origen.
+visitsRouter.get('/seguimientos', async (req: Request, res: Response) => {
+  try {
+    const userId = req.session.userId!
+    const rows = await getPrismaClient().seguimientoVisita.findMany({
+      where: { visitaOrigen: { usuarioResponsableId: userId } },
+      include: { visitaOrigen: { include: { familia: { include: { comunidad: { select: { nombre: true } } } } } } },
+      orderBy: [{ fechaLimite: 'asc' }, { creadoEn: 'desc' }], take: 500,
+    })
+    res.setHeader('Cache-Control', 'no-store')
+    res.json({ data: rows.map(r => ({
+      id: r.id, sourceVisitId: r.visitaOrigenId, familyId: r.visitaOrigen.familiaId,
+      familyName: r.visitaOrigen.familia.nombreReferencia,
+      community: r.visitaOrigen.familia.comunidad.nombre,
+      date: r.visitaOrigen.fecha.toISOString().slice(0,10),
+      text: r.texto, category: r.responsable,
+      due: r.fechaLimite?.toISOString().slice(0,10) ?? null,
+      status: r.estado, observation: r.observacionCierre,
+    })) })
+  } catch (error) { console.error('Error consultando seguimientos:', error); res.status(503).json({ error: 'No se pudieron consultar los compromisos.' }) }
+})
+
+// Actualizaciones manuales desde agenda: requieren red, se limitan a visitas propias.
+visitsRouter.patch('/seguimientos/:id', async (req: Request, res: Response) => {
+  if (req.get('X-Requested-With') !== 'XMLHttpRequest') { res.status(403).json({ error: 'Solicitud no autorizada.' }); return }
+  const id = String(req.params.id ?? '').toLowerCase()
+  if (!uuid.test(id)) { res.status(400).json({ error: 'Compromiso inválido.' }); return }
+  const { status, due, text, observation } = req.body ?? {}
+  if (!statusOptions.includes(status) || (due !== null && due !== undefined && (typeof due !== 'string' || !validDate(due))) ||
+    (typeof text !== 'string' || !text.trim() || text.trim().length > 500) ||
+    (observation !== undefined && (typeof observation !== 'string' || observation.length > 2000))) {
+    res.status(400).json({ error: 'Verifica el estado, la fecha y el texto.' }); return
+  }
+  try {
+    const prisma = getPrismaClient()
+    const result = await prisma.seguimientoVisita.updateMany({
+      where: { id, visitaOrigen: { usuarioResponsableId: req.session.userId! } },
+      data: { estado: status, fechaLimite: due ? new Date(`${due}T12:00:00Z`) : null,
+        texto: text.trim(), observacionCierre: observation?.trim() || null },
+    })
+    if (result.count !== 1) { res.status(404).json({ error: 'Compromiso no encontrado.' }); return }
+    res.json({ accepted: true })
+  } catch (error) { console.error('Error actualizando seguimiento:', error); res.status(503).json({ error: 'No se pudo actualizar el compromiso.' }) }
+})
 
 // Evidencia privada: ruta autenticada, ligada a la visita del usuario y nunca servida como carpeta pública.
 visitsRouter.get('/:visitId/evidencias/:evidenceId', async (req: Request, res: Response) => {
