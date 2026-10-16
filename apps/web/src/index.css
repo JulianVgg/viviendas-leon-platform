@@ -242,6 +242,13 @@
 }
 .layout-dropdown-panel.is-open { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
 
+/* Anima únicamente el contenido de la ruta cuando cambia el pathname. */
+@keyframes page-route-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.page-route-enter { animation: page-route-enter 240ms ease-out both; }
+
 /* Entrada breve para etapas y filas dinámicas del registro integral. */
 @keyframes wizard-card-enter {
   from { opacity: 0; transform: translateY(8px); }
@@ -259,5 +266,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .layout-menu-accordion, .layout-dropdown-panel { transition: none; }
-  .wizard-card-entry { animation: none; }
+  .page-route-enter, .wizard-card-entry { animation: none; }
 }

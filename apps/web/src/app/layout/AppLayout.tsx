@@ -26,7 +26,9 @@ function LayoutContent() {
         <AppHeader />
         <ConnectivitySyncBridge />
         <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-screen-2xl p-4 outline-none md:p-6 xl:p-8">
-          <Outlet />
+          <div key={pathname} className="page-route-enter">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>
