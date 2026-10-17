@@ -10,14 +10,9 @@ export default function ProtectedRoute() {
     return (
       <div
         role="status"
-        className="flex min-h-dvh items-center justify-center bg-slate-50 dark:bg-slate-950"
+        className="flex min-h-dvh items-center justify-center"
       >
-        <div className="text-center">
-          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
-          <p className="text-sm text-slate-600 dark:text-slate-300">
-            Verificando sesión...
-          </p>
-        </div>
+        <p>Verificando sesión...</p>
       </div>
     )
   }
@@ -30,6 +25,16 @@ export default function ProtectedRoute() {
         replace
       />
     )
+  }
+
+  const rutaPassword = '/establecer-password'
+
+  if (usuario.debeCambiarPassword) {
+    if (location.pathname !== rutaPassword) {
+      return <Navigate to={rutaPassword} replace />
+    }
+  } else if (location.pathname === rutaPassword) {
+    return <Navigate to="/" replace />
   }
 
   return <Outlet />

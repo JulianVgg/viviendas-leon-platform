@@ -1,9 +1,12 @@
 
 import type { Request, Response, NextFunction } from 'express'
+
 import {
   validateCredentials,
   getAuthenticatedUser,
+  cambiarPassword,
 } from './auth.service.js'
+
 
 export async function login(
   req: Request,
@@ -120,4 +123,53 @@ export function logout(
       message: 'Sesión cerrada correctamente.',
     })
   })
+}
+
+
+
+export async function actualizarPassword(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  try {
+    const usuarioId = req.session.userId
+    const { passwordActual, passwordNueva } = req.body ?? {}
+
+    if (
+      !usuarioId ||
+      typeof passwordActual !== 'string' ||
+      typeof passwordNueva !== 'string'
+    ) {
+      res.status(400).json({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Debes proporcionar ambas contraseñas.',
+        },
+      })
+      return
+    }
+
+    await cambiarPassword(
+      usuarioId,
+      passwordActual,
+      passwordNueva,
+    )
+
+    res.status(200).json({
+      message: 'Contraseña actualizada correctamente.',
+    })
+  } catch (error) {
+    if (error instanceof Error) {
+      res.status(400).json({
+        error: {
+          code: 'PASSWORD_ERROR',
+          message: error.message,
+        },
+      })
+      return
+    }
+
+    next(error)
+  }
 }

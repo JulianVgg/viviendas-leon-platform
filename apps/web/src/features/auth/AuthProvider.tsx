@@ -8,13 +8,18 @@ import {
   type ReactNode,
 } from 'react'
 
+
 type AuthUser = {
   id: number
   nombre: string
+  apellido: string | null
+  telefono: string | null
   correo: string
   roles: string[]
   permisos: string[]
+  debeCambiarPassword: boolean
 }
+
 
 type AuthContextValue = {
   usuario: AuthUser | null

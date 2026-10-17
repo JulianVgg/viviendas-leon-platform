@@ -9,6 +9,18 @@ import { communitiesRouter } from './modules/catalogs/catalogs.routes.js';
 import { offlineDemoRouter } from './modules/offline/offline.routes.js';
 import { visitsRouter } from './modules/visits/visits.routes.js';
 
+// AUTH-04: Administración de usuarios
+import { usersRouter } from './modules/users/users.routes.js';
+
+// AUTH-04: Perfil personal
+import { profileRouter } from './modules/profile/profile.routes.js';
+
+// AUTH-04: Roles y permisos
+import { rolesRouter } from './modules/admin/roles.routes.js';
+
+// AUTH-04: Cambio obligatorio de contraseña
+import { requirePasswordChangeCompleted } from './modules/auth/require-password-change.middleware.js';
+
 // AUTH-02: Autenticación
 import { authRouter } from './modules/auth/auth.routes.js';
 import { createSessionMiddleware } from './config/session.js';
@@ -37,8 +49,22 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
-// AUTH-02: Rutas de inicio y cierre de sesión
+// AUTH-02: Rutas de autenticación
 app.use('/api/v1/auth', authRouter);
+
+// AUTH-04: Cambio obligatorio de contraseña
+// Impide acceder a las demás operaciones hasta
+// establecer una contraseña personal.
+app.use('/api/v1', requirePasswordChangeCompleted);
+
+// AUTH-04: Perfil del usuario autenticado
+app.use('/api/v1/perfil', profileRouter);
+
+// AUTH-04: Administración de roles y permisos
+app.use('/api/v1/roles', rolesRouter);
+
+// AUTH-04: Administración de usuarios
+app.use('/api/v1/usuarios', usersRouter);
 
 // Rutas existentes de Viviendas León
 app.use('/api/v1/familias', familiesRouter);

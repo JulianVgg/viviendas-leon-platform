@@ -5,9 +5,12 @@ import { getPrismaClient } from '../../config/prisma.js'
 export type AuthenticatedUser = {
   id: number
   nombre: string
+  apellido: string | null
+  telefono: string | null
   correo: string
   roles: string[]
   permisos: string[]
+  debeCambiarPassword: boolean
 }
 
 export async function validateCredentials(
@@ -79,9 +82,12 @@ export async function validateCredentials(
   return {
     id: usuario.id,
     nombre: usuario.nombre,
+    apellido: usuario.apellido,
+    telefono: usuario.telefono,
     correo: usuario.correo,
     roles,
     permisos,
+    debeCambiarPassword: usuario.debeCambiarPassword,
   }
 }
 
@@ -120,6 +126,8 @@ export async function getAuthenticatedUser(
   return {
     id: usuario.id,
     nombre: usuario.nombre,
+    apellido: usuario.apellido,
+    telefono: usuario.telefono,
     correo: usuario.correo,
     roles: activeRoles.map((rol) => rol.nombre),
     permisos: [
@@ -129,5 +137,56 @@ export async function getAuthenticatedUser(
         ),
       ),
     ],
+    debeCambiarPassword: usuario.debeCambiarPassword,
   }
+}
+
+export async function cambiarPassword(
+  usuarioId: number,
+  passwordActual: string,
+  passwordNueva: string,
+) {
+  const prisma = getPrismaClient()
+
+  const usuario = await prisma.usuario.findUnique({
+    where: { id: usuarioId },
+  })
+
+  if (!usuario || usuario.estado !== 'ACTIVO') {
+    throw new Error('Usuario no disponible.')
+  }
+
+  const passwordValida = await argon2.verify(
+    usuario.passwordHash,
+    passwordActual,
+  )
+
+  if (!passwordValida) {
+    throw new Error('La contraseña actual es incorrecta.')
+  }
+
+  if (
+    passwordNueva.length < 12 ||
+    passwordNueva.length > 128
+  ) {
+    throw new Error(
+      'La contraseña debe contener entre 12 y 128 caracteres.',
+    )
+  }
+
+  if (passwordActual === passwordNueva) {
+    throw new Error(
+      'La nueva contraseña debe ser diferente a la actual.',
+    )
+  }
+
+  const nuevoHash = await argon2.hash(passwordNueva)
+
+  await prisma.usuario.update({
+    where: { id: usuarioId },
+    data: {
+      passwordHash: nuevoHash,
+      debeCambiarPassword: false,
+    },
+  })
 }
