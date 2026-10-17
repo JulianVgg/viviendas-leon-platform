@@ -5,6 +5,8 @@ import { randomBytes } from 'node:crypto'
 import pg from 'pg'
 import { validateIntegralFamilyInput } from '../dist/modules/families/families-integral.validation.js'
 import { createIntegralFamily, IntegralFamilyValidationError } from '../dist/modules/families/families-integral.service.js'
+import { validIdempotencyKey, validateFamilyUpdate, validateMemberCreate, validateMemberState, validateMemberUpdate } from '../dist/modules/families/families-management.validation.js'
+import { createFamilyPermissionGuard, FAMILY_WRITE_PERMISSION } from '../dist/modules/families/families.authorization.js'
 
 // Test-process configuration BEFORE importing the app: never inherit a real DB.
 // No .env loader, no production defaults, and no PostgreSQL connections allowed.
@@ -94,6 +96,46 @@ test('rejects non-object bodies', () => {
   for (const body of [null, [], false, 'text', 123]) assert.equal(validateIntegralFamilyInput(body).details[0].field, 'body')
 })
 
+test('family update distinguishes absent fields, null values and forbidden fields', () => {
+  const validUpdate = validateFamilyUpdate({ version: '123', observaciones: null, fechaIngreso: null })
+  assert.deepEqual(validUpdate.details, [])
+  assert.equal(validUpdate.data.observaciones, null)
+  assert.equal(validUpdate.data.fechaIngreso, null)
+  for (const body of [{ version: '123' }, { version: '123', estado: 'RETIRADA' }, { version: 'bad', nombreReferencia: 'Familia' }]) {
+    assert.equal(validateFamilyUpdate(body).data, undefined)
+  }
+})
+
+test('member management validates create, partial update and state-only contracts', () => {
+  const create = validateMemberCreate({ nombreCompleto: ' Persona ', fechaNacimiento: '2000-02-29', sexo: 'Femenino', parentesco: 'Madre', telefono: null, observaciones: '' })
+  assert.deepEqual(create.details, [])
+  assert.equal(create.data.nombreCompleto, 'Persona')
+  assert.equal(create.data.observaciones, null)
+  assert.equal(validateMemberCreate({ ...create, familiaId: 1 }).data, undefined)
+  assert.deepEqual(validateMemberUpdate({ version: '5', telefono: null }).details, [])
+  assert.equal(validateMemberUpdate({ version: '5', activo: false }).data, undefined)
+  assert.deepEqual(validateMemberState({ version: '8', activo: false }).details, [])
+  assert.equal(validateMemberState({ version: '8', activo: false, observaciones: 'x' }).data, undefined)
+})
+
+test('idempotency keys require UUID v4', () => {
+  assert.equal(validIdempotencyKey('123e4567-e89b-42d3-a456-426614174000'), true)
+  assert.equal(validIdempotencyKey('123e4567-e89b-12d3-a456-426614174000'), false)
+})
+
+test('family permission guard allows persisted write permission and denies read-only users', async () => {
+  const invoke = async (permissions) => {
+    let status
+    let payload
+    let continued = false
+    const guard = createFamilyPermissionGuard([FAMILY_WRITE_PERMISSION], 'Denied', async () => ({ id: 7, nombre: 'Synthetic', correo: 'synthetic@example.invalid', roles: [], permisos: permissions }))
+    await guard({ session: { userId: 7 } }, { status(value) { status = value; return this }, json(value) { payload = value; return this } }, () => { continued = true })
+    return { status, payload, continued }
+  }
+  assert.deepEqual(await invoke(['SYN-FAMILIAS-READ']), { status: 403, payload: { error: { code: 'FORBIDDEN', message: 'Denied' } }, continued: false })
+  assert.deepEqual(await invoke([FAMILY_WRITE_PERMISSION]), { status: undefined, payload: undefined, continued: true })
+})
+
 test('service also enforces minimum relations before accessing PostgreSQL', async () => {
   const input = validateIntegralFamilyInput(valid()).data
   for (const key of ['integrantes', 'programas']) {
@@ -101,7 +143,7 @@ test('service also enforces minimum relations before accessing PostgreSQL', asyn
   }
 })
 
-test('HTTP gates fail closed and leave basic health/validation unchanged', async () => {
+test('family HTTP routes deny unauthenticated access independently of environment flags', async () => {
   const previous = { node: process.env.NODE_ENV, flag: process.env.ENABLE_FAMILY_INTEGRAL_API }
   const server = app.listen(0, '127.0.0.1')
   await once(server, 'listening')
@@ -111,16 +153,16 @@ test('HTTP gates fail closed and leave basic health/validation unchanged', async
       if (env === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = env
       if (flag === undefined) delete process.env.ENABLE_FAMILY_INTEGRAL_API; else process.env.ENABLE_FAMILY_INTEGRAL_API = flag
       for (const [path, method] of [['registro-integral', 'POST'], ['opciones/programas', 'GET'], ['1/expediente', 'GET']]) {
-        assert.equal((await fetch(`${base}/api/v1/familias/${path}`, { method })).status, 404)
+        assert.equal((await fetch(`${base}/api/v1/familias/${path}`, { method })).status, 401)
       }
     }
     process.env.NODE_ENV = 'qa'
     process.env.ENABLE_FAMILY_INTEGRAL_API = 'true'
     const invalid = await fetch(`${base}/api/v1/familias/registro-integral`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...valid(), integrantes: [] }) })
-    assert.equal(invalid.status, 400)
-    assert.equal((await invalid.json()).error.details[0].field, 'integrantes')
-    assert.equal((await fetch(`${base}/api/v1/familias/invalid/expediente`)).status, 400)
-    assert.equal((await fetch(`${base}/api/v1/familias`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).status, 400)
+    assert.equal(invalid.status, 401)
+    assert.equal((await fetch(`${base}/api/v1/familias/invalid/expediente`)).status, 401)
+    assert.equal((await fetch(`${base}/api/v1/familias`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).status, 401)
+    assert.equal((await fetch(`${base}/api/v1/familias`)).status, 401)
     assert.deepEqual(await (await fetch(`${base}/api/health`)).json(), { status: 'ok', service: 'viviendas-leon-api' })
   } finally {
     await new Promise((resolve) => server.close(resolve))

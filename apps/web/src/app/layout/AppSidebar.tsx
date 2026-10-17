@@ -7,6 +7,7 @@ import { cn } from '@/app/lib/cn'
 
 function activePath(pathname: string, path?: string, exact = false) {
   if (!path) return false
+  if (path === '/familias/editar' && /^\/familias\/\d+\/editar$/.test(pathname)) return true
   return path === '/' || exact ? pathname === path : pathname === path || pathname.startsWith(`${path}/`)
 }
 

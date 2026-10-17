@@ -25,11 +25,16 @@ const recordSelect = {
   },
 } satisfies Prisma.FamiliaSelect
 
-function serializeRecord(record: Prisma.FamiliaGetPayload<{ select: typeof recordSelect }>): IntegralFamilyRecord {
+function serializeRecord(
+  record: Prisma.FamiliaGetPayload<{ select: typeof recordSelect }>,
+  version: string,
+  memberVersions: Map<number, string>,
+): IntegralFamilyRecord {
   return {
     ...record,
+    version,
     fechaIngreso: record.fechaIngreso?.toISOString() ?? null,
-    integrantes: record.integrantes.map((member) => ({ ...member, fechaNacimiento: member.fechaNacimiento?.toISOString() ?? null })),
+    integrantes: record.integrantes.map((member) => ({ ...member, version: memberVersions.get(member.id) ?? '', fechaNacimiento: member.fechaNacimiento?.toISOString() ?? null })),
     programas: record.programas.map((program) => ({ ...program, fechaIngreso: program.fechaIngreso?.toISOString() ?? null, fechaSalida: program.fechaSalida?.toISOString() ?? null })),
   }
 }
@@ -52,8 +57,15 @@ export async function listFamilyProgramOptions(): Promise<FamilyProgramOption[]>
 }
 
 export async function findIntegralFamily(id: number): Promise<IntegralFamilyRecord | null> {
-  const record = await getPrismaClient().familia.findUnique({ where: { id }, select: recordSelect })
-  return record ? serializeRecord(record) : null
+  return getPrismaClient().$transaction(async (transaction) => {
+    const record = await transaction.familia.findUnique({ where: { id }, select: recordSelect })
+    if (!record) return null
+    const familyVersions = await transaction.$queryRaw<Array<{ version: string }>>`SELECT xmin::text AS version FROM familia WHERE id = ${id}`
+    const memberVersions = record.integrantes.length
+      ? await transaction.$queryRaw<Array<{ id: number; version: string }>>(Prisma.sql`SELECT id, xmin::text AS version FROM integrante_familia WHERE familia_id = ${id}`)
+      : []
+    return serializeRecord(record, familyVersions[0].version, new Map(memberVersions.map((item) => [item.id, item.version])))
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead })
 }
 
 export async function createIntegralFamily(input: IntegralFamilyInput, prisma = getPrismaClient()): Promise<IntegralFamilyRecord> {
@@ -91,6 +103,8 @@ export async function createIntegralFamily(input: IntegralFamilyInput, prisma = 
     const general = await transaction.familia.findUniqueOrThrow({ where: { id: created.id }, select: generalSelection })
     const members = await transaction.integranteFamilia.findMany({ where: { familiaId: created.id }, ...memberSelection })
     const associations = await transaction.familiaPrograma.findMany({ where: { familiaId: created.id }, ...programSelection })
-    return serializeRecord({ ...general, integrantes: members, programas: associations })
+    const familyVersions = await transaction.$queryRaw<Array<{ version: string }>>`SELECT xmin::text AS version FROM familia WHERE id = ${created.id}`
+    const memberVersions = await transaction.$queryRaw<Array<{ id: number; version: string }>>`SELECT id, xmin::text AS version FROM integrante_familia WHERE familia_id = ${created.id}`
+    return serializeRecord({ ...general, integrantes: members, programas: associations }, familyVersions[0].version, new Map(memberVersions.map((item) => [item.id, item.version])))
   })
 }

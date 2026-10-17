@@ -92,7 +92,7 @@ export function integralErrorMessage(status?: number, posting = false): string {
   if (status === 400) return 'Revisa los campos indicados. Tus datos se conservan.'
   if (status === 401) return 'La sesión no es válida o ha expirado. Inicia sesión nuevamente antes de continuar.'
   if (status === 403) return 'No tienes permiso para realizar esta operación.'
-  if (status === 404) return 'El registro integral no está habilitado en este entorno. Contacta al administrador.'
+  if (status === 404) return 'El servicio solicitado no está disponible. Verifica la ruta o contacta al administrador.'
   if (status && status >= 500) return 'El servidor no pudo completar la operación. Tus datos se conservan.'
   if (posting) return 'No se pudo confirmar el resultado del envío. El expediente podría haberse guardado. Verifica el listado antes de intentar otro registro para evitar duplicados.'
   return 'No fue posible consultar el catálogo. Comprueba la conexión y reintenta.'

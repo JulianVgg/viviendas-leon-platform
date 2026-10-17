@@ -378,13 +378,7 @@ test('real family wizard / Brave / isolated PostgreSQL QA', { skip: process.env.
       await wait("document.body.innerText.includes('Paso 4 de 4')")
     })
 
-    await t.test('real 404 environment gate, then real 500 with PostgreSQL rollback', async () => {
-      process.env.ENABLE_FAMILY_INTEGRAL_API = 'false'
-      try {
-        await click('Confirmar y registrar')
-        await wait("document.body.innerText.includes('no está habilitado') && document.activeElement?.id === 'wizard-submission-error'")
-        assert.ok(httpResponses.some((item) => item.path.endsWith('/registro-integral') && item.status === 404))
-      } finally { process.env.ENABLE_FAMILY_INTEGRAL_API = 'true' }
+    await t.test('real 500 with PostgreSQL rollback', async () => {
       transactionOriginal = prisma.$transaction
       const originalLog = console.error
       let injected = false

@@ -154,11 +154,11 @@ test('indexed backend errors map to the submitted stable rows, including row-lev
   for (const [field, expected] of [['nombreReferencia', 0], ['integrantes.member-a.nombreCompleto', 1], ['programas.program-a.programaId', 2]]) assert.equal(stepForField(field), expected)
 })
 
-test('safe error messages distinguish session, permissions, gate, server and ambiguous POST', () => {
+test('safe error messages distinguish session, permissions, unavailable service, server and ambiguous POST', () => {
   assert.match(integralErrorMessage(400, true), /conservan/)
   assert.match(integralErrorMessage(401), /sesión/)
   assert.match(integralErrorMessage(403), /permiso/)
-  assert.match(integralErrorMessage(404), /no está habilitado/)
+  assert.match(integralErrorMessage(404), /no está disponible/)
   assert.match(integralErrorMessage(500, true), /servidor/)
   assert.match(integralErrorMessage(undefined, true), /podría haberse guardado/)
   assert.match(integralErrorMessage(undefined), /catálogo/)

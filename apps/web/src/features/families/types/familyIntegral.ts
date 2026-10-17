@@ -29,7 +29,8 @@ export type IntegralFamilyInput = {
 export type FamilyProgramOption = { id: number; nombre: string; descripcion: string | null; estado: string }
 
 export type IntegralFamilyRecord = FamilyDetail & {
-  integrantes: Array<FamilyMemberInput & { id: number; activo: boolean }>
+  version: string
+  integrantes: Array<FamilyMemberInput & { id: number; version: string; activo: boolean }>
   programas: Array<FamilyProgramInput & { id: number; programa: { id: number; nombre: string } }>
 }
 
@@ -50,3 +51,14 @@ export type FamilyWizardInput = {
   programas: ProgramDraft[]
 }
 export type WizardErrors = Record<string, string>
+
+export type FamilyUpdateInput = {
+  version: string
+  nombreReferencia?: string
+  comunidadId?: number
+  fechaIngreso?: string | null
+  observaciones?: string | null
+}
+
+export type FamilyMemberRecord = IntegralFamilyRecord['integrantes'][number]
+export type FamilyMemberUpdateInput = Partial<FamilyMemberInput> & { version: string }

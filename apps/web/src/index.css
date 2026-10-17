@@ -256,6 +256,12 @@
 }
 .wizard-card-entry { animation: wizard-card-enter 240ms ease-out both; }
 
+@keyframes dialog-enter {
+  from { opacity: 0; transform: translateY(6px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.dialog-enter[open] { animation: dialog-enter 180ms ease-out both; }
+
 /* Barra de desplazamiento de TailAdmin ajustada para Firefox. */
 .custom-scrollbar { scrollbar-width: thin; scrollbar-color: var(--color-gray-200) transparent; }
 .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -266,5 +272,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .layout-menu-accordion, .layout-dropdown-panel { transition: none; }
-  .page-route-enter, .wizard-card-entry { animation: none; }
+  .page-route-enter, .wizard-card-entry, .dialog-enter[open] { animation: none; }
 }

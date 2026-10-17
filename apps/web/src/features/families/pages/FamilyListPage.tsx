@@ -14,6 +14,7 @@ import LoadingState from '@/components/ui/LoadingState'
 import { fetchFamiliesWithOffline } from '@/features/families/services/familyOfflineService'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import type { FamilyListResponse } from '@/features/families/types/family'
+import { useAuth } from '@/features/auth/AuthProvider'
 
 const PAGE_SIZE = 20
 
@@ -46,6 +47,8 @@ function formatDate(value: string | null) {
 }
 
 export default function FamilyListPage({ mode = 'list' }: { mode?: 'list' | 'edit' }) {
+  const { usuario } = useAuth()
+  const canEdit = Boolean(usuario?.permisos.includes('FAMILIAS_WRITE'))
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
@@ -135,6 +138,7 @@ export default function FamilyListPage({ mode = 'list' }: { mode?: 'list' | 'edi
     <Badge key={`status-${family.id}`} variant={statusBadgeVariant(family.estado)}>
       {humanizeStatus(family.estado)}
     </Badge>,
+    ...(mode === 'edit' ? [canEdit ? <Link key={`edit-${family.id}`} to={`/familias/${family.id}/editar`} className="layout-focus inline-flex min-h-9 items-center justify-center rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600">Editar</Link> : <span key={`edit-${family.id}`} className="text-xs text-gray-500">Sin permiso</span>] : []),
   ]) ?? []
 
   return (
@@ -145,13 +149,13 @@ export default function FamilyListPage({ mode = 'list' }: { mode?: 'list' | 'edi
       />
       <PageHeader
         title={mode === 'edit' ? 'Seleccionar familia' : 'Familias y beneficiarios'}
-        description={mode === 'edit' ? 'Busca una familia y abre su expediente. La edición de información general estará disponible cuando exista el contrato de actualización.' : 'Consulta las familias registradas y localízalas por nombre, integrante, comunidad o programa.'}
+        description={mode === 'edit' ? 'Busca una familia y abre su formulario de edición autorizado.' : 'Consulta las familias registradas y localízalas por nombre, integrante, comunidad o programa.'}
         actions={mode === 'list' ? <Link to="/familias/nueva" className="layout-focus inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs transition-[background-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-theme-sm active:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"><span aria-hidden="true" className="text-lg leading-none">+</span>Registrar familia</Link> : <Link to="/familias" className="layout-focus inline-flex min-h-11 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs transition-colors hover:bg-gray-50 motion-reduce:transition-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Volver al listado</Link>}
       />
 
       <ComponentCard
         title={mode === 'edit' ? 'Familias disponibles' : 'Listado de familias'}
-        description={mode === 'edit' ? 'Selecciona el nombre de una familia para consultar su expediente.' : 'Consulta los registros y abre un expediente para ver su información.'}
+         description={mode === 'edit' ? 'Usa la acción Editar para actualizar la información general de una familia.' : 'Consulta los registros y abre un expediente para ver su información.'}
         actions={!loading && !error && result ? <Badge>{result.pagination.total} {result.pagination.total === 1 ? 'familia' : 'familias'}</Badge> : undefined}
       >
         {dataOrigin === 'cache' && (
@@ -226,7 +230,7 @@ export default function FamilyListPage({ mode = 'list' }: { mode?: 'list' | 'edi
         {!loading && !error && result && result.pagination.total > 0 && (
           <>
             {result.data.length > 0 && <DataTableContainer
-              columns={['Familia', 'Comunidad', 'Programas', 'Integrantes', 'Fecha de ingreso', 'Estado']}
+               columns={['Familia', 'Comunidad', 'Programas', 'Integrantes', 'Fecha de ingreso', 'Estado', ...(mode === 'edit' ? ['Acción'] : [])]}
               rows={rows}
               caption="Familias y beneficiarios registrados"
             />}

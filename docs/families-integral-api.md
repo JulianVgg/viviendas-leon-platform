@@ -1,34 +1,46 @@
 # API de registro integral de familias — primera entrega
 
+## FAM-03 y FAM-05 — actualización 2026-10-16
+
+Se añadieron contratos autenticados de administración, protegidos por el permiso
+persistido `FAMILIAS_WRITE` (asignado únicamente al rol coordinador del seed):
+
+| Método y ruta | Operación |
+|---|---|
+| `PATCH /api/v1/familias/:id` | Actualiza únicamente nombre, comunidad, fecha de ingreso y observaciones |
+| `POST /api/v1/familias/:id/integrantes` | Crea un integrante con `Idempotency-Key` UUID v4 |
+| `PATCH /api/v1/familias/:id/integrantes/:integranteId` | Actualiza campos personales sin cambiar IDs |
+| `PATCH /api/v1/familias/:id/integrantes/:integranteId/estado` | Activa o desactiva lógicamente |
+
+Los expedientes incluyen `version` para la familia y cada integrante. El token
+proviene de `xmin` de PostgreSQL y debe devolverse en todo PATCH; la comparación
+se realiza bajo bloqueo transaccional y una versión obsoleta devuelve 409. No se
+requiere migración de esquema. Cada mutación genera una fila de `bitacora` dentro
+de la misma transacción.
+
+El estado de familia permanece **solo lectura**: las transiciones entre `ACTIVA`,
+`RETIRADA` y `EGRESADA` siguen pendientes de reglas institucionales y no se
+aceptan en el PATCH. La desactivación de integrantes es lógica y se rechaza si
+dejaría a la familia sin al menos un integrante activo. No se eliminan relaciones
+históricas. El alta usa la bitácora y un bloqueo asesor como comprobante
+idempotente; reutilizar la clave con otro contenido devuelve 409.
+
 Fecha de verificación: **2026-10-14**. Rama: `feat/families-integral-api`,
 base `feat/tailadmin-pro-families` (`9b3ffe4`). Implementación aditiva de
 backend; no incluye asistente visual, modales, cambios offline ni AUTH.
 
-## Seguridad y habilitación temporal
+## Seguridad vigente
 
-Los tres endpoints nuevos están **deshabilitados por defecto**. Requieren
-simultáneamente, en el proceso servidor:
+Las rutas de familias, registro integral y expediente requieren la sesión real
+de Express. Las consultas y el registro integral existente requieren identidad
+autenticada; las rutas nuevas de edición exigen `FAMILIAS_WRITE`. El selector visual de roles,
+`RoleContext`, `NODE_ENV` y `ENABLE_FAMILY_INTEGRAL_API` no conceden acceso.
 
-```powershell
-$env:NODE_ENV = 'qa' # También se permite 'development'.
-$env:ENABLE_FAMILY_INTEGRAL_API = 'true'
-```
-
-Con ambiente ausente, distinto de `development`/`qa`, flag ausente o distinto
-de `true`, devuelven 404 con `NOT_FOUND`. En `NODE_ENV=production` no se
-habilitan aunque el flag sea `true`. No se utiliza ninguna variable `VITE_`.
-
-Esto **no es autenticación ni autorización**: depende de la configuración
-del despliegue. Usar exclusivamente datos sintéticos y una API ligada a
-loopback/red privada aislada, nunca publicar la sesión QA. No establecer
-`NODE_ENV=qa` en un despliegue productivo para evadir la barrera. CORS y
-RoleContext no protegen el backend. El gate no modifica las rutas básicas,
-cuya deuda de seguridad sigue pendiente.
-
-Antes de producción, el equipo AUTH debe integrar identidad autenticada,
-autorización real para crear/consultar expedientes y catálogos, y pruebas
-de denegación por permisos. Entonces se podrá sustituir esta barrera temporal
-en los tres endpoints. No se crearon usuarios mock ni se modificó AUTH.
+Sin sesión se devuelve 401 y sin permiso persistido se devuelve 403. Como no
+existe un modelo verificable de familias asignadas al personal de campo, sus
+escrituras de edición se deniegan por defecto. El seed declara `FAMILIAS_WRITE` únicamente
+para coordinación, pero no se ejecuta automáticamente ni modifica bases ya
+existentes. Dirección requiere una asignación administrativa real del permiso.
 
 ## Endpoints
 
@@ -158,7 +170,6 @@ Ejemplo de error HTTP 400:
 |---|---|
 | 400 | Datos, referencias o ID inválidos: `VALIDATION_ERROR`, detalles por campo |
 | 404 | Expediente inexistente: `FAMILY_NOT_FOUND` |
-| 404 | Endpoints deshabilitados: `NOT_FOUND` |
 | 500 | Creación: `FAMILY_INTEGRAL_CREATE_ERROR` |
 | 500 | Consulta: `FAMILY_INTEGRAL_DETAIL_ERROR` |
 | 500 | Catálogo: `FAMILY_PROGRAM_OPTIONS_ERROR` |
@@ -193,7 +204,8 @@ relacional Prisma. No se modificaron esquema ni migraciones.
 
 Permanecen los contratos y la paginación de `GET /api/v1/familias`,
 `POST /api/v1/familias`, `GET /api/v1/familias/:id`, `GET /api/v1/comunidades`
-y `GET /api/health`. El gate se aplica solo a las rutas nuevas.
+y `GET /api/health`. Las rutas de familias ahora requieren autenticación y
+permisos persistidos; el feature flag histórico ya no habilita ni deniega acceso.
 
 **Excepción temporal:** el POST básico continúa permitiendo familias sin
 integrantes/programas. La obligatoriedad mínima se garantiza en el registro
@@ -315,7 +327,7 @@ La próxima entrega frontend podrá usar estos contratos para:
 
 El expediente tendrá Información general, Integrantes y Programas. El frontend
 deberá distinguir IDs de asociación/programa y manejar 400/404/500, fechas
-ISO/null y endpoints temporalmente deshabilitados. No dividir el alta en varios
+ISO/null y respuestas de autenticación/autorización. No dividir el alta en varios
 POST ni asumir que bloquear el doble clic proporciona idempotencia de red.
 No se modificaron `FamilyForm`, `FamilyListPage` ni otros archivos web.
 Entrega lista para revisión, sin commit, push ni merge automáticos.

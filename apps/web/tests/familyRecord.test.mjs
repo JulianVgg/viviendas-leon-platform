@@ -180,7 +180,7 @@ test('Brave record UI: real DOM, mocked HTTP, read-only tabs, errors, privacy an
     for (const [status, code, title] of [
       [400, 'VALIDATION_ERROR', 'Identificador no válido'], [401, 'UNAUTHORIZED', 'Sesión expirada o no válida'],
       [403, 'FORBIDDEN', 'Acceso denegado'], [404, 'FAMILY_NOT_FOUND', 'Expediente inexistente'],
-      [404, 'NOT_FOUND', 'Servicio integral deshabilitado'], [404, 'OTHER', 'Servicio integral no disponible'],
+    [404, 'NOT_FOUND', 'Servicio integral no disponible'], [404, 'OTHER', 'Servicio integral no disponible'],
       [500, 'FAMILY_INTEGRAL_DETAIL_ERROR', 'Error interno del servidor'], ['network', undefined, 'No se pudo conectar con el servicio'],
     ]) {
       mode = { status, code }
