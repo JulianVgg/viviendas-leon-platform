@@ -5,11 +5,14 @@ import { cn } from '@/app/lib/cn'
 import { SidebarProvider, useSidebar } from '@/app/providers/SidebarContext'
 import AppHeader from './AppHeader'
 import AppSidebar from './AppSidebar'
+import { useAuth } from '@/features/auth/AuthProvider'
+import { canViewPath } from '@/features/auth/screenPermissions'
 import Backdrop from './Backdrop'
 
 function LayoutContent() {
   const { isExpanded, isHovered, isMobileOpen, closeMobileSidebar } = useSidebar()
   const { pathname } = useLocation()
+  const { usuario } = useAuth()
 
   useEffect(() => {
     closeMobileSidebar()
@@ -26,7 +29,12 @@ function LayoutContent() {
         <AppHeader />
         <ConnectivitySyncBridge />
         <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-screen-2xl p-4 outline-none md:p-6 xl:p-8">
-          <Outlet />
+          {usuario && !canViewPath(usuario, pathname) ? (
+            <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+              <h1 className="text-lg font-semibold">Acceso restringido</h1>
+              <p className="mt-2 text-sm">Tu rol no tiene acceso a esta pantalla. Consulta con Dirección general si necesitas ese permiso.</p>
+            </div>
+          ) : <Outlet />}
         </main>
       </div>
     </div>

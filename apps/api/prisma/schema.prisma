@@ -677,14 +677,19 @@ model Alerta {
 // USUARIOS, ROLES Y PERMISOS
 // ============================================================
 
+
+
 model Usuario {
-  id            Int       @id @default(autoincrement())
-  nombre        String
-  correo        String    @unique
-  passwordHash  String    @map("password_hash")
-  estado        String
-  ultimoAcceso  DateTime? @map("ultimo_acceso")
-  fechaCreacion DateTime  @map("fecha_creacion")
+  id                  Int       @id @default(autoincrement())
+  nombre              String
+  apellido            String?
+  telefono            String?
+  correo              String    @unique
+  passwordHash        String    @map("password_hash")
+  debeCambiarPassword Boolean   @default(false) @map("debe_cambiar_password")
+  estado              String
+  ultimoAcceso        DateTime? @map("ultimo_acceso")
+  fechaCreacion       DateTime  @map("fecha_creacion")
 
   roles        UsuarioRol[]
   visitas      Visita[]
@@ -694,6 +699,8 @@ model Usuario {
 
   @@map("usuario")
 }
+
+
 
 model Rol {
   id          Int     @id @default(autoincrement())
