@@ -10,6 +10,8 @@ import { FamilyApiError, fetchFamilies } from '@/features/families/services/fami
 import { getOfflineData, saveOfflineData } from '@/db/offlineDb'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { saveVisitCapture, type VisitCapture, type CropCapture, type VisitPhotoFile } from '@/features/visits/services/visitService'
+import SearchableSelect, { catalogOptions } from '@/features/visits/components/SearchableSelect'
+import { getVisitFollowUps, getVisitList, type VisitListItem, type VisitFollowUp, type FollowUpStatus } from '@/features/visits/services/visitService'
 import VisitEvidencePicker from '@/features/visits/components/VisitEvidencePicker'
 import type { FamilyListItem } from '@/features/families/types/family'
 import { crops, stages, qualities, weatherOptions, diseases, pests, damage, organicInsecticides, fertilizers, chemicalInsecticides } from '@/features/visits/data/visitCatalogs'
@@ -18,7 +20,7 @@ type Finding = { id: string; type: 'plaga' | 'enfermedad'; name: string; damage:
 type CropEntry = {
   id: string; name: string; stage: string; plants: string; quality: string
   findings: Finding[]; production: boolean; perPlantUnits: string; perPlantKg: string
-  units: string; kg: string; priceQ: string; priceUSD: string; priceBasis: 'unidad' | 'kg'
+  units: string; kg: string; priceQ: string; priceBasis: 'unidad' | 'kg'
 }
 type Commitment = { id: string; text: string; due: string; category: string }
 const steps = ['Información general', 'Evaluación de cultivos', 'Recomendaciones y observaciones']
@@ -26,9 +28,9 @@ const input = `${formControlClassName} w-full`
 const area = `${formControlClassName} h-auto min-h-24 resize-y`
 const card = 'rounded-2xl border border-slate-200 bg-white p-4 shadow-theme-xs dark:border-slate-800 dark:bg-slate-900 md:p-6'
 const todayLocal = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
-const newCrop = (): CropEntry => ({ id: crypto.randomUUID(), name: '', stage: '', plants: '', quality: '', findings: [], production: false, perPlantUnits: '', perPlantKg: '', units: '', kg: '', priceQ: '', priceUSD: '', priceBasis: 'unidad' })
+const newCrop = (): CropEntry => ({ id: crypto.randomUUID(), name: '', stage: '', plants: '', quality: '', findings: [], production: false, perPlantUnits: '', perPlantKg: '', units: '', kg: '', priceQ: '', priceBasis: 'unidad' })
 const newCommitment = (): Commitment => ({ id: crypto.randomUUID(), text: '', due: '', category: 'Familia' })
-const currencyTotal = (entry: CropEntry, currency: 'priceQ' | 'priceUSD') => {
+const currencyTotal = (entry: CropEntry, currency: 'priceQ') => {
   const quantity = Number(entry.priceBasis === 'kg' ? entry.kg : entry.units)
   const price = Number(entry[currency])
   if (!entry[currency].trim() || !(entry.priceBasis === 'kg' ? entry.kg : entry.units).trim() || !Number.isFinite(quantity * price)) return '—'
@@ -41,11 +43,23 @@ function Options({ items, placeholder = 'Seleccionar' }: { items: string[]; plac
 export default function VisitRegisterPage() {
   const [searchParams] = useSearchParams()
   const initialDate = searchParams.get('fecha')
+  const initialFamily = searchParams.get('familia')
+  const initialScheduled = searchParams.get('programada')
   const [step, setStep] = useState(0)
-  const [familyId, setFamilyId] = useState('')
+  const [familyId, setFamilyId] = useState(initialFamily && /^\d+$/.test(initialFamily) ? initialFamily : '')
   const [date, setDate] = useState(initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate) ? initialDate : todayLocal)
   const [weather, setWeather] = useState('')
-  const [checkIn, setCheckIn] = useState('')
+  const [scheduledVisits, setScheduledVisits] = useState<VisitListItem[]>([])
+  const [scheduledVisitId, setScheduledVisitId] = useState<number | null>(null)
+  const [scheduleLoading, setScheduleLoading] = useState(true)
+  const [scheduleLocal, setScheduleLocal] = useState(false)
+  const [scheduleError, setScheduleError] = useState('')
+  const [followUps, setFollowUps] = useState<VisitFollowUp[]>([])
+  const [followUpLoading, setFollowUpLoading] = useState(true)
+  const [followUpLocal, setFollowUpLocal] = useState(false)
+  const [followUpError, setFollowUpError] = useState('')
+  const [followUpRefresh, setFollowUpRefresh] = useState(0)
+  const [reviewStates, setReviewStates] = useState<Record<string, FollowUpStatus>>({})
   const [cropsState, setCrops] = useState<CropEntry[]>([])
   const [commitments, setCommitments] = useState<Commitment[]>([])
   const [treatment, setTreatment] = useState('')
@@ -90,6 +104,57 @@ export default function VisitRegisterPage() {
     return () => controller.abort()
   }, [refresh, cacheKey])
 
+  // Muestra citas PROGRAMADAS reales y permite elegir cuál se convertirá en REALIZADA.
+  // Una cita sin ID de servidor todavía debe sincronizarse antes de poder enlazarla.
+  useEffect(() => {
+    if (!usuario) { setScheduleLoading(false); return }
+    let active = true
+    setScheduleLoading(true)
+    setScheduleError('')
+    getVisitList(usuario.id).then(result => {
+      if (!active) return
+      setScheduledVisits(result.items.filter(visit => visit.status === 'PROGRAMADA'))
+      setScheduleLocal(result.local)
+    }).catch(cause => {
+      if (active) { setScheduledVisits([]); setScheduleError(cause instanceof Error ? cause.message : 'No se pudieron consultar las visitas programadas.') }
+    }).finally(() => { if (active) setScheduleLoading(false) })
+    return () => { active = false }
+  }, [usuario])
+
+  const familyScheduled = useMemo(() => scheduledVisits.filter(visit =>
+    String(visit.familyId) === familyId
+  ).sort((a, b) => a.date.localeCompare(b.date)), [scheduledVisits, familyId])
+
+  // La agenda puede pasar ?programada=ID para seleccionar una cita directamente.
+  useEffect(() => {
+    if (!initialScheduled || !/^\d+$/.test(initialScheduled) || scheduleLoading) return
+    const match = scheduledVisits.find(visit => visit.id === Number(initialScheduled) && String(visit.familyId) === familyId)
+    if (match?.id) setScheduledVisitId(match.id)
+  }, [initialScheduled, familyId, scheduleLoading, scheduledVisits])
+
+  useEffect(() => {
+    if (!usuario) { setFollowUpLoading(false); return }
+    let active = true
+    setFollowUpLoading(true)
+    setFollowUpError('')
+    getVisitFollowUps(usuario.id).then(result => {
+      if (active) { setFollowUps(result.items); setFollowUpLocal(result.local) }
+    }).catch(cause => {
+      if (active) {
+        setFollowUps([])
+        setFollowUpError(cause instanceof Error ? cause.message : 'No se pudieron consultar los compromisos.')
+      }
+    }).finally(() => { if (active) setFollowUpLoading(false) })
+    return () => { active = false }
+  }, [usuario, familyId, followUpRefresh])
+  useEffect(() => {
+    const recheck = () => setFollowUpRefresh(n => n + 1)
+    window.addEventListener('focus', recheck)
+    return () => window.removeEventListener('focus', recheck)
+  }, [])
+  const previousFollowUps = useMemo(() => followUps.filter(item =>
+    String(item.familyId) === familyId && item.status !== 'CUMPLIDO' && item.date <= date
+  ).sort((a,b) => (a.due ?? a.date).localeCompare(b.due ?? b.date)), [followUps, familyId, date])
   const selectedFamily = useMemo(() => familyOptions.find(f => String(f.id) === familyId), [familyId, familyOptions])
   const updateCrop = (id: string, patch: Partial<CropEntry>) => setCrops(list => list.map(c => c.id === id ? { ...c, ...patch } : c))
   const updateFinding = (cropId: string, findingId: string, patch: Partial<Finding>) => setCrops(list => list.map(c => c.id === cropId ? { ...c, findings: c.findings.map(f => f.id === findingId ? { ...f, ...patch } : f) } : c))
@@ -104,13 +169,16 @@ export default function VisitRegisterPage() {
     if (saving || saved) return
     if (!usuario) { setError('Tu sesión no está disponible. Inicia sesión nuevamente.'); return }
     if (!selectedFamily || !date) { setError('Selecciona una familia y la fecha.'); setStep(0); return }
+    if (scheduledVisitId && !familyScheduled.some(visit => visit.id === scheduledVisitId && visit.status === 'PROGRAMADA')) {
+      setError('La cita programada seleccionada ya no está disponible. Actualiza la página y vuelve a elegir.'); setStep(0); return
+    }
     if (cropsState.some(c => !c.name || c.findings.some(f => !f.name || !f.damage))) {
       setError('Completa los cultivos y los hallazgos agregados antes de guardar.'); setStep(1); return
     }
     if (commitments.some(c => !c.text.trim())) {
       setError('Completa los compromisos agregados o elimínalos.'); setStep(2); return
     }
-    const cropNumbers = cropsState.flatMap(c => [c.plants, c.perPlantUnits, c.perPlantKg, c.units, c.kg, c.priceQ, c.priceUSD])
+    const cropNumbers = cropsState.flatMap(c => [c.plants, c.perPlantUnits, c.perPlantKg, c.units, c.kg, c.priceQ])
     if (cropNumbers.some(value => value.trim() && (!Number.isFinite(Number(value)) || Number(value) < 0)) ||
         cropsState.some(c => c.plants.trim() && !Number.isSafeInteger(Number(c.plants)))) {
       setError('Revisa las cantidades y precios; deben ser números positivos.'); setStep(1); return
@@ -122,14 +190,16 @@ export default function VisitRegisterPage() {
       perPlantKg: c.production ? numberOrNull(c.perPlantKg) : null,
       units: c.production ? numberOrNull(c.units) : null, kg: c.production ? numberOrNull(c.kg) : null,
       priceQ: c.production ? numberOrNull(c.priceQ) : null,
-      priceUSD: c.production ? numberOrNull(c.priceUSD) : null,
+      priceUSD: null, // Los importes en dólares se calcularán en reportes.
       priceBasis: c.priceBasis,
     }))
     const payload: VisitCapture = {
       familyId: Number(familyId), date, status: type, weather,
-      checkIn: checkIn.trim(), crops: cropsCapture, recommendation: recommendation.trim(),
+      ...(scheduledVisitId ? { scheduledVisitId } : {}),
+      checkIn: '', crops: cropsCapture, recommendation: recommendation.trim(),
       treatment, observations: observations.trim(),
-      commitments: commitments.map(c => ({ text: c.text.trim(), due: c.due || null, category: c.category as 'Familia' | 'ONG' })),
+      commitments: commitments.map(c => ({ id: c.id, text: c.text.trim(), due: c.due || null, category: c.category as 'Familia' | 'ONG' })),
+      reviews: type === 'REALIZADA' ? previousFollowUps.filter(f => reviewStates[f.id] && reviewStates[f.id] !== f.status).map(f => ({ id: f.id, status: reviewStates[f.id] })) : [],
     }
     setError(''); setSaving(true)
     try {
@@ -150,12 +220,54 @@ export default function VisitRegisterPage() {
       {step === 0 && <section className={card} aria-label="Información general">
         <h2 className="mb-1 text-lg font-semibold text-slate-900 dark:text-white">¿A quién visitamos?</h2>
         <div className="grid gap-4 md:grid-cols-2">
-          <FormField id="visit-family" label="Familia" required>
-            <select id="visit-family" className={input} disabled={familiesLoading} value={familyId} onChange={e => setFamilyId(e.target.value)}><option value="">{familiesLoading ? 'Cargando familias...' : 'Selecciona una familia'}</option>{familyOptions.map(f => <option key={f.id} value={String(f.id)}>{f.nombreReferencia} — {f.comunidad.nombre}</option>)}</select>
-          </FormField>
+          <SearchableSelect id="visit-family" label="Familia" required disabled={familiesLoading} value={familyId} onChange={value => { setFamilyId(value); setScheduledVisitId(null) }}
+            placeholder={familiesLoading ? 'Cargando familias...' : 'Buscar familia o comunidad...'}
+            options={familyOptions.map(f => ({ value: String(f.id), label: `${f.nombreReferencia} — ${f.comunidad.nombre}` }))} />
           <FormField id="visit-date" label="Fecha de visita" required><input id="visit-date" type="date" className={input} value={date} onChange={e => setDate(e.target.value)}/></FormField>
+          {familyId && <div className="md:col-span-2 rounded-xl border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-700 dark:bg-blue-500/10">
+            <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200">Visitas programadas de esta familia</h3>
+            <p className="mt-1 text-xs text-blue-800 dark:text-blue-300">Si esta visita corresponde a una cita previa, selecciónala. Se actualizará esa misma visita, sin crear otra.</p>
+            {scheduleLoading ? <p className="mt-3 text-sm text-gray-500">Buscando citas programadas…</p>
+            : scheduleError ? <p role="alert" className="mt-3 text-sm text-red-600">{scheduleError}. No es posible confirmar las citas hasta recuperar la conexión.</p>
+            : familyScheduled.length ? <div className="mt-3 space-y-2" role="radiogroup" aria-label="Vincular visita programada">
+              {familyScheduled.map(visit => <label key={visit.operationId ?? visit.id} className={`flex cursor-pointer items-start gap-3 rounded-lg border bg-white p-3 text-sm dark:bg-gray-900 ${scheduledVisitId === visit.id && visit.id !== null ? 'border-blue-500 ring-1 ring-blue-300' : 'border-gray-200 dark:border-gray-700'}`}>
+                <input type="radio" name="scheduled-visit" className="mt-1 accent-blue-600" checked={scheduledVisitId === visit.id && visit.id !== null} disabled={!visit.id || Boolean(visit.syncStatus && visit.syncStatus !== 'synced')} onChange={() => setScheduledVisitId(visit.id)} />
+                <span><strong className="block text-gray-900 dark:text-white">{new Date(`${visit.date}T12:00:00`).toLocaleDateString('es-GT', {day:'numeric', month:'long', year:'numeric'})}</strong>
+                  <span className="mt-1 block text-xs text-gray-600 dark:text-gray-300">{visit.capture?.timeSlot === 'TARDE' ? 'Tarde' : visit.capture?.timeSlot === 'MANANA' ? 'Mañana' : 'Sin turno'} · Responsable: {visit.responsibleName || 'Sin dato'}</span>
+                  {!visit.id && <span className="mt-1 block text-xs text-amber-700">Pendiente de sincronizar. Primero sincroniza esta cita para vincularla.</span>}
+                </span>
+              </label>)}
+              <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-gray-200 bg-white p-3 text-sm dark:border-gray-700 dark:bg-gray-900">
+                <input type="radio" name="scheduled-visit" className="accent-blue-600" checked={scheduledVisitId === null} onChange={() => setScheduledVisitId(null)}/>
+                Registrar sin vincular a una cita (visita no programada)
+              </label>
+            </div> : <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">No se encontraron visitas programadas para esta familia. Puedes registrar una visita no programada.</p>}
+            {scheduleLocal && <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">Datos de agenda almacenados localmente. Confirma la cita al recuperar conexión.</p>}
+          </div>}
           <FormField id="visit-weather" label="Condición climática"><select id="visit-weather" className={input} value={weather} onChange={e => setWeather(e.target.value)}><Options items={weatherOptions}/></select></FormField>
-          <FormField id="visit-progress" label="¿Cómo le ha ido desde la última visita?"><textarea id="visit-progress" className={area} value={checkIn} onChange={e => setCheckIn(e.target.value)} /></FormField>
+          <div className="md:col-span-2 rounded-xl border border-gray-200 bg-gray-50/60 p-4 dark:border-gray-700 dark:bg-gray-800/30">
+            <h3 className="font-semibold text-gray-900 dark:text-white">¿Cómo le ha ido desde la última visita?</h3>
+            <p className="mt-1 text-xs text-gray-500">Revisa los compromisos anteriores de la familia. Puedes marcarlos ahora o dejarlos pendientes para otra visita.</p>
+            {followUpLocal && <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">Consultando datos locales: pueden faltar compromisos que todavía no se han descargado en este dispositivo.</p>}
+            {followUpError && <div role="alert" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-700 dark:bg-amber-500/10 dark:text-amber-200">
+              No fue posible consultar los seguimientos: {followUpError}. No significa que la familia no tenga compromisos.
+              <button type="button" className="ml-2 font-semibold underline" onClick={() => setFollowUpRefresh(n => n + 1)}>Reintentar</button>
+            </div>}
+            {!familyId ? <p className="mt-3 text-sm text-gray-500">Selecciona una familia para consultar los pendientes.</p>
+              : followUpError ? null
+              : followUpLoading ? <p className="mt-3 text-sm text-gray-500">Consultando compromisos anteriores…</p>
+              : previousFollowUps.length === 0 ? <p className="mt-3 rounded-lg bg-white p-3 text-sm text-gray-500 dark:bg-gray-900">{followUpLocal ? 'No hay seguimientos de esta familia disponibles en el caché de este dispositivo. Conecta con la API y vuelve a intentar para confirmar los pendientes.' : 'No hay compromisos anteriores pendientes para esta familia. En la primera visita podrás agregarlos en el paso 3.'}</p>
+              : <div className="mt-3 space-y-3">{previousFollowUps.map(f => <div key={f.id} className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">{f.text}</p>
+                <p className="mt-1 text-xs text-gray-500">Responsable: {f.category}{f.due ? ` · Revisar: ${f.due}` : ''}{f.local ? ' · Pendiente de sincronizar' : ''}</p>
+                <fieldset className="mt-3"><legend className="mb-1 text-xs text-gray-500">Resultado del compromiso</legend>
+                <div className="flex flex-wrap gap-2">{([['CUMPLIDO','Cumplió'],['NO_CUMPLIDO','No cumplió'],['PENDIENTE','Pendiente']] as const).map(([status,label]) => <label key={status}
+                  className={`cursor-pointer rounded-lg border px-3 py-2 text-xs font-medium ${(reviewStates[f.id] ?? f.status) === status ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300' : 'border-gray-200 text-gray-600 dark:border-gray-700 dark:text-gray-300'}`}>
+                  <input type="radio" name={`followup-${f.id}`} className="mr-1.5 accent-brand-500" checked={(reviewStates[f.id] ?? f.status) === status}
+                    onChange={() => setReviewStates(previous => ({ ...previous, [f.id]:status }))} />{label}
+                </label>)}</div></fieldset>
+              </div>)}</div>}
+          </div>
         </div>
         {selectedFamily && <div className="mt-4 rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800/50"><strong>{selectedFamily.nombreReferencia}</strong><p className="mt-1 text-slate-500 dark:text-slate-400">{selectedFamily.comunidad.nombre} · {selectedFamily.integrantes} integrante(s)</p></div>}
         {familiesError && <div role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">Error al consultar familias: {familiesError} <Button variant="secondary" size="sm" type="button" className="ms-2" onClick={() => setRefresh(n=>n+1)}>Reintentar</Button></div>}
@@ -169,7 +281,7 @@ export default function VisitRegisterPage() {
         {cropsState.map((crop, i) => <article key={crop.id} className={card}>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold text-slate-900 dark:text-white">Cultivo {i + 1} {crop.name && <Badge>{crop.name}</Badge>}</h3><Button type="button" size="sm" variant="secondary" onClick={() => setCrops(list => list.filter(c => c.id !== crop.id))}>Quitar</Button></div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <FormField label="Planta" id={`crop-name-${crop.id}`}><select id={`crop-name-${crop.id}`} className={input} value={crop.name} onChange={e => updateCrop(crop.id,{name:e.target.value})}><Options items={crops}/></select></FormField>
+            <SearchableSelect label="Planta" id={`crop-name-${crop.id}`} value={crop.name} onChange={name => updateCrop(crop.id,{name})} options={catalogOptions(crops)} />
             <FormField label="Etapa" id={`crop-stage-${crop.id}`}><select id={`crop-stage-${crop.id}`} className={input} value={crop.stage} onChange={e => updateCrop(crop.id,{stage:e.target.value})}><Options items={stages}/></select></FormField>
             <FormField label="Cantidad de plantas" id={`crop-plants-${crop.id}`}><input id={`crop-plants-${crop.id}`} className={input} type="number" min="0" step="1" value={crop.plants} onChange={e=>updateCrop(crop.id,{plants:e.target.value})}/></FormField>
             <FormField label="Calidad" id={`crop-quality-${crop.id}`}><select id={`crop-quality-${crop.id}`} className={input} value={crop.quality} onChange={e=>updateCrop(crop.id,{quality:e.target.value})}><Options items={qualities}/></select></FormField>
@@ -177,7 +289,7 @@ export default function VisitRegisterPage() {
           <details className="mt-5 rounded-xl border border-slate-200 p-4 dark:border-slate-700"><summary className="cursor-pointer font-medium text-slate-900 dark:text-white">¿Detectaste plagas o enfermedades? <span className="text-xs font-normal text-slate-500">({crop.findings.length} hallazgos)</span></summary>
             <div className="mt-4 space-y-3">{crop.findings.map(f => <div key={f.id} className="grid gap-2 rounded-lg bg-slate-50 p-3 dark:bg-slate-800/40 md:grid-cols-[135px_1fr_110px_auto] md:items-end">
               <FormField id={`finding-type-${f.id}`} label="Tipo"><select id={`finding-type-${f.id}`} className={input} value={f.type} onChange={e => updateFinding(crop.id,f.id,{type:e.target.value as Finding['type'],name:''})}><option value="plaga">Plaga</option><option value="enfermedad">Enfermedad</option></select></FormField>
-              <FormField id={`finding-name-${f.id}`} label="Hallazgo"><select id={`finding-name-${f.id}`} className={input} value={f.name} onChange={e => updateFinding(crop.id,f.id,{name:e.target.value})}><Options items={f.type === 'plaga' ? pests : diseases}/></select></FormField>
+              <SearchableSelect id={`finding-name-${f.id}`} label="Hallazgo" value={f.name} onChange={name => updateFinding(crop.id,f.id,{name})} options={catalogOptions(f.type === 'plaga' ? pests : diseases)} />
               <FormField id={`finding-damage-${f.id}`} label="Daño"><select id={`finding-damage-${f.id}`} className={input} value={f.damage} onChange={e => updateFinding(crop.id,f.id,{damage:e.target.value})}><option value="">Sin estimar</option>{damage.map(n => <option key={n} value={n}>{n}%</option>)}</select></FormField>
               <Button type="button" variant="secondary" size="sm" onClick={() => updateCrop(crop.id, {findings: crop.findings.filter(item => item.id !== f.id)})}>Quitar</Button>
             </div>)}<Button type="button" variant="secondary" size="sm" onClick={()=>updateCrop(crop.id,{findings:[...crop.findings,{id:crypto.randomUUID(),type:'plaga',name:'',damage:''}]})}>+ Añadir hallazgo</Button></div>
@@ -186,8 +298,8 @@ export default function VisitRegisterPage() {
             <div className="mt-4 space-y-4"><label className="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={crop.production} onChange={e=>updateCrop(crop.id,{production:e.target.checked})}/> Registrar producción y ventas</label>
               {crop.production && <><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 {([['perPlantUnits','Producto/planta (unidades)'],['perPlantKg','Producto/planta (kg)'],['units','Total obtenido (unidades)'],['kg','Total obtenido (kg)']] as const).map(([key,name]) => <FormField key={key} id={`${key}-${crop.id}`} label={name}><input id={`${key}-${crop.id}`} className={input} type="number" min="0" step="any" value={crop[key]} onChange={e=>updateCrop(crop.id,{[key]:e.target.value})}/></FormField>)}
-              </div><div className="grid gap-3 md:grid-cols-3"><FormField id={`price-basis-${crop.id}`} label="Precio por"><select id={`price-basis-${crop.id}`} className={input} value={crop.priceBasis} onChange={e=>updateCrop(crop.id,{priceBasis:e.target.value as CropEntry['priceBasis']})}><option value="unidad">Unidad</option><option value="kg">Kilogramo</option></select></FormField><FormField id={`price-q-${crop.id}`} label="Precio de venta (Q)"><input id={`price-q-${crop.id}`} className={input} type="number" min="0" step="any" value={crop.priceQ} onChange={e=>updateCrop(crop.id,{priceQ:e.target.value})}/></FormField><FormField id={`price-usd-${crop.id}`} label="Precio de venta ($)"><input id={`price-usd-${crop.id}`} className={input} type="number" min="0" step="any" value={crop.priceUSD} onChange={e=>updateCrop(crop.id,{priceUSD:e.target.value})}/></FormField></div>
-              <div className="grid gap-3 md:grid-cols-2"><div className="rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800"><div className="text-slate-500">Total de venta (Q)</div><strong className="text-lg text-slate-900 dark:text-white">{currencyTotal(crop,'priceQ')}</strong></div><div className="rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800"><div className="text-slate-500">Total de ventas ($)</div><strong className="text-lg text-slate-900 dark:text-white">{currencyTotal(crop,'priceUSD')}</strong></div></div></>}
+              </div><div className="grid gap-3 md:grid-cols-2"><FormField id={`price-basis-${crop.id}`} label="Precio por"><select id={`price-basis-${crop.id}`} className={input} value={crop.priceBasis} onChange={e=>updateCrop(crop.id,{priceBasis:e.target.value as CropEntry['priceBasis']})}><option value="unidad">Unidad</option><option value="kg">Kilogramo</option></select></FormField><FormField id={`price-q-${crop.id}`} label="Precio de venta (Q)"><input id={`price-q-${crop.id}`} className={input} type="number" min="0" step="any" value={crop.priceQ} onChange={e=>updateCrop(crop.id,{priceQ:e.target.value})}/></FormField></div>
+              <div className="grid gap-3 md:grid-cols-1"><div className="rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800"><div className="text-slate-500">Total de venta (Q)</div><strong className="text-lg text-slate-900 dark:text-white">{currencyTotal(crop,'priceQ')}</strong></div></div></>}
             </div>
           </details>
         </article>)}
@@ -198,7 +310,7 @@ export default function VisitRegisterPage() {
         <FormField id="visit-recommendations" label="Recomendación general"><textarea id="visit-recommendations" className={area} value={recommendation} onChange={e=>setRecommendation(e.target.value)} /></FormField>
         <div className="grid gap-4 md:grid-cols-2">
           <FormField id="visit-treatment-type" label="Tipo de insumo recomendado"><select id="visit-treatment-type" value={treatmentGroup} className={input} onChange={e=>{setTreatmentGroup(e.target.value);setTreatment('')}}><option value="orgánico">Insecticida orgánico</option><option value="abono">Abono orgánico</option><option value="químico">Producto químico</option></select></FormField>
-          <FormField id="visit-treatment" label="Insumo"><select id="visit-treatment" className={input} value={treatment} onChange={e=>setTreatment(e.target.value)}><Options items={treatmentGroup === 'orgánico' ? organicInsecticides : treatmentGroup === 'abono' ? fertilizers : chemicalInsecticides}/></select></FormField>
+          <SearchableSelect id="visit-treatment" label="Insumo" value={treatment} onChange={setTreatment} options={catalogOptions(treatmentGroup === 'orgánico' ? organicInsecticides : treatmentGroup === 'abono' ? fertilizers : chemicalInsecticides)} />
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold text-slate-900 dark:text-white">Compromisos</h3><Button type="button" size="sm" variant="secondary" onClick={()=>setCommitments(list=>[...list,newCommitment()])}>+ Agregar compromiso</Button></div>
         {commitments.map((c,i) => <div key={c.id} className="grid gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-800 md:grid-cols-[1fr_150px_170px_auto] md:items-end">
@@ -214,6 +326,7 @@ export default function VisitRegisterPage() {
           <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700"><h3 className="mb-3 font-medium text-slate-900 dark:text-white">Audio para la familia</h3><Button type="button" variant="secondary" disabled>Grabar audio</Button></div>
         </div>
         <VisitEvidencePicker photos={photos} onChange={setPhotos} disabled={saving || Boolean(saved)} />
+        {scheduledVisitId && <p className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800 dark:bg-blue-500/10 dark:text-blue-200">Este registro completará la visita programada #{scheduledVisitId} (sin generar una nueva).</p>}
         <div className="flex flex-wrap items-center gap-3 rounded-xl bg-slate-50 p-4 text-sm dark:bg-slate-800/40"><strong>{selectedFamily?.nombreReferencia ?? 'Sin familia'}</strong><span>{date}</span><span>{cropsState.length} cultivo(s)</span><span>{commitments.length} compromiso(s)</span><span>{photos.length} foto(s)</span></div>
       </section>}
       {saved && <div role="status" className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">
@@ -227,7 +340,6 @@ export default function VisitRegisterPage() {
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-xs text-slate-500">Paso {step+1} de {steps.length}</span>
           {step < steps.length-1 ? <Button type="button" onClick={next} disabled={Boolean(saved)}>Siguiente →</Button> : <>
-            <Button type="button" variant="secondary" disabled={saving || Boolean(saved)} onClick={()=>void save('PROGRAMADA')}>{saving ? 'Guardando…' : 'Programar visita'}</Button>
             <Button type="button" disabled={saving || Boolean(saved)} onClick={()=>void save('REALIZADA')}>{saving ? 'Guardando…' : 'Guardar visita'}</Button>
           </>}
         </div>
