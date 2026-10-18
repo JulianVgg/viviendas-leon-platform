@@ -20,10 +20,12 @@ export type CropCapture = {
 }
 export type VisitCapture = {
   familyId: number; date: string; status: 'PROGRAMADA' | 'REALIZADA'; timeSlot?: VisitTimeSlot
+  scheduledVisitId?: number // Si se completa una cita, conserva el mismo ID de la visita.
   weather: string; checkIn: string; crops: CropCapture[]
   recommendation: string; treatment: string; observations: string
   commitments: { id: string; text: string; category: 'Familia' | 'ONG'; due: string | null }[]
   reviews: FollowUpReview[]
+  programacion?: { date: string; timeSlot?: VisitTimeSlot; operationId?: string }
 }
 type OwnedVisitCapture = { ownerId: number; familyName: string; community: string; capture: VisitCapture; photos?: VisitPhotoFile[] }
 export type VisitListItem = {
@@ -68,7 +70,9 @@ export async function getVisitList(userId: number): Promise<{ items: VisitListIt
     }
   })
   const syncedIds = new Set(rows.map(r => r.operationId))
-  const extras = candidates.filter(o => !syncedIds.has(o.id)).map(o => {
+  // Una cita sincronizada cuyo UUID fue reemplazado al marcarla como REALIZADA
+  // ya no debe reaparecer como segundo registro en el historial conectado.
+  const extras = candidates.filter(o => !syncedIds.has(o.id) && (local || o.status !== 'synced')).map(o => {
     const p = o.payload as OwnedVisitCapture
     return {
       id: null, operationId: o.id, date: p.capture.date, status: p.capture.status,
@@ -88,7 +92,8 @@ async function sendVisit(operation: PendingOperation): Promise<SyncAcknowledgmen
   })
   if (!response.ok) {
     if (response.status === 401) throw new Error('Inicia sesión para sincronizar.')
-    throw new Error(`No se pudo sincronizar la visita (HTTP ${response.status}).`)
+    const detail = await response.json().catch(() => null) as { error?: string } | null
+    throw new Error(detail?.error ?? `No se pudo sincronizar la visita (HTTP ${response.status}).`)
   }
   const result = await response.json() as { operationId?: string; accepted?: boolean }
   if (result.operationId !== operation.id || result.accepted !== true) throw new Error('El servidor no confirmó la visita.')
@@ -199,5 +204,17 @@ export async function rescheduleVisit(visitId: number, date: string): Promise<vo
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as { error?: string } | null
     throw new Error(payload?.error ?? `No se pudo cambiar la fecha (HTTP ${response.status}).`)
+  }
+}
+
+// Solo se elimina una visita PROGRAMADA y sincronizada en el servidor.
+export async function deleteScheduledVisit(visitId: number): Promise<void> {
+  const response = await fetch(`/api/v1/visitas/agenda/${visitId}`, {
+    method: 'DELETE', credentials: 'same-origin', cache: 'no-store',
+    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+  })
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null) as { error?: string } | null
+    throw new Error(payload?.error ?? `No se pudo eliminar la visita (HTTP ${response.status}).`)
   }
 }

@@ -29,7 +29,7 @@ const statusOptions = ['PENDIENTE','CUMPLIDO','NO_CUMPLIDO'] as const
 const validDate = (v: string) => dateRe.test(v) && !Number.isNaN(Date.parse(`${v}T12:00:00Z`)) && new Date(`${v}T12:00:00Z`).toISOString().slice(0,10) === v
 const clean = (v: unknown, max: number) => typeof v === 'string' ? v.trim().slice(0, max) : ''
 const positive = (v: unknown) => v === '' || v === null || v === undefined || (typeof v === 'number' && Number.isFinite(v) && v >= 0)
-function validate(input: unknown, operationId: unknown): { familyId: number; date: string; status: 'PROGRAMADA' | 'REALIZADA'; timeSlot?: 'MANANA' | 'TARDE'; weather: string; checkIn: string; recommendation: string; observations: string; treatment: string; crops: Record<string, unknown>[]; commitments: Record<string, unknown>[]; reviews: { id: string; status: string }[] } | null {
+function validate(input: unknown, operationId: unknown): { familyId: number; date: string; status: 'PROGRAMADA' | 'REALIZADA'; timeSlot?: 'MANANA' | 'TARDE'; scheduledVisitId?: number; weather: string; checkIn: string; recommendation: string; observations: string; treatment: string; crops: Record<string, unknown>[]; commitments: Record<string, unknown>[]; reviews: { id: string; status: string }[] } | null {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return null
   const v = input as Record<string, unknown>
   const opId = typeof operationId === 'string' && uuid.test(operationId) ? operationId.toLowerCase() : ''
@@ -39,6 +39,7 @@ function validate(input: unknown, operationId: unknown): { familyId: number; dat
       new Date(`${date}T12:00:00Z`).toISOString().slice(0, 10) !== date ||
       (v.status !== 'PROGRAMADA' && v.status !== 'REALIZADA')) return null
   if (v.timeSlot !== undefined && !['MANANA', 'TARDE'].includes(String(v.timeSlot))) return null
+  if (v.scheduledVisitId !== undefined && (v.status !== 'REALIZADA' || !Number.isSafeInteger(v.scheduledVisitId) || Number(v.scheduledVisitId) <= 0)) return null
   if (!Array.isArray(v.crops) || v.crops.length > 30 || !Array.isArray(v.commitments) || v.commitments.length > 30) return null
   const crops: Record<string, unknown>[] = []
   for (const item of v.crops) {
@@ -86,6 +87,7 @@ function validate(input: unknown, operationId: unknown): { familyId: number; dat
   return {
     familyId: Number(v.familyId), date, status: v.status,
     ...(v.timeSlot ? { timeSlot: v.timeSlot as 'MANANA' | 'TARDE' } : {}),
+    ...(v.scheduledVisitId ? { scheduledVisitId: Number(v.scheduledVisitId) } : {}),
     weather: clean(v.weather, 80), checkIn: clean(v.checkIn, 4000),
     recommendation: clean(v.recommendation, 4000), observations: clean(v.observations, 4000),
     treatment: clean(v.treatment, 120), crops, commitments, reviews,
@@ -153,6 +155,22 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
   const hash = createHash('sha256').update(JSON.stringify(hashInput)).digest('hex')
   const prisma = getPrismaClient()
   try {
+    // Compatibilidad idempotente: una cita ya realizada conserva la operación
+    // original dentro de datos.programacion, aunque ahora la captura tenga
+    // el UUID de la realización. Un reintento de la agenda no crea otra visita.
+    const priorSchedule = await prisma.$queryRaw<Array<{ visita_id: number; usuario_id: number; original_hash: string }>>`
+      SELECT "visita_id", "usuario_id", "datos"->'programacion'->>'payloadHash' AS "original_hash"
+      FROM "visita_captura"
+      WHERE "datos"->'programacion'->>'operationId' = ${normalizedId}
+      LIMIT 1
+    `
+    if (priorSchedule.length) {
+      if (priorSchedule[0].usuario_id !== userId || priorSchedule[0].original_hash !== hash) {
+        res.status(409).json({ error: 'La operación programada ya fue utilizada con otros datos.' }); return
+      }
+      res.status(200).json({ operationId: normalizedId, accepted: true, duplicate: true, visitId: priorSchedule[0].visita_id })
+      return
+    }
     const persist = async () => {
       const existing = await prisma.$queryRaw<Array<{ visita_id: number; usuario_id: number; payload_hash: string }>>`
         SELECT "visita_id", "usuario_id", "payload_hash" FROM "visita_captura" WHERE "operation_id" = CAST(${normalizedId} AS UUID)
@@ -166,14 +184,49 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
       if (!await prisma.familia.findUnique({ where: { id: payload.familyId }, select: { id:true } })) return null
       const climate = payload.weather ? await prisma.condicionClimatica.findFirst({ where: { nombre: { equals: payload.weather, mode: 'insensitive' }, activo: true }, select: { id:true } }) : null
       const created = await prisma.$transaction(async tx => {
-        const visita = await tx.visita.create({ data: {
-          familiaId: payload.familyId, usuarioResponsableId: userId, fecha: new Date(`${payload.date}T12:00:00Z`),
-          condicionClimaticaId: climate?.id ?? null, tipo: 'TECNICA', estado: payload.status,
-          observaciones: payload.observations || null,
-        } })
+        let visitaId: number
+        let storedCapture: Record<string, unknown> = payload
+        if (payload.scheduledVisitId) {
+          // Transición atómica PROGRAMADA -> REALIZADA, sin crear otra fila Visita.
+          // Solo puede completar una cita el técnico responsable de la misma familia.
+          const planned = await tx.visita.findFirst({
+            where: { id: payload.scheduledVisitId, familiaId: payload.familyId,
+              usuarioResponsableId: userId, estado: 'PROGRAMADA' },
+            select: { id: true, fecha: true },
+          })
+          if (!planned) throw new Error('SCHEDULE_CONFLICT')
+          const previous = await tx.visitaCaptura.findUnique({
+            where: { visitaId: planned.id },
+            select: { operationId: true, payloadHash: true, usuarioId: true, datos: true },
+          })
+          if (previous && previous.usuarioId !== userId) throw new Error('SCHEDULE_CONFLICT')
+          const changed = await tx.visita.updateMany({
+            where: { id: planned.id, familiaId: payload.familyId,
+              usuarioResponsableId: userId, estado: 'PROGRAMADA' },
+            data: { estado: 'REALIZADA', fecha: new Date(`${payload.date}T12:00:00Z`),
+              condicionClimaticaId: climate?.id ?? null, observaciones: payload.observations || null },
+          })
+          if (changed.count !== 1) throw new Error('SCHEDULE_CONFLICT')
+          visitaId = planned.id
+          const plannedData = previous?.datos && typeof previous.datos === 'object' && !Array.isArray(previous.datos)
+            ? previous.datos as Record<string, unknown> : {}
+          storedCapture = { ...payload, programacion: {
+            date: planned.fecha.toISOString().slice(0, 10),
+            timeSlot: plannedData.timeSlot ?? null,
+            operationId: previous?.operationId ?? null,
+            payloadHash: previous?.payloadHash ?? null,
+          } }
+        } else {
+          const visita = await tx.visita.create({ data: {
+            familiaId: payload.familyId, usuarioResponsableId: userId, fecha: new Date(`${payload.date}T12:00:00Z`),
+            condicionClimaticaId: climate?.id ?? null, tipo: 'TECNICA', estado: payload.status,
+            observaciones: payload.observations || null,
+          } })
+          visitaId = visita.id
+        }
         if (payload.commitments.length) {
           await tx.seguimientoVisita.createMany({ data: payload.commitments.map(c => ({
-            id: String(c.id), visitaOrigenId: visita.id, texto: String(c.text),
+            id: String(c.id), visitaOrigenId: visitaId, texto: String(c.text),
             responsable: String(c.category), fechaLimite: c.due ? new Date(`${c.due}T12:00:00Z`) : null,
           })) })
         }
@@ -185,11 +238,23 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
           })
           if (updated.count !== 1) throw new Error('El compromiso anterior no está sincronizado o no corresponde a esta familia.')
         }
-        await tx.$executeRaw`
-          INSERT INTO "visita_captura" ("visita_id", "usuario_id", "operation_id", "payload_hash", "datos")
-          VALUES (${visita.id}, ${userId}, CAST(${normalizedId} AS UUID), ${hash}, CAST(${JSON.stringify(payload)} AS JSONB))
-        `
-        return visita.id
+        if (payload.scheduledVisitId) {
+          // Conservar el ID de la visita y actualizar su captura; fotografía y
+          // reintentos de realización se vinculan al nuevo operationId.
+          await tx.$executeRaw`
+            INSERT INTO "visita_captura" ("visita_id", "usuario_id", "operation_id", "payload_hash", "datos")
+            VALUES (${visitaId}, ${userId}, CAST(${normalizedId} AS UUID), ${hash}, CAST(${JSON.stringify(storedCapture)} AS JSONB))
+            ON CONFLICT ("visita_id") DO UPDATE SET
+              "operation_id" = EXCLUDED."operation_id", "payload_hash" = EXCLUDED."payload_hash",
+              "datos" = EXCLUDED."datos"
+          `
+        } else {
+          await tx.$executeRaw`
+            INSERT INTO "visita_captura" ("visita_id", "usuario_id", "operation_id", "payload_hash", "datos")
+            VALUES (${visitaId}, ${userId}, CAST(${normalizedId} AS UUID), ${hash}, CAST(${JSON.stringify(payload)} AS JSONB))
+          `
+        }
+        return visitaId
       })
       return { conflict: false, visitId: created, duplicate: false }
     }
@@ -203,6 +268,10 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
     if (!result || result.conflict) { res.status(409).json({ error: 'Identificador utilizado por otra operación.' }); return }
     res.status(result.duplicate ? 200 : 201).json({ operationId: normalizedId, accepted: true, duplicate: result.duplicate, visitId: result.visitId })
   } catch (error) {
+    if (error instanceof Error && error.message === 'SCHEDULE_CONFLICT') {
+      res.status(409).json({ error: 'La cita programada ya fue realizada, cambió de familia o corresponde a otro responsable. Actualiza la agenda antes de registrar.' })
+      return
+    }
     console.error('Error sincronizando visita:', error)
     res.status(503).json({ error: 'No se pudo guardar la visita.' })
   }
@@ -226,6 +295,35 @@ visitsRouter.patch('/agenda/:visitId', async (req: Request, res: Response) => {
     if (result.count !== 1) { res.status(404).json({ error: 'Visita programada no encontrada o ya realizada.' }); return }
     res.json({ accepted: true })
   } catch (error) { console.error('Error reprogramando visita:', error); res.status(503).json({ error: 'No se pudo reprogramar la visita.' }) }
+})
+
+// Eliminar una cita PROGRAMADA. Una visita REALIZADA no puede borrarse
+// desde la agenda: sus datos técnicos y evidencias deben preservarse.
+visitsRouter.delete('/agenda/:visitId', async (req: Request, res: Response) => {
+  if (req.get('X-Requested-With') !== 'XMLHttpRequest') { res.status(403).json({ error: 'Solicitud no autorizada.' }); return }
+  const visitId = Number(req.params.visitId)
+  if (!Number.isSafeInteger(visitId) || visitId <= 0) { res.status(400).json({ error: 'Visita inválida.' }); return }
+  try {
+    const result = await getPrismaClient().visita.deleteMany({
+      where: {
+        id: visitId,
+        usuarioResponsableId: req.session.userId!,
+        estado: 'PROGRAMADA',
+        compromisosVisita: { none: {} },
+        evaluaciones: { none: {} },
+        evidencias: { none: {} },
+        alertas: { none: {} },
+      },
+    })
+    if (result.count !== 1) {
+      res.status(404).json({ error: 'La visita programada no existe, ya fue realizada o no puedes eliminarla.' }); return
+    }
+    res.setHeader('Cache-Control', 'no-store')
+    res.json({ accepted: true })
+  } catch (error) {
+    console.error('Error eliminando visita programada:', error)
+    res.status(503).json({ error: 'No se pudo eliminar la visita programada.' })
+  }
 })
 
 // VIS-04: Consultar compromisos, incluyendo su visita de origen.

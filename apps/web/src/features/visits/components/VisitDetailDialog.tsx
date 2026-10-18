@@ -60,7 +60,8 @@ export default function VisitDetailDialog({ visit, onClose, extra }: { visit: Vi
           <h3 className="mb-2 flex items-center gap-2 font-semibold text-slate-900 dark:text-white"><Leaf size={18} className="text-brand-500"/> Evaluación técnica</h3>
           <dl><DetailLine label="Estado" value={pending ? 'Pendiente de sincronización' : visit.status === 'REALIZADA' ? 'Realizada' : 'Programada'}/>
             {visit.responsibleName && <DetailLine label="Técnico responsable" value={visit.responsibleName}/>}
-            {visit.capture?.timeSlot && <DetailLine label="Turno estimado" value={visit.capture.timeSlot === 'MANANA' ? 'Mañana' : 'Tarde'}/>}
+            {visit.capture?.programacion?.date && <DetailLine label="Fecha originalmente programada" value={dateLabel(visit.capture.programacion.date)}/>}
+            {(visit.capture?.programacion?.timeSlot ?? visit.capture?.timeSlot) && <DetailLine label="Turno programado" value={(visit.capture?.programacion?.timeSlot ?? visit.capture?.timeSlot) === 'MANANA' ? 'Mañana' : 'Tarde'}/>}
             <DetailLine label="Clima" value={visit.capture?.weather}/><DetailLine label="Cultivos" value={visit.capture?.crops.map(c => c.name).join(', ')}/>
             <DetailLine label="Recomendaciones" value={visit.capture?.recommendation}/><DetailLine label="Insumo recomendado" value={visit.capture?.treatment}/>
             <DetailLine label="Observaciones" value={visit.capture?.observations}/>

@@ -11,7 +11,7 @@ import { getOfflineData, saveOfflineData } from '@/db/offlineDb'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { saveVisitCapture, type VisitCapture, type CropCapture, type VisitPhotoFile } from '@/features/visits/services/visitService'
 import SearchableSelect, { catalogOptions } from '@/features/visits/components/SearchableSelect'
-import { getVisitFollowUps, type VisitFollowUp, type FollowUpStatus } from '@/features/visits/services/visitService'
+import { getVisitFollowUps, getVisitList, type VisitListItem, type VisitFollowUp, type FollowUpStatus } from '@/features/visits/services/visitService'
 import VisitEvidencePicker from '@/features/visits/components/VisitEvidencePicker'
 import type { FamilyListItem } from '@/features/families/types/family'
 import { crops, stages, qualities, weatherOptions, diseases, pests, damage, organicInsecticides, fertilizers, chemicalInsecticides } from '@/features/visits/data/visitCatalogs'
@@ -44,10 +44,16 @@ export default function VisitRegisterPage() {
   const [searchParams] = useSearchParams()
   const initialDate = searchParams.get('fecha')
   const initialFamily = searchParams.get('familia')
+  const initialScheduled = searchParams.get('programada')
   const [step, setStep] = useState(0)
   const [familyId, setFamilyId] = useState(initialFamily && /^\d+$/.test(initialFamily) ? initialFamily : '')
   const [date, setDate] = useState(initialDate && /^\d{4}-\d{2}-\d{2}$/.test(initialDate) ? initialDate : todayLocal)
   const [weather, setWeather] = useState('')
+  const [scheduledVisits, setScheduledVisits] = useState<VisitListItem[]>([])
+  const [scheduledVisitId, setScheduledVisitId] = useState<number | null>(null)
+  const [scheduleLoading, setScheduleLoading] = useState(true)
+  const [scheduleLocal, setScheduleLocal] = useState(false)
+  const [scheduleError, setScheduleError] = useState('')
   const [followUps, setFollowUps] = useState<VisitFollowUp[]>([])
   const [followUpLoading, setFollowUpLoading] = useState(true)
   const [followUpLocal, setFollowUpLocal] = useState(false)
@@ -98,6 +104,34 @@ export default function VisitRegisterPage() {
     return () => controller.abort()
   }, [refresh, cacheKey])
 
+  // Muestra citas PROGRAMADAS reales y permite elegir cuál se convertirá en REALIZADA.
+  // Una cita sin ID de servidor todavía debe sincronizarse antes de poder enlazarla.
+  useEffect(() => {
+    if (!usuario) { setScheduleLoading(false); return }
+    let active = true
+    setScheduleLoading(true)
+    setScheduleError('')
+    getVisitList(usuario.id).then(result => {
+      if (!active) return
+      setScheduledVisits(result.items.filter(visit => visit.status === 'PROGRAMADA'))
+      setScheduleLocal(result.local)
+    }).catch(cause => {
+      if (active) { setScheduledVisits([]); setScheduleError(cause instanceof Error ? cause.message : 'No se pudieron consultar las visitas programadas.') }
+    }).finally(() => { if (active) setScheduleLoading(false) })
+    return () => { active = false }
+  }, [usuario])
+
+  const familyScheduled = useMemo(() => scheduledVisits.filter(visit =>
+    String(visit.familyId) === familyId
+  ).sort((a, b) => a.date.localeCompare(b.date)), [scheduledVisits, familyId])
+
+  // La agenda puede pasar ?programada=ID para seleccionar una cita directamente.
+  useEffect(() => {
+    if (!initialScheduled || !/^\d+$/.test(initialScheduled) || scheduleLoading) return
+    const match = scheduledVisits.find(visit => visit.id === Number(initialScheduled) && String(visit.familyId) === familyId)
+    if (match?.id) setScheduledVisitId(match.id)
+  }, [initialScheduled, familyId, scheduleLoading, scheduledVisits])
+
   useEffect(() => {
     if (!usuario) { setFollowUpLoading(false); return }
     let active = true
@@ -135,6 +169,9 @@ export default function VisitRegisterPage() {
     if (saving || saved) return
     if (!usuario) { setError('Tu sesión no está disponible. Inicia sesión nuevamente.'); return }
     if (!selectedFamily || !date) { setError('Selecciona una familia y la fecha.'); setStep(0); return }
+    if (scheduledVisitId && !familyScheduled.some(visit => visit.id === scheduledVisitId && visit.status === 'PROGRAMADA')) {
+      setError('La cita programada seleccionada ya no está disponible. Actualiza la página y vuelve a elegir.'); setStep(0); return
+    }
     if (cropsState.some(c => !c.name || c.findings.some(f => !f.name || !f.damage))) {
       setError('Completa los cultivos y los hallazgos agregados antes de guardar.'); setStep(1); return
     }
@@ -158,6 +195,7 @@ export default function VisitRegisterPage() {
     }))
     const payload: VisitCapture = {
       familyId: Number(familyId), date, status: type, weather,
+      ...(scheduledVisitId ? { scheduledVisitId } : {}),
       checkIn: '', crops: cropsCapture, recommendation: recommendation.trim(),
       treatment, observations: observations.trim(),
       commitments: commitments.map(c => ({ id: c.id, text: c.text.trim(), due: c.due || null, category: c.category as 'Familia' | 'ONG' })),
@@ -182,10 +220,30 @@ export default function VisitRegisterPage() {
       {step === 0 && <section className={card} aria-label="Información general">
         <h2 className="mb-1 text-lg font-semibold text-slate-900 dark:text-white">¿A quién visitamos?</h2>
         <div className="grid gap-4 md:grid-cols-2">
-          <SearchableSelect id="visit-family" label="Familia" required disabled={familiesLoading} value={familyId} onChange={setFamilyId}
+          <SearchableSelect id="visit-family" label="Familia" required disabled={familiesLoading} value={familyId} onChange={value => { setFamilyId(value); setScheduledVisitId(null) }}
             placeholder={familiesLoading ? 'Cargando familias...' : 'Buscar familia o comunidad...'}
             options={familyOptions.map(f => ({ value: String(f.id), label: `${f.nombreReferencia} — ${f.comunidad.nombre}` }))} />
           <FormField id="visit-date" label="Fecha de visita" required><input id="visit-date" type="date" className={input} value={date} onChange={e => setDate(e.target.value)}/></FormField>
+          {familyId && <div className="md:col-span-2 rounded-xl border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-700 dark:bg-blue-500/10">
+            <h3 className="text-sm font-semibold text-blue-900 dark:text-blue-200">Visitas programadas de esta familia</h3>
+            <p className="mt-1 text-xs text-blue-800 dark:text-blue-300">Si esta visita corresponde a una cita previa, selecciónala. Se actualizará esa misma visita, sin crear otra.</p>
+            {scheduleLoading ? <p className="mt-3 text-sm text-gray-500">Buscando citas programadas…</p>
+            : scheduleError ? <p role="alert" className="mt-3 text-sm text-red-600">{scheduleError}. No es posible confirmar las citas hasta recuperar la conexión.</p>
+            : familyScheduled.length ? <div className="mt-3 space-y-2" role="radiogroup" aria-label="Vincular visita programada">
+              {familyScheduled.map(visit => <label key={visit.operationId ?? visit.id} className={`flex cursor-pointer items-start gap-3 rounded-lg border bg-white p-3 text-sm dark:bg-gray-900 ${scheduledVisitId === visit.id && visit.id !== null ? 'border-blue-500 ring-1 ring-blue-300' : 'border-gray-200 dark:border-gray-700'}`}>
+                <input type="radio" name="scheduled-visit" className="mt-1 accent-blue-600" checked={scheduledVisitId === visit.id && visit.id !== null} disabled={!visit.id || Boolean(visit.syncStatus && visit.syncStatus !== 'synced')} onChange={() => setScheduledVisitId(visit.id)} />
+                <span><strong className="block text-gray-900 dark:text-white">{new Date(`${visit.date}T12:00:00`).toLocaleDateString('es-GT', {day:'numeric', month:'long', year:'numeric'})}</strong>
+                  <span className="mt-1 block text-xs text-gray-600 dark:text-gray-300">{visit.capture?.timeSlot === 'TARDE' ? 'Tarde' : visit.capture?.timeSlot === 'MANANA' ? 'Mañana' : 'Sin turno'} · Responsable: {visit.responsibleName || 'Sin dato'}</span>
+                  {!visit.id && <span className="mt-1 block text-xs text-amber-700">Pendiente de sincronizar. Primero sincroniza esta cita para vincularla.</span>}
+                </span>
+              </label>)}
+              <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-gray-200 bg-white p-3 text-sm dark:border-gray-700 dark:bg-gray-900">
+                <input type="radio" name="scheduled-visit" className="accent-blue-600" checked={scheduledVisitId === null} onChange={() => setScheduledVisitId(null)}/>
+                Registrar sin vincular a una cita (visita no programada)
+              </label>
+            </div> : <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">No se encontraron visitas programadas para esta familia. Puedes registrar una visita no programada.</p>}
+            {scheduleLocal && <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">Datos de agenda almacenados localmente. Confirma la cita al recuperar conexión.</p>}
+          </div>}
           <FormField id="visit-weather" label="Condición climática"><select id="visit-weather" className={input} value={weather} onChange={e => setWeather(e.target.value)}><Options items={weatherOptions}/></select></FormField>
           <div className="md:col-span-2 rounded-xl border border-gray-200 bg-gray-50/60 p-4 dark:border-gray-700 dark:bg-gray-800/30">
             <h3 className="font-semibold text-gray-900 dark:text-white">¿Cómo le ha ido desde la última visita?</h3>
@@ -268,6 +326,7 @@ export default function VisitRegisterPage() {
           <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700"><h3 className="mb-3 font-medium text-slate-900 dark:text-white">Audio para la familia</h3><Button type="button" variant="secondary" disabled>Grabar audio</Button></div>
         </div>
         <VisitEvidencePicker photos={photos} onChange={setPhotos} disabled={saving || Boolean(saved)} />
+        {scheduledVisitId && <p className="rounded-lg bg-blue-50 p-3 text-sm text-blue-800 dark:bg-blue-500/10 dark:text-blue-200">Este registro completará la visita programada #{scheduledVisitId} (sin generar una nueva).</p>}
         <div className="flex flex-wrap items-center gap-3 rounded-xl bg-slate-50 p-4 text-sm dark:bg-slate-800/40"><strong>{selectedFamily?.nombreReferencia ?? 'Sin familia'}</strong><span>{date}</span><span>{cropsState.length} cultivo(s)</span><span>{commitments.length} compromiso(s)</span><span>{photos.length} foto(s)</span></div>
       </section>}
       {saved && <div role="status" className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">
@@ -281,7 +340,6 @@ export default function VisitRegisterPage() {
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-xs text-slate-500">Paso {step+1} de {steps.length}</span>
           {step < steps.length-1 ? <Button type="button" onClick={next} disabled={Boolean(saved)}>Siguiente →</Button> : <>
-            <Button type="button" variant="secondary" disabled={saving || Boolean(saved)} onClick={()=>void save('PROGRAMADA')}>{saving ? 'Guardando…' : 'Programar visita'}</Button>
             <Button type="button" disabled={saving || Boolean(saved)} onClick={()=>void save('REALIZADA')}>{saving ? 'Guardando…' : 'Guardar visita'}</Button>
           </>}
         </div>

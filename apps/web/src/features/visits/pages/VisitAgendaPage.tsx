@@ -1,6 +1,6 @@
 import '../visits.css'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarDays, CheckCheck, ChevronLeft, ChevronRight, ClipboardList, Clock3, Edit3, RefreshCw } from 'lucide-react'
+import { CalendarDays, CheckCheck, ChevronLeft, ChevronRight, ClipboardList, Clock3, Edit3, RefreshCw, Trash2 } from 'lucide-react'
 import { Link } from 'react-router'
 import PageHeader from '@/components/common/PageHeader'
 import Dialog from '@/components/ui/Dialog'
@@ -11,7 +11,7 @@ import { useAuth } from '@/features/auth/AuthProvider'
 import RescheduleVisitDialog from '@/features/visits/components/RescheduleVisitDialog'
 import FollowUpEditDialog from '@/features/visits/components/FollowUpEditDialog'
 import VisitDetailDialog from '@/features/visits/components/VisitDetailDialog'
-import { getVisitFollowUps, getVisitList, syncPendingVisits, type VisitFollowUp, type VisitListItem } from '@/features/visits/services/visitService'
+import { deleteScheduledVisit, getVisitFollowUps, getVisitList, syncPendingVisits, type VisitFollowUp, type VisitListItem } from '@/features/visits/services/visitService'
 
 const monthLabels = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
 const weekdays = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom']
@@ -31,6 +31,9 @@ export default function VisitAgendaPage() {
   const [error, setError] = useState('')
   const [local, setLocal] = useState(false)
   const [selected, setSelected] = useState<VisitListItem | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<VisitListItem | null>(null)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
   const [editing, setEditing] = useState<VisitFollowUp | null>(null)
   const [rescheduling, setRescheduling] = useState<VisitListItem | null>(null)
   const [slide, setSlide] = useState(0)
@@ -105,6 +108,26 @@ export default function VisitAgendaPage() {
   }
   const openFollowUp = (f: VisitFollowUp) => { setSelected(null); setEditing(f) }
   const openReschedule = (v: VisitListItem) => { setSelected(null); setRescheduling(v) }
+  const requestDelete = (v: VisitListItem) => {
+    if (v.status !== 'PROGRAMADA' || !v.id || (v.syncStatus && v.syncStatus !== 'synced')) return
+    setSelected(null)
+    setDeleteError('')
+    setDeleteTarget(v)
+  }
+  const confirmDelete = async () => {
+    if (!deleteTarget?.id || deleteBusy) return
+    setDeleteBusy(true)
+    setDeleteError('')
+    try {
+      await deleteScheduledVisit(deleteTarget.id)
+      setDeleteTarget(null)
+      await refresh()
+    } catch (cause) {
+      setDeleteError(cause instanceof Error ? cause.message : 'No se pudo eliminar la visita.')
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
   return <div className="visits-enter">
     <PageMeta title="Agenda de visitas | Viviendas León" description="Agenda y compromisos de visitas técnicas" />
     <PageHeader title="Agenda de visitas" description="" />
@@ -114,7 +137,8 @@ export default function VisitAgendaPage() {
     <div className="mb-4 flex flex-wrap items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
       <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-brand-500"/>Programada</span>
       <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-emerald-500"/>Realizada</span>
-      <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-amber-500"/>Seguimiento pendiente ({pendingCount})</span>
+      <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-amber-500"/>Seguimiento pendiente</span>
+      <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-red-500"/>No cumplido ({followups.filter(f => f.status === 'NO_CUMPLIDO').length})</span>
     </div>
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
       <section className={card} aria-label="Calendario de visitas">
@@ -139,7 +163,7 @@ export default function VisitAgendaPage() {
                   onClick={() => event.visit ? setSelected(event.visit) : event.followup && openFollowUp(event.followup)}
                   onDoubleClick={e => e.stopPropagation()}
                   title={event.kind === 'visit' ? `Ver visita: ${event.label}` : `Editar seguimiento: ${event.label}`}
-                  className={`block w-full truncate rounded-md border-l-[3px] px-1.5 py-1 text-left text-[11px] font-medium transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-brand-500 ${event.kind==='followup'?'border-amber-500 bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300':event.visit?.status==='REALIZADA'?'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300':'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-200'}`}>
+                  className={`block w-full truncate rounded-md border-l-[3px] px-1.5 py-1 text-left text-[11px] font-medium transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-brand-500 ${event.kind==='followup' ? event.followup?.status === 'NO_CUMPLIDO' ? 'border-red-500 bg-red-50 text-red-800 dark:bg-red-500/10 dark:text-red-300' : 'border-amber-500 bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300' :event.visit?.status==='REALIZADA'?'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300':'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-200'}`}>
                   {event.kind === 'followup' && <Clock3 size={10} className="mr-1 inline"/>}{event.label}
                 </button>)}
                 {daily.length > 3 && <button type="button" onClick={() => setExpandedDay(cell.key)}
@@ -164,14 +188,14 @@ export default function VisitAgendaPage() {
           }} className="custom-scrollbar max-h-[450px] min-w-0 flex-1 snap-y snap-mandatory space-y-3 overflow-y-auto overscroll-contain">
             {loading ? <p className="py-8 text-center text-sm text-gray-500">Cargando…</p> : reminders.length === 0 ? <div className="py-9 text-center text-sm text-gray-500"><CheckCheck className="mx-auto mb-2 text-emerald-500" size={27}/>No hay visitas programadas ni seguimientos abiertos.</div>
             : reminders.map(item => <article key={item.key} data-reminder className="snap-start rounded-xl border border-gray-200 bg-gray-50/30 p-3 dark:border-gray-800 dark:bg-white/5">
-              <div className="mb-2 flex items-center gap-2 text-xs font-semibold"><span className={`rounded-full px-2 py-1 ${item.type==='visit'?'bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300':'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'}`}>{item.type==='visit'?'Visita':'Seguimiento'}</span><span className={item.date && item.date<today?'text-rose-600':'text-gray-500'}>{item.date ? dateLabel(item.date) : 'Sin fecha de revisión'}{item.date && item.date<today?' · Vencido':''}</span></div>
+              <div className="mb-2 flex items-center gap-2 text-xs font-semibold"><span className={`rounded-full px-2 py-1 ${item.type==='visit' ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300' : item.followup?.status === 'NO_CUMPLIDO' ? 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'}`}>{item.type==='visit' ? 'Visita programada' : item.followup?.status === 'NO_CUMPLIDO' ? 'No cumplido' : 'Seguimiento'}</span><span className={item.date && item.date<today?'text-rose-600':'text-gray-500'}>{item.date ? dateLabel(item.date) : 'Sin fecha de revisión'}{item.date && item.date<today?' · Vencido':''}</span></div>
               <p className="text-sm font-semibold text-gray-900 dark:text-white">{item.family}</p>
               <p className="mt-1 line-clamp-3 text-sm leading-5 text-gray-600 dark:text-gray-300">{item.description}</p>
               <div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold text-brand-600 dark:text-brand-400">
                 {item.visit && <><button type="button" onClick={()=>setSelected(item.visit!)} className="hover:underline">Ver detalle →</button>
                   <button type="button" disabled={!item.visit.id || Boolean(item.visit.syncStatus && item.visit.syncStatus !== 'synced')} onClick={()=>openReschedule(item.visit!)} className="hover:underline disabled:cursor-not-allowed disabled:opacity-40">Cambiar fecha</button></>}
                 {item.followup && <button type="button" onClick={()=>openFollowUp(item.followup!)} className="inline-flex items-center gap-1 hover:underline"><Edit3 size={13}/> Editar seguimiento</button>}
-                <Link to={`/visitas/nueva?familia=${item.visit?.familyId ?? item.followup?.familyId}&fecha=${today}`} className="hover:underline">Registrar visita ↗</Link>
+                <Link to={`/visitas/nueva?familia=${item.visit?.familyId ?? item.followup?.familyId}&fecha=${today}${item.visit?.id && item.visit.status === 'PROGRAMADA' ? `&programada=${item.visit.id}` : ''}`} className="hover:underline">Registrar visita ↗</Link>
               </div>
             </article>)}
           </div>
@@ -191,7 +215,7 @@ export default function VisitAgendaPage() {
         {(expandedDay ? eventsByDate.get(expandedDay) ?? [] : []).map(event => <button type="button" key={event.key}
           onClick={() => { setExpandedDay(null); if (event.visit) setSelected(event.visit); else if (event.followup) openFollowUp(event.followup) }}
           className="flex w-full items-start gap-3 rounded-lg border border-gray-200 p-3 text-left transition hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-brand-500 dark:border-gray-700 dark:hover:bg-gray-800">
-          <span className={`mt-1 size-2.5 shrink-0 rounded-full ${event.kind==='followup'?'bg-amber-500':event.visit?.status==='REALIZADA'?'bg-emerald-500':'bg-brand-500'}`}/>
+          <span className={`mt-1 size-2.5 shrink-0 rounded-full ${event.kind==='followup' ? event.followup?.status === 'NO_CUMPLIDO' ? 'bg-red-500' : 'bg-amber-500' :event.visit?.status==='REALIZADA'?'bg-emerald-500':'bg-brand-500'}`}/>
           <span className="min-w-0"><span className="block break-words text-sm font-semibold text-gray-900 dark:text-white">{event.label}</span>
           <span className="mt-1 block text-xs text-gray-500">{event.kind==='followup'?'Seguimiento pendiente':event.visit?.status==='REALIZADA'?'Visita realizada':'Visita programada'} · Abrir detalle</span></span>
         </button>)}
@@ -206,9 +230,24 @@ export default function VisitAgendaPage() {
       </div>)}</div>}
       <div className="mt-3 flex flex-wrap gap-4">
         {selected.status === 'PROGRAMADA' && <button type="button" disabled={!selected.id} onClick={()=>openReschedule(selected)} className="text-xs font-semibold text-brand-600 hover:underline disabled:opacity-40 dark:text-brand-400">Cambiar fecha programada</button>}
-        <Link className="text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400" to={`/visitas/nueva?familia=${selected.familyId}`}>Registrar siguiente visita ↗</Link>
+        {selected.status === 'PROGRAMADA' && <button type="button" disabled={!selected.id || Boolean(selected.syncStatus && selected.syncStatus !== 'synced')} onClick={()=>requestDelete(selected)} className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:underline disabled:cursor-not-allowed disabled:opacity-40 dark:text-red-400"><Trash2 size={14}/> Eliminar visita</button>}
+        <Link className="text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400" to={`/visitas/nueva?familia=${selected.familyId}${selected.id && selected.status === 'PROGRAMADA' ? `&programada=${selected.id}` : ''}`}>Registrar siguiente visita ↗</Link>
       </div>
     </section> : undefined}/>
+    <Dialog open={Boolean(deleteTarget)} onClose={() => { if (!deleteBusy) setDeleteTarget(null) }}
+      title="Eliminar visita programada"
+      description={deleteTarget ? `${deleteTarget.familyName} · ${dateLabel(deleteTarget.date)}` : ''}
+      actions={<>
+        <Button type="button" variant="secondary" onClick={() => setDeleteTarget(null)} disabled={deleteBusy}>Cancelar</Button>
+        <Button type="button" variant="danger" onClick={() => void confirmDelete()} disabled={deleteBusy}>
+          <Trash2 size={16}/> {deleteBusy ? 'Eliminando…' : 'Sí, eliminar visita'}
+        </Button>
+      </>}>
+      <p className="text-sm leading-relaxed text-gray-700 dark:text-gray-300">
+        La cita se eliminará del calendario y de Próximas visitas. Esta acción no se puede deshacer.
+      </p>
+      {deleteError && <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">{deleteError}</p>}
+    </Dialog>
     <RescheduleVisitDialog key={rescheduling?.operationId ?? rescheduling?.id ?? 'dialog-reschedule'} visit={rescheduling} onClose={()=>setRescheduling(null)} onSaved={()=>{setRescheduling(null);void refresh()}}/>
     <FollowUpEditDialog key={editing?.id ?? 'dialog-followup'} item={editing} onClose={()=>setEditing(null)} onSaved={()=>{setEditing(null); void refresh()}} />
   </div>
