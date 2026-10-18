@@ -12,6 +12,7 @@ import { recordFailure, type RecordFailure } from '../services/familyRecord'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import type { IntegralFamilyRecord } from '../types/familyIntegral'
 import { useAuth } from '@/features/auth/AuthProvider'
+import { canWriteFamilies } from '@/features/auth/screenPermissions'
 
 type RecordState = { kind: 'loading' } | { kind: 'loaded'; family: IntegralFamilyRecord } | { kind: 'error'; failure: RecordFailure }
 
@@ -53,7 +54,7 @@ function FamilyDetailRequest({ id, onRetry }: { id: string; onRetry: () => void 
 export default function FamilyDetailPage() {
   const { id = '' } = useParams()
   const { usuario } = useAuth()
-  const canEdit = Boolean(usuario?.permisos.includes('FAMILIAS_WRITE'))
+  const canEdit = Boolean(usuario && canWriteFamilies(usuario))
   const [version, setVersion] = useState(0)
   const isOnline = useOnlineStatus()
   return <>

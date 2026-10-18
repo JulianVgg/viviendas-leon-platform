@@ -123,17 +123,18 @@ test('idempotency keys require UUID v4', () => {
   assert.equal(validIdempotencyKey('123e4567-e89b-12d3-a456-426614174000'), false)
 })
 
-test('family permission guard allows persisted write permission and denies read-only users', async () => {
-  const invoke = async (permissions) => {
+test('family permission guard allows persisted write permission and Dirección general, and denies read-only users', async () => {
+  const invoke = async (permissions, roles = []) => {
     let status
     let payload
     let continued = false
-    const guard = createFamilyPermissionGuard([FAMILY_WRITE_PERMISSION], 'Denied', async () => ({ id: 7, nombre: 'Synthetic', correo: 'synthetic@example.invalid', roles: [], permisos: permissions }))
+    const guard = createFamilyPermissionGuard([FAMILY_WRITE_PERMISSION], 'Denied', async () => ({ id: 7, nombre: 'Synthetic', correo: 'synthetic@example.invalid', roles, permisos: permissions }))
     await guard({ session: { userId: 7 } }, { status(value) { status = value; return this }, json(value) { payload = value; return this } }, () => { continued = true })
     return { status, payload, continued }
   }
   assert.deepEqual(await invoke(['SYN-FAMILIAS-READ']), { status: 403, payload: { error: { code: 'FORBIDDEN', message: 'Denied' } }, continued: false })
   assert.deepEqual(await invoke([FAMILY_WRITE_PERMISSION]), { status: undefined, payload: undefined, continued: true })
+  assert.deepEqual(await invoke([], ['Dirección general']), { status: undefined, payload: undefined, continued: true })
 })
 
 test('service also enforces minimum relations before accessing PostgreSQL', async () => {
@@ -148,12 +149,15 @@ test('family HTTP routes deny unauthenticated access independently of environmen
   const server = app.listen(0, '127.0.0.1')
   await once(server, 'listening')
   const base = `http://127.0.0.1:${server.address().port}`
+
   try {
     for (const [env, flag] of [[undefined, undefined], ['development', undefined], ['production', 'true'], ['test', 'true'], ['qa', 'false']]) {
       if (env === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = env
       if (flag === undefined) delete process.env.ENABLE_FAMILY_INTEGRAL_API; else process.env.ENABLE_FAMILY_INTEGRAL_API = flag
       for (const [path, method] of [['registro-integral', 'POST'], ['opciones/programas', 'GET'], ['1/expediente', 'GET']]) {
-        assert.equal((await fetch(`${base}/api/v1/familias/${path}`, { method })).status, 401)
+        const response = await fetch(`${base}/api/v1/familias/${path}`, { method })
+        assert.equal(response.status, 401)
+        assert.equal((await response.json()).error.code, 'UNAUTHORIZED')
       }
     }
     process.env.NODE_ENV = 'qa'

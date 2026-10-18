@@ -19,10 +19,12 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sprout,
+  UserRound,
   UsersRound,
   Wheat,
 } from 'lucide-react'
 import type { UserRole } from '@/types/roles'
+import { canViewPath, type PermissionUser } from '@/features/auth/screenPermissions'
 
 export type NavigationItem = {
   id: string
@@ -40,6 +42,7 @@ const size = 19
 const strokeWidth = 1.8
 const icons = {
   dashboard: <LayoutDashboard size={size} strokeWidth={strokeWidth} />,
+  profile: <UserRound size={size} strokeWidth={strokeWidth} />,
   families: <UsersRound size={size} strokeWidth={strokeWidth} />,
   familyList: <FileText size={size} strokeWidth={strokeWidth} />,
   familyCreate: <ClipboardPenLine size={size} strokeWidth={strokeWidth} />,
@@ -71,6 +74,7 @@ export const navigationGroups: { id: string; name: string; items: NavigationItem
     name: 'Navegación',
     items: [
       { id: 'dashboard', name: 'Dashboard', path: '/', icon: icons.dashboard, roles: ['fieldWorker', 'coordination', 'operationsDirector', 'administration', 'audit'] },
+      { id: 'profile', name: 'Mi perfil', path: '/mi-perfil', icon: icons.profile, roles: ['fieldWorker', 'coordination', 'operationsDirector', 'administration', 'audit'] },
       { id: 'families', name: 'Familias y beneficiarios', path: '/familias', icon: icons.families, roles: ['fieldWorker', 'coordination'], children: [
         { id: 'families-list', name: 'Listado de familias', path: '/familias', icon: icons.familyList, exact: true },
         { id: 'families-create', name: 'Registrar familias', path: '/familias/nueva', icon: icons.familyCreate, exact: true },
@@ -120,4 +124,20 @@ export function navigationForRole(role: UserRole) {
   return navigationGroups
     .map((group) => ({ ...group, items: group.items.filter((item) => item.roles?.includes(role)) }))
     .filter((group) => group.items.length > 0)
+}
+
+export function navigationForAccount(usuario: PermissionUser) {
+  return navigationGroups
+    .map((grupo) => ({
+      ...grupo,
+      items: grupo.items.flatMap((item) => {
+        if (!item.children) return canViewPath(usuario, item.path) ? [item] : []
+        const children = item.children.filter((child) => canViewPath(usuario, child.path))
+        const puedeVerGeneral = canViewPath(usuario, item.path)
+        if (!children.length && !puedeVerGeneral) return []
+        // Sin permiso de la vista general, tampoco se ofrece el enlace "Vista general".
+        return [{ ...item, path: puedeVerGeneral ? item.path : '', children }]
+      }),
+    }))
+    .filter((grupo) => grupo.items.length > 0)
 }

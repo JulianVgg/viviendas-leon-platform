@@ -3,10 +3,11 @@ import { createIntegralFamily, findIntegralFamily, IntegralFamilyValidationError
 import { validateIntegralFamilyInput } from './families-integral.validation.js'
 import { parseFamilyId } from './families.validation.js'
 import { requireAuth } from '../auth/auth.middleware.js'
+import { requireFamilyWrite } from './families.authorization.js'
 
 export const integralFamiliesRouter = Router()
 
-integralFamiliesRouter.post('/registro-integral', requireAuth, async (req, res) => {
+integralFamiliesRouter.post('/registro-integral', requireAuth, requireFamilyWrite, async (req, res) => {
   const result = validateIntegralFamilyInput(req.body)
   if (!result.data) return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Revisa los datos del expediente.', details: result.details } })
   try {

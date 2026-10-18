@@ -1,5 +1,6 @@
 import type { RequestHandler } from 'express'
 import { getAuthenticatedUser, type AuthenticatedUser } from '../auth/auth.service.js'
+import { esDireccionGeneral } from '../auth/require-permission.middleware.js'
 
 export const FAMILY_WRITE_PERMISSION = 'FAMILIAS_WRITE'
 
@@ -11,7 +12,7 @@ export function createFamilyPermissionGuard(
   return async (req, res, next) => {
     try {
       const user = await getUser(req.session.userId!)
-      if (!user || !codes.some((code) => user.permisos.includes(code))) {
+      if (!user || (!esDireccionGeneral(user.roles) && !codes.some((code) => user.permisos.includes(code)))) {
         return res.status(403).json({ error: { code: 'FORBIDDEN', message } })
       }
       next()

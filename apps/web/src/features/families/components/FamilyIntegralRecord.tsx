@@ -9,6 +9,7 @@ import Alert from '@/components/ui/Alert'
 import Button from '@/components/ui/Button'
 import Dialog from '@/components/ui/Dialog'
 import { useAuth } from '@/features/auth/AuthProvider'
+import { canWriteFamilies } from '@/features/auth/screenPermissions'
 import { familyStateVariant, formatRecordDate } from '../services/familyRecord'
 import { FamilyApiError, updateFamilyMemberState } from '../services/familyService'
 import type { FamilyMemberRecord, IntegralFamilyRecord } from '../types/familyIntegral'
@@ -25,7 +26,7 @@ const textClass = 'block min-w-0 max-w-80 whitespace-pre-wrap break-words [overf
 
 export default function FamilyIntegralRecord({ family, onRefresh }: { family: IntegralFamilyRecord; onRefresh: () => Promise<IntegralFamilyRecord> }) {
   const { usuario } = useAuth()
-  const canManage = Boolean(usuario?.permisos.includes('FAMILIAS_WRITE'))
+  const canManage = Boolean(usuario && canWriteFamilies(usuario))
   const isOnline = useOnlineStatus()
   const instanceId = useId()
   const [selected, setSelected] = useState<RecordTab>('general')

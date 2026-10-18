@@ -15,6 +15,7 @@ import { fetchFamiliesWithOffline } from '@/features/families/services/familyOff
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import type { FamilyListResponse } from '@/features/families/types/family'
 import { useAuth } from '@/features/auth/AuthProvider'
+import { canWriteFamilies } from '@/features/auth/screenPermissions'
 
 const PAGE_SIZE = 20
 
@@ -48,7 +49,7 @@ function formatDate(value: string | null) {
 
 export default function FamilyListPage({ mode = 'list' }: { mode?: 'list' | 'edit' }) {
   const { usuario } = useAuth()
-  const canEdit = Boolean(usuario?.permisos.includes('FAMILIAS_WRITE'))
+  const canEdit = Boolean(usuario && canWriteFamilies(usuario))
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')

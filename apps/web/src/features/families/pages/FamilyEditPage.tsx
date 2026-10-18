@@ -10,6 +10,7 @@ import Card, { CardBody, CardHeader } from '@/components/ui/Card'
 import FormField, { formControlClassName } from '@/components/ui/FormField'
 import LoadingState from '@/components/ui/LoadingState'
 import { useAuth } from '@/features/auth/AuthProvider'
+import { canWriteFamilies } from '@/features/auth/screenPermissions'
 import { FamilyApiError, fetchCommunities, fetchIntegralFamily, updateFamily } from '../services/familyService'
 import type { CommunityOption } from '../types/family'
 import type { IntegralFamilyRecord } from '../types/familyIntegral'
@@ -22,7 +23,7 @@ export default function FamilyEditPage() {
   const { id = '' } = useParams()
   const navigate = useNavigate()
   const { usuario } = useAuth()
-  const authorized = Boolean(usuario?.permisos.includes('FAMILIAS_WRITE'))
+  const authorized = Boolean(usuario && canWriteFamilies(usuario))
   const isOnline = useOnlineStatus()
   const [family, setFamily] = useState<IntegralFamilyRecord>()
   const [communities, setCommunities] = useState<CommunityOption[]>([])
