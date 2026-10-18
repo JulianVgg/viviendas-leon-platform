@@ -7,6 +7,7 @@ import ModulePage from '@/components/common/ModulePage'
 import FamilyListPage from '@/features/families/pages/FamilyListPage'
 import FamilyCreatePage from '@/features/families/pages/FamilyCreatePage'
 import FamilyDetailPage from '@/features/families/pages/FamilyDetailPage'
+import FamilyEditPage from '@/features/families/pages/FamilyEditPage'
 
 import OfflineTestPage from '@/features/offline/pages/OfflineTestPage'
 import OfflineOperationsTestPage from '@/features/offline/pages/OfflineOperationsTestPage'
@@ -161,6 +162,16 @@ export default function AppRoutes() {
           <Route
             path="familias/nueva"
             element={<FamilyCreatePage />}
+          />
+
+          <Route
+            path="familias/editar"
+            element={<FamilyListPage mode="edit" />}
+          />
+
+          <Route
+            path="familias/:id/editar"
+            element={<FamilyEditPage />}
           />
 
           <Route

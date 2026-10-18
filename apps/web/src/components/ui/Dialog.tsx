@@ -51,7 +51,7 @@ export default function Dialog({ open, title, description, onClose, children, ac
     aria-modal="true"
     aria-labelledby={titleId}
     aria-describedby={description ? descriptionId : undefined}
-    className={cn('custom-scrollbar fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-3xl border border-slate-200 bg-white p-0 text-slate-700 shadow-theme-lg backdrop:bg-slate-950/50 backdrop:backdrop-blur-xs dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300', className)}
+    className={cn('dialog-enter custom-scrollbar fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-3xl border border-slate-200 bg-white p-0 text-slate-700 shadow-theme-lg backdrop:bg-slate-950/50 backdrop:backdrop-blur-xs dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300', className)}
     onCancel={(event) => { event.preventDefault(); onClose() }}
     onClick={(event) => {
       if (event.target !== event.currentTarget) return

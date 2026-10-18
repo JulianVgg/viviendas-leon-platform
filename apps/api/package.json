@@ -9,6 +9,7 @@
     "db:seed": "prisma db seed --config prisma7.config.ts",
     "test": "npm run build && node --test tests/families-integral.test.mjs",
     "test:qa": "npm run build && node --test tests/families-integral.qa.test.mjs",
+    "test:management:qa": "npm run build && node --test tests/families-management.qa.test.mjs",
     "postinstall": "prisma skills sync || exit 0"
   },
   "description": "",

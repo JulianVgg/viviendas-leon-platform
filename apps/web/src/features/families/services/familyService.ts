@@ -1,5 +1,5 @@
 import type { CommunityOption, FamilyCreateInput, FamilyDetail, FamilyListParams, FamilyListResponse } from '@/features/families/types/family'
-import type { FamilyProgramOption, IntegralFamilyInput, IntegralFamilyRecord } from '@/features/families/types/familyIntegral'
+import type { FamilyMemberInput, FamilyMemberRecord, FamilyMemberUpdateInput, FamilyProgramOption, FamilyUpdateInput, IntegralFamilyInput, IntegralFamilyRecord } from '@/features/families/types/familyIntegral'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL?.trim() || '/api'
 
@@ -20,7 +20,7 @@ export class FamilyApiError extends Error {
 async function requestData<T>(path: string, options: RequestInit = {}): Promise<T> {
   const base = API_BASE_URL.endsWith('/') ? API_BASE_URL : `${API_BASE_URL}/`
   const url = new URL(path, new URL(base, window.location.origin))
-  const response = await fetch(url, { credentials: 'same-origin', ...options, headers: { Accept: 'application/json', ...(options.body ? { 'Content-Type': 'application/json' } : {}) } })
+  const response = await fetch(url, { credentials: 'same-origin', ...options, headers: { Accept: 'application/json', ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers } })
   const payload = await response.json().catch(() => null)
   if (!response.ok) {
     throw new FamilyApiError(payload?.error?.message ?? 'No fue posible completar la operación.', response.status, payload?.error?.details ?? [], payload?.error?.code)
@@ -58,6 +58,26 @@ export async function createIntegralFamily(input: IntegralFamilyInput) {
   const record = await requestData<IntegralFamilyRecord>('v1/familias/registro-integral', { method: 'POST', body: JSON.stringify(input) })
   if (!Number.isInteger(record?.id) || record.id <= 0) throw new Error('No se pudo confirmar el identificador generado.')
   return record
+}
+
+export function updateFamily(id: number, input: FamilyUpdateInput) {
+  return requestData<IntegralFamilyRecord>(`v1/familias/${id}`, { method: 'PATCH', body: JSON.stringify(input) })
+}
+
+export function createFamilyMember(id: number, input: FamilyMemberInput, idempotencyKey: string) {
+  return requestData<FamilyMemberRecord>(`v1/familias/${id}/integrantes`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
+    body: JSON.stringify(input),
+  })
+}
+
+export function updateFamilyMember(familyId: number, memberId: number, input: FamilyMemberUpdateInput) {
+  return requestData<FamilyMemberRecord>(`v1/familias/${familyId}/integrantes/${memberId}`, { method: 'PATCH', body: JSON.stringify(input) })
+}
+
+export function updateFamilyMemberState(familyId: number, memberId: number, activo: boolean, version: string) {
+  return requestData<FamilyMemberRecord>(`v1/familias/${familyId}/integrantes/${memberId}/estado`, { method: 'PATCH', body: JSON.stringify({ activo, version }) })
 }
 
 export async function fetchFamilies(

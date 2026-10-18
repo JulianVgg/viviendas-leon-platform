@@ -14,7 +14,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElem
   return <button
     ref={ref}
     className={cn(
-      'inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-transparent text-sm font-medium shadow-theme-xs transition-[background-color,border-color,color,box-shadow,transform] duration-200 ease-out motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand-500/20 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-gray-900',
+      'inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-transparent text-sm font-medium shadow-theme-xs transition-[background-color,border-color,color,box-shadow,transform] duration-200 ease-out enabled:hover:-translate-y-0.5 enabled:hover:shadow-theme-sm enabled:active:translate-y-0 enabled:active:scale-[0.98] motion-reduce:transform-none motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand-500/20 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:focus-visible:ring-offset-gray-900',
       size === 'sm' && 'min-h-9 px-4 py-2',
       size === 'md' && 'px-5 py-2.5',
       size === 'lg' && 'min-h-12 px-6 py-3',

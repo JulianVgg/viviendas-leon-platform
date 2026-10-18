@@ -280,6 +280,7 @@ async function main() {
   const rolCoordinador = await ensure(prisma.rol, { nombre: "Rol Sintético Coordinador" }, { nombre: "Rol Sintético Coordinador", descripcion: "Rol ficticio para pruebas de coordinación.", activo: true });
   const rolAuditor = await ensure(prisma.rol, { nombre: "Rol Sintético Auditor" }, { nombre: "Rol Sintético Auditor", descripcion: "Rol ficticio para pruebas de auditoría.", activo: true });
   const permisoFamilias = await ensure(prisma.permiso, { codigo: "SYN-FAMILIAS-READ" }, { codigo: "SYN-FAMILIAS-READ", nombre: "Consultar familias sintéticas", descripcion: "Permiso ficticio." });
+  const permisoFamiliasWrite = await ensure(prisma.permiso, { codigo: "FAMILIAS_WRITE" }, { codigo: "FAMILIAS_WRITE", nombre: "Editar familias e integrantes", descripcion: "Permite actualizar información familiar y administrar sus integrantes." });
   const permisoAgricultura = await ensure(prisma.permiso, { codigo: "SYN-AGRICULTURA-WRITE" }, { codigo: "SYN-AGRICULTURA-WRITE", nombre: "Gestionar agricultura sintética", descripcion: "Permiso ficticio." });
   const permisoVisitas = await ensure(prisma.permiso, { codigo: "SYN-VISITAS-WRITE" }, { codigo: "SYN-VISITAS-WRITE", nombre: "Gestionar visitas sintéticas", descripcion: "Permiso ficticio." });
   const permisoReportes = await ensure(prisma.permiso, { codigo: "SYN-REPORTES-READ" }, { codigo: "SYN-REPORTES-READ", nombre: "Consultar reportes sintéticos", descripcion: "Permiso ficticio." });
@@ -306,6 +307,7 @@ async function main() {
   await prisma.rolPermiso.upsert({ where: { rolId_permisoId: { rolId: rolTecnico.id, permisoId: permisoAgricultura.id } }, update: {}, create: { rolId: rolTecnico.id, permisoId: permisoAgricultura.id } });
   await prisma.rolPermiso.upsert({ where: { rolId_permisoId: { rolId: rolTecnico.id, permisoId: permisoVisitas.id } }, update: {}, create: { rolId: rolTecnico.id, permisoId: permisoVisitas.id } });
   await prisma.rolPermiso.upsert({ where: { rolId_permisoId: { rolId: rolCoordinador.id, permisoId: permisoFamilias.id } }, update: {}, create: { rolId: rolCoordinador.id, permisoId: permisoFamilias.id } });
+  await prisma.rolPermiso.upsert({ where: { rolId_permisoId: { rolId: rolCoordinador.id, permisoId: permisoFamiliasWrite.id } }, update: {}, create: { rolId: rolCoordinador.id, permisoId: permisoFamiliasWrite.id } });
   await prisma.rolPermiso.upsert({ where: { rolId_permisoId: { rolId: rolAuditor.id, permisoId: permisoReportes.id } }, update: {}, create: { rolId: rolAuditor.id, permisoId: permisoReportes.id } });
 
   const climaSoleado = await ensure(prisma.condicionClimatica, { nombre: "Clima Sintético Soleado" }, { nombre: "Clima Sintético Soleado", activo: true });

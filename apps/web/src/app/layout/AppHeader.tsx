@@ -82,7 +82,6 @@ export default function AppHeader() {
             <p className="text-sm font-semibold text-slate-800 dark:text-white">{usuario?.nombre ?? 'Usuario'}</p>
             <p className="mt-1 break-all text-xs text-slate-500 dark:text-slate-400">{usuario?.correo}</p>
             <p className="mt-2 text-xs font-medium text-slate-600 dark:text-slate-300">{usuario?.roles.join(', ') || 'Sin rol asignado'}</p>
-
             <Link to="/mi-perfil" onClick={() => setUserOpen(false)} className="layout-menu-item layout-menu-inactive layout-focus mt-3">Mi perfil</Link>
             {canViewSettings && <Link to="/administracion/configuracion" onClick={() => setUserOpen(false)} className="layout-menu-item layout-menu-inactive layout-focus mt-3">Configuración de cuenta</Link>}
             <Button type="button" variant="ghost" size="sm" className="mt-3 w-full" onClick={() => { setUserOpen(false); roleButtonRef.current?.focus() }}>Cerrar menú</Button>

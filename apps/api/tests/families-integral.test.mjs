@@ -5,7 +5,8 @@ import { randomBytes } from 'node:crypto'
 import pg from 'pg'
 import { validateIntegralFamilyInput } from '../dist/modules/families/families-integral.validation.js'
 import { createIntegralFamily, IntegralFamilyValidationError } from '../dist/modules/families/families-integral.service.js'
-import express from 'express'
+import { validIdempotencyKey, validateFamilyUpdate, validateMemberCreate, validateMemberState, validateMemberUpdate } from '../dist/modules/families/families-management.validation.js'
+import { createFamilyPermissionGuard, FAMILY_WRITE_PERMISSION } from '../dist/modules/families/families.authorization.js'
 
 // Test-process configuration BEFORE importing the app: never inherit a real DB.
 // No .env loader, no production defaults, and no PostgreSQL connections allowed.
@@ -22,7 +23,6 @@ const denyDatabaseConnection = () => {
 pg.Pool.prototype.connect = denyDatabaseConnection
 pg.Client.prototype.connect = denyDatabaseConnection
 const { app } = await import('../dist/app.js')
-const { familiesRouter } = await import('../dist/modules/families/families.routes.js')
 after(() => {
   pg.Pool.prototype.connect = originalPoolConnect
   pg.Client.prototype.connect = originalClientConnect
@@ -96,6 +96,47 @@ test('rejects non-object bodies', () => {
   for (const body of [null, [], false, 'text', 123]) assert.equal(validateIntegralFamilyInput(body).details[0].field, 'body')
 })
 
+test('family update distinguishes absent fields, null values and forbidden fields', () => {
+  const validUpdate = validateFamilyUpdate({ version: '123', observaciones: null, fechaIngreso: null })
+  assert.deepEqual(validUpdate.details, [])
+  assert.equal(validUpdate.data.observaciones, null)
+  assert.equal(validUpdate.data.fechaIngreso, null)
+  for (const body of [{ version: '123' }, { version: '123', estado: 'RETIRADA' }, { version: 'bad', nombreReferencia: 'Familia' }]) {
+    assert.equal(validateFamilyUpdate(body).data, undefined)
+  }
+})
+
+test('member management validates create, partial update and state-only contracts', () => {
+  const create = validateMemberCreate({ nombreCompleto: ' Persona ', fechaNacimiento: '2000-02-29', sexo: 'Femenino', parentesco: 'Madre', telefono: null, observaciones: '' })
+  assert.deepEqual(create.details, [])
+  assert.equal(create.data.nombreCompleto, 'Persona')
+  assert.equal(create.data.observaciones, null)
+  assert.equal(validateMemberCreate({ ...create, familiaId: 1 }).data, undefined)
+  assert.deepEqual(validateMemberUpdate({ version: '5', telefono: null }).details, [])
+  assert.equal(validateMemberUpdate({ version: '5', activo: false }).data, undefined)
+  assert.deepEqual(validateMemberState({ version: '8', activo: false }).details, [])
+  assert.equal(validateMemberState({ version: '8', activo: false, observaciones: 'x' }).data, undefined)
+})
+
+test('idempotency keys require UUID v4', () => {
+  assert.equal(validIdempotencyKey('123e4567-e89b-42d3-a456-426614174000'), true)
+  assert.equal(validIdempotencyKey('123e4567-e89b-12d3-a456-426614174000'), false)
+})
+
+test('family permission guard allows persisted write permission and Dirección general, and denies read-only users', async () => {
+  const invoke = async (permissions, roles = []) => {
+    let status
+    let payload
+    let continued = false
+    const guard = createFamilyPermissionGuard([FAMILY_WRITE_PERMISSION], 'Denied', async () => ({ id: 7, nombre: 'Synthetic', correo: 'synthetic@example.invalid', roles, permisos: permissions }))
+    await guard({ session: { userId: 7 } }, { status(value) { status = value; return this }, json(value) { payload = value; return this } }, () => { continued = true })
+    return { status, payload, continued }
+  }
+  assert.deepEqual(await invoke(['SYN-FAMILIAS-READ']), { status: 403, payload: { error: { code: 'FORBIDDEN', message: 'Denied' } }, continued: false })
+  assert.deepEqual(await invoke([FAMILY_WRITE_PERMISSION]), { status: undefined, payload: undefined, continued: true })
+  assert.deepEqual(await invoke([], ['Dirección general']), { status: undefined, payload: undefined, continued: true })
+})
+
 test('service also enforces minimum relations before accessing PostgreSQL', async () => {
   const input = validateIntegralFamilyInput(valid()).data
   for (const key of ['integrantes', 'programas']) {
@@ -103,141 +144,33 @@ test('service also enforces minimum relations before accessing PostgreSQL', asyn
   }
 })
 
-
-
-test('API requires authentication and preserves health endpoint', async () => {
+test('family HTTP routes deny unauthenticated access independently of environment flags', async () => {
+  const previous = { node: process.env.NODE_ENV, flag: process.env.ENABLE_FAMILY_INTEGRAL_API }
   const server = app.listen(0, '127.0.0.1')
   await once(server, 'listening')
   const base = `http://127.0.0.1:${server.address().port}`
 
   try {
-    const paths = [
-      ['registro-integral', 'POST'],
-      ['opciones/programas', 'GET'],
-      ['1/expediente', 'GET'],
-    ]
-
-    for (const [path, method] of paths) {
-      const response = await fetch(
-        `${base}/api/v1/familias/${path}`,
-        { method },
-      )
-
-      assert.equal(response.status, 401)
-      assert.equal((await response.json()).error.code, 'UNAUTHORIZED')
-    }
-
-    const health = await fetch(`${base}/api/health`)
-    assert.equal(health.status, 200)
-    assert.deepEqual(await health.json(), {
-      status: 'ok',
-      service: 'viviendas-leon-api',
-    })
-  } finally {
-    await new Promise((resolve) => server.close(resolve))
-  }
-})
-
-test('family routes preserve feature gates and validation independently', async () => {
-  const previous = {
-    node: process.env.NODE_ENV,
-    flag: process.env.ENABLE_FAMILY_INTEGRAL_API,
-  }
-
-  // Aplicación aislada para comprobar solamente las rutas de familias.
-  // No modifica la aplicación real ni desactiva su autenticación.
-  const testApp = express()
-  testApp.use(express.json())
-  testApp.use('/api/v1/familias', familiesRouter)
-
-  const server = testApp.listen(0, '127.0.0.1')
-  await once(server, 'listening')
-  const base = `http://127.0.0.1:${server.address().port}`
-
-  try {
-    const environments = [
-      [undefined, undefined],
-      ['development', undefined],
-      ['production', 'true'],
-      ['test', 'true'],
-      ['qa', 'false'],
-    ]
-
-    for (const [env, flag] of environments) {
-      if (env === undefined) {
-        delete process.env.NODE_ENV
-      } else {
-        process.env.NODE_ENV = env
-      }
-
-      if (flag === undefined) {
-        delete process.env.ENABLE_FAMILY_INTEGRAL_API
-      } else {
-        process.env.ENABLE_FAMILY_INTEGRAL_API = flag
-      }
-
-      for (const [path, method] of [
-        ['registro-integral', 'POST'],
-        ['opciones/programas', 'GET'],
-        ['1/expediente', 'GET'],
-      ]) {
-        const response = await fetch(
-          `${base}/api/v1/familias/${path}`,
-          { method },
-        )
-
-        assert.equal(response.status, 404)
+    for (const [env, flag] of [[undefined, undefined], ['development', undefined], ['production', 'true'], ['test', 'true'], ['qa', 'false']]) {
+      if (env === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = env
+      if (flag === undefined) delete process.env.ENABLE_FAMILY_INTEGRAL_API; else process.env.ENABLE_FAMILY_INTEGRAL_API = flag
+      for (const [path, method] of [['registro-integral', 'POST'], ['opciones/programas', 'GET'], ['1/expediente', 'GET']]) {
+        const response = await fetch(`${base}/api/v1/familias/${path}`, { method })
+        assert.equal(response.status, 401)
+        assert.equal((await response.json()).error.code, 'UNAUTHORIZED')
       }
     }
-
     process.env.NODE_ENV = 'qa'
     process.env.ENABLE_FAMILY_INTEGRAL_API = 'true'
-
-    const invalid = await fetch(
-      `${base}/api/v1/familias/registro-integral`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...valid(),
-          integrantes: [],
-        }),
-      },
-    )
-
-    assert.equal(invalid.status, 400)
-    assert.equal(
-      (await invalid.json()).error.details[0].field,
-      'integrantes',
-    )
-
-    const invalidId = await fetch(
-      `${base}/api/v1/familias/invalid/expediente`,
-    )
-    assert.equal(invalidId.status, 400)
-
-    const invalidBody = await fetch(
-      `${base}/api/v1/familias`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: '{}',
-      },
-    )
-    assert.equal(invalidBody.status, 400)
+    const invalid = await fetch(`${base}/api/v1/familias/registro-integral`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...valid(), integrantes: [] }) })
+    assert.equal(invalid.status, 401)
+    assert.equal((await fetch(`${base}/api/v1/familias/invalid/expediente`)).status, 401)
+    assert.equal((await fetch(`${base}/api/v1/familias`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).status, 401)
+    assert.equal((await fetch(`${base}/api/v1/familias`)).status, 401)
+    assert.deepEqual(await (await fetch(`${base}/api/health`)).json(), { status: 'ok', service: 'viviendas-leon-api' })
   } finally {
     await new Promise((resolve) => server.close(resolve))
-
-    if (previous.node === undefined) {
-      delete process.env.NODE_ENV
-    } else {
-      process.env.NODE_ENV = previous.node
-    }
-
-    if (previous.flag === undefined) {
-      delete process.env.ENABLE_FAMILY_INTEGRAL_API
-    } else {
-      process.env.ENABLE_FAMILY_INTEGRAL_API = previous.flag
-    }
+    if (previous.node === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previous.node
+    if (previous.flag === undefined) delete process.env.ENABLE_FAMILY_INTEGRAL_API; else process.env.ENABLE_FAMILY_INTEGRAL_API = previous.flag
   }
 })

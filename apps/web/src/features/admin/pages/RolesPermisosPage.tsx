@@ -17,7 +17,9 @@ const GRUPOS: Grupo[] = [
   { titulo: 'Familias y beneficiarios', pantallas: [
     { codigo: 'PANTALLA_FAMILIAS', nombre: 'Listado de familias', ruta: '/familias' },
     { codigo: 'PANTALLA_FAMILIAS_CREAR', nombre: 'Registrar familia', ruta: '/familias/nueva' },
+    { codigo: 'PANTALLA_FAMILIAS_EDITAR', nombre: 'Editar familias', ruta: '/familias/editar' },
     { codigo: 'PANTALLA_FAMILIAS_DETALLE', nombre: 'Detalle de familia', ruta: '/familias/:id' },
+    { codigo: 'FAMILIAS_WRITE', nombre: 'Escritura de familias e integrantes', ruta: 'Operaciones API', especial: true },
   ] },
   { titulo: 'Gestión agrícola', pantallas: [
     { codigo: 'PANTALLA_GESTION_AGRICOLA', nombre: 'Vista general de gestión agrícola', ruta: '/gestion-agricola' },
@@ -429,7 +431,7 @@ export default function RolesPermisosPage() {
         </form>
       </details>
 
-      <p className="text-sm text-amber-700 dark:text-amber-300">Esta pantalla registra los permisos en PostgreSQL. Todavía falta conectar los códigos PANTALLA_* a las rutas frontend y a las autorizaciones del servidor para que las casillas hagan cumplir el acceso. El selector «Rol simulado» no cambia permisos reales.</p>
+      <p className="text-sm text-amber-700 dark:text-amber-300">Esta pantalla registra permisos reales en PostgreSQL. La visibilidad de una pantalla no sustituye las validaciones de autorización que protegen las operaciones del servidor.</p>
     </div>
   )
 }

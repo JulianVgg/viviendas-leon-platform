@@ -25,6 +25,7 @@ export type IntegralFamilyInput = FamilyCreateInput & {
 /** JSON contract: dates use the same UTC ISO serialization as the basic API. */
 export type IntegralFamilyRecord = {
   id: number
+  version: string
   nombreReferencia: string
   fechaIngreso: string | null
   estado: string
@@ -32,6 +33,7 @@ export type IntegralFamilyRecord = {
   comunidad: { id: number; nombre: string; municipio: { id: number; nombre: string } }
   integrantes: Array<Omit<FamilyMemberInput, 'fechaNacimiento'> & {
     id: number
+    version: string
     fechaNacimiento: string | null
     activo: boolean
   }>

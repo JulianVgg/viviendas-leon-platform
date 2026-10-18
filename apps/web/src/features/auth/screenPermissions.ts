@@ -12,6 +12,7 @@ export const SCREEN_PERMISSIONS: Record<string, string> = {
   '/mi-perfil': 'PANTALLA_MI_PERFIL',
   '/familias': 'PANTALLA_FAMILIAS',
   '/familias/nueva': 'PANTALLA_FAMILIAS_CREAR',
+  '/familias/editar': 'PANTALLA_FAMILIAS_EDITAR',
   '/gestion-agricola': 'PANTALLA_GESTION_AGRICOLA',
   '/gestion-agricola/huertos': 'PANTALLA_HUERTOS',
   '/gestion-agricola/cultivos': 'PANTALLA_CULTIVOS',
@@ -46,8 +47,13 @@ export const SCREEN_PERMISSIONS: Record<string, string> = {
 
 export function permissionForPath(path: string): string | null {
   if (SCREEN_PERMISSIONS[path]) return SCREEN_PERMISSIONS[path]
+  if (/^\/familias\/[^/]+\/editar$/.test(path)) return 'PANTALLA_FAMILIAS_EDITAR'
   if (/^\/familias\/[^/]+$/.test(path)) return 'PANTALLA_FAMILIAS_DETALLE'
   return null
+}
+
+export function canWriteFamilies(usuario: PermissionUser): boolean {
+  return isDireccionGeneral(usuario) || usuario.permisos.includes('FAMILIAS_WRITE')
 }
 
 export function canViewPath(usuario: PermissionUser, path: string): boolean {
@@ -56,5 +62,6 @@ export function canViewPath(usuario: PermissionUser, path: string): boolean {
   const codigo = permissionForPath(path)
   if (!codigo) return false
   if (path.startsWith('/offline-') && !import.meta.env.DEV) return false
+  if ((path === '/familias/nueva' || path === '/familias/editar' || /^\/familias\/[^/]+\/editar$/.test(path)) && !canWriteFamilies(usuario)) return false
   return usuario.permisos.includes(codigo)
 }

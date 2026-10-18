@@ -1,20 +1,13 @@
 import { Router } from 'express'
-import type { RequestHandler } from 'express'
 import { createIntegralFamily, findIntegralFamily, IntegralFamilyValidationError, listFamilyProgramOptions } from './families-integral.service.js'
 import { validateIntegralFamilyInput } from './families-integral.validation.js'
 import { parseFamilyId } from './families.validation.js'
+import { requireAuth } from '../auth/auth.middleware.js'
+import { requireFamilyWrite } from './families.authorization.js'
 
 export const integralFamiliesRouter = Router()
 
-// Fail closed, even when the flag is accidentally enabled in production.
-const requireIntegralEnvironment: RequestHandler = (_req, res, next) => {
-  if (!['development', 'qa'].includes(process.env.NODE_ENV ?? '') || process.env.ENABLE_FAMILY_INTEGRAL_API !== 'true') {
-    return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'La ruta solicitada no está disponible.' } })
-  }
-  next()
-}
-
-integralFamiliesRouter.post('/registro-integral', requireIntegralEnvironment, async (req, res) => {
+integralFamiliesRouter.post('/registro-integral', requireAuth, requireFamilyWrite, async (req, res) => {
   const result = validateIntegralFamilyInput(req.body)
   if (!result.data) return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Revisa los datos del expediente.', details: result.details } })
   try {
@@ -27,7 +20,7 @@ integralFamiliesRouter.post('/registro-integral', requireIntegralEnvironment, as
   }
 })
 
-integralFamiliesRouter.get('/opciones/programas', requireIntegralEnvironment, async (_req, res) => {
+integralFamiliesRouter.get('/opciones/programas', requireAuth, async (_req, res) => {
   try {
     return res.json({ data: await listFamilyProgramOptions() })
   } catch (error) {
@@ -36,7 +29,7 @@ integralFamiliesRouter.get('/opciones/programas', requireIntegralEnvironment, as
   }
 })
 
-integralFamiliesRouter.get('/:id/expediente', requireIntegralEnvironment, async (req, res) => {
+integralFamiliesRouter.get('/:id/expediente', requireAuth, async (req, res) => {
   const id = parseFamilyId(req.params.id)
   if (id === null) return res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'El identificador no es válido.', details: [{ field: 'id', message: 'El identificador debe ser un entero positivo válido.' }] } })
   try {

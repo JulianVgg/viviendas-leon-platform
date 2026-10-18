@@ -192,7 +192,7 @@ test('Brave integral record / real read-only family requests / isolated PostgreS
       await clickTab(2)
       assert.ok((await panelText()).includes('Sin programas asociados'))
     })
-    await t.test('real 400 and distinct missing/disabled 404 contracts', async () => {
+    await t.test('real 400/404 contracts and feature flag cannot replace authorization', async () => {
       for (const [id, title] of [['invalid', 'Identificador no válido'], ['2147483647', 'Expediente inexistente']]) {
         await navigate(`/familias/${id}`)
         await wait(`document.body.innerText.includes(${JSON.stringify(title)})`)
@@ -200,7 +200,8 @@ test('Brave integral record / real read-only family requests / isolated PostgreS
       process.env.ENABLE_FAMILY_INTEGRAL_API = 'false'
       try {
         await navigate(`/familias/${multiple.id}`)
-        await wait("document.body.innerText.includes('Servicio integral deshabilitado')")
+        await ready()
+        assert.equal(await evaluate("document.querySelector('[aria-label=\"Identificación del expediente\"]') !== null"), true)
       } finally { process.env.ENABLE_FAMILY_INTEGRAL_API = 'true' }
     })
     await t.test('real induced 500 and real expired session before the integral GET', async () => {

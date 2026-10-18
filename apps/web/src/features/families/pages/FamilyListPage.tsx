@@ -14,6 +14,8 @@ import LoadingState from '@/components/ui/LoadingState'
 import { fetchFamiliesWithOffline } from '@/features/families/services/familyOfflineService'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import type { FamilyListResponse } from '@/features/families/types/family'
+import { useAuth } from '@/features/auth/AuthProvider'
+import { canWriteFamilies } from '@/features/auth/screenPermissions'
 
 const PAGE_SIZE = 20
 
@@ -45,7 +47,9 @@ function formatDate(value: string | null) {
   }).format(new Date(value))
 }
 
-export default function FamilyListPage() {
+export default function FamilyListPage({ mode = 'list' }: { mode?: 'list' | 'edit' }) {
+  const { usuario } = useAuth()
+  const canEdit = Boolean(usuario && canWriteFamilies(usuario))
   const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
@@ -123,7 +127,7 @@ export default function FamilyListPage() {
     <Link
       key={family.id}
       to={`/familias/${family.id}`}
-      className="layout-focus inline-flex min-w-48 max-w-80 flex-col gap-1 rounded-md whitespace-normal text-brand-600 hover:text-brand-700 dark:text-brand-300 dark:hover:text-brand-100"
+      className="layout-focus inline-flex min-w-48 max-w-80 flex-col gap-1 rounded-md whitespace-normal text-brand-600 transition-colors hover:text-brand-700 motion-reduce:transition-none dark:text-brand-300 dark:hover:text-brand-100"
     >
       <span className="font-semibold leading-5">{family.nombreReferencia}</span>
       <span className="text-xs text-slate-500 dark:text-slate-400">Expediente #{family.id}</span>
@@ -135,23 +139,24 @@ export default function FamilyListPage() {
     <Badge key={`status-${family.id}`} variant={statusBadgeVariant(family.estado)}>
       {humanizeStatus(family.estado)}
     </Badge>,
+    ...(mode === 'edit' ? [canEdit ? <Link key={`edit-${family.id}`} to={`/familias/${family.id}/editar`} className="layout-focus inline-flex min-h-9 items-center justify-center rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600">Editar</Link> : <span key={`edit-${family.id}`} className="text-xs text-gray-500">Sin permiso</span>] : []),
   ]) ?? []
 
   return (
     <>
       <PageMeta
-        title="Familias y beneficiarios | Viviendas León Guatemala"
-        description="Consulta de familias beneficiarias registradas en la plataforma."
+        title={`${mode === 'edit' ? 'Seleccionar familia' : 'Familias y beneficiarios'} | Viviendas León Guatemala`}
+        description={mode === 'edit' ? 'Selección de un expediente familiar existente.' : 'Consulta de familias beneficiarias registradas en la plataforma.'}
       />
       <PageHeader
-        title="Familias y beneficiarios"
-        description="Consulta las familias registradas y localízalas por nombre, integrante, comunidad o programa."
-        actions={<Link to="/familias/nueva" className="layout-focus inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs transition-colors hover:bg-brand-600 motion-reduce:transition-none"><span aria-hidden="true" className="text-lg leading-none">+</span>Registrar familia</Link>}
+        title={mode === 'edit' ? 'Seleccionar familia' : 'Familias y beneficiarios'}
+        description={mode === 'edit' ? 'Busca una familia y abre su formulario de edición autorizado.' : 'Consulta las familias registradas y localízalas por nombre, integrante, comunidad o programa.'}
+        actions={mode === 'list' ? <Link to="/familias/nueva" className="layout-focus inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs transition-[background-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-theme-sm active:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"><span aria-hidden="true" className="text-lg leading-none">+</span>Registrar familia</Link> : <Link to="/familias" className="layout-focus inline-flex min-h-11 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-theme-xs transition-colors hover:bg-gray-50 motion-reduce:transition-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700">Volver al listado</Link>}
       />
 
       <ComponentCard
-        title="Listado de familias"
-        description="Consulta los registros y abre un expediente para ver su información."
+        title={mode === 'edit' ? 'Familias disponibles' : 'Listado de familias'}
+         description={mode === 'edit' ? 'Usa la acción Editar para actualizar la información general de una familia.' : 'Consulta los registros y abre un expediente para ver su información.'}
         actions={!loading && !error && result ? <Badge>{result.pagination.total} {result.pagination.total === 1 ? 'familia' : 'familias'}</Badge> : undefined}
       >
         {dataOrigin === 'cache' && (
@@ -226,7 +231,7 @@ export default function FamilyListPage() {
         {!loading && !error && result && result.pagination.total > 0 && (
           <>
             {result.data.length > 0 && <DataTableContainer
-              columns={['Familia', 'Comunidad', 'Programas', 'Integrantes', 'Fecha de ingreso', 'Estado']}
+               columns={['Familia', 'Comunidad', 'Programas', 'Integrantes', 'Fecha de ingreso', 'Estado', ...(mode === 'edit' ? ['Acción'] : [])]}
               rows={rows}
               caption="Familias y beneficiarios registrados"
             />}
