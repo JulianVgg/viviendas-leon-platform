@@ -1,9 +1,33 @@
 import assert from 'node:assert/strict'
-import { test } from 'node:test'
+import { after, test } from 'node:test'
 import { once } from 'node:events'
+import { randomBytes } from 'node:crypto'
+import pg from 'pg'
 import { validateIntegralFamilyInput } from '../dist/modules/families/families-integral.validation.js'
-import { app } from '../dist/app.js'
 import { createIntegralFamily, IntegralFamilyValidationError } from '../dist/modules/families/families-integral.service.js'
+import express from 'express'
+
+// Test-process configuration BEFORE importing the app: never inherit a real DB.
+// No .env loader, no production defaults, and no PostgreSQL connections allowed.
+process.env.DATABASE_URL = 'postgresql://unit_test:unused@127.0.0.1:1/unit_test'
+process.env.SESSION_SECRET = randomBytes(48).toString('hex')
+process.env.NODE_ENV = 'test'
+let databaseConnectionAttempts = 0
+const originalPoolConnect = pg.Pool.prototype.connect
+const originalClientConnect = pg.Client.prototype.connect
+const denyDatabaseConnection = () => {
+  databaseConnectionAttempts++
+  throw new Error('Unit tests must not connect to PostgreSQL')
+}
+pg.Pool.prototype.connect = denyDatabaseConnection
+pg.Client.prototype.connect = denyDatabaseConnection
+const { app } = await import('../dist/app.js')
+const { familiesRouter } = await import('../dist/modules/families/families.routes.js')
+after(() => {
+  pg.Pool.prototype.connect = originalPoolConnect
+  pg.Client.prototype.connect = originalClientConnect
+  assert.equal(databaseConnectionAttempts, 0, 'Unit suite unexpectedly attempted database access')
+})
 
 const valid = () => ({ nombreReferencia: ' QA FAMILY ', comunidadId: 1, integrantes: [{ nombreCompleto: ' QA PERSON ' }], programas: [{ programaId: 1 }] })
 
@@ -79,30 +103,141 @@ test('service also enforces minimum relations before accessing PostgreSQL', asyn
   }
 })
 
-test('HTTP gates fail closed and leave basic health/validation unchanged', async () => {
-  const previous = { node: process.env.NODE_ENV, flag: process.env.ENABLE_FAMILY_INTEGRAL_API }
+
+
+test('API requires authentication and preserves health endpoint', async () => {
   const server = app.listen(0, '127.0.0.1')
   await once(server, 'listening')
   const base = `http://127.0.0.1:${server.address().port}`
+
   try {
-    for (const [env, flag] of [[undefined, undefined], ['development', undefined], ['production', 'true'], ['test', 'true'], ['qa', 'false']]) {
-      if (env === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = env
-      if (flag === undefined) delete process.env.ENABLE_FAMILY_INTEGRAL_API; else process.env.ENABLE_FAMILY_INTEGRAL_API = flag
-      for (const [path, method] of [['registro-integral', 'POST'], ['opciones/programas', 'GET'], ['1/expediente', 'GET']]) {
-        assert.equal((await fetch(`${base}/api/v1/familias/${path}`, { method })).status, 404)
-      }
+    const paths = [
+      ['registro-integral', 'POST'],
+      ['opciones/programas', 'GET'],
+      ['1/expediente', 'GET'],
+    ]
+
+    for (const [path, method] of paths) {
+      const response = await fetch(
+        `${base}/api/v1/familias/${path}`,
+        { method },
+      )
+
+      assert.equal(response.status, 401)
+      assert.equal((await response.json()).error.code, 'UNAUTHORIZED')
     }
-    process.env.NODE_ENV = 'qa'
-    process.env.ENABLE_FAMILY_INTEGRAL_API = 'true'
-    const invalid = await fetch(`${base}/api/v1/familias/registro-integral`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...valid(), integrantes: [] }) })
-    assert.equal(invalid.status, 400)
-    assert.equal((await invalid.json()).error.details[0].field, 'integrantes')
-    assert.equal((await fetch(`${base}/api/v1/familias/invalid/expediente`)).status, 400)
-    assert.equal((await fetch(`${base}/api/v1/familias`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })).status, 400)
-    assert.deepEqual(await (await fetch(`${base}/api/health`)).json(), { status: 'ok', service: 'viviendas-leon-api' })
+
+    const health = await fetch(`${base}/api/health`)
+    assert.equal(health.status, 200)
+    assert.deepEqual(await health.json(), {
+      status: 'ok',
+      service: 'viviendas-leon-api',
+    })
   } finally {
     await new Promise((resolve) => server.close(resolve))
-    if (previous.node === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previous.node
-    if (previous.flag === undefined) delete process.env.ENABLE_FAMILY_INTEGRAL_API; else process.env.ENABLE_FAMILY_INTEGRAL_API = previous.flag
+  }
+})
+
+test('family routes preserve feature gates and validation independently', async () => {
+  const previous = {
+    node: process.env.NODE_ENV,
+    flag: process.env.ENABLE_FAMILY_INTEGRAL_API,
+  }
+
+  // Aplicación aislada para comprobar solamente las rutas de familias.
+  // No modifica la aplicación real ni desactiva su autenticación.
+  const testApp = express()
+  testApp.use(express.json())
+  testApp.use('/api/v1/familias', familiesRouter)
+
+  const server = testApp.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const base = `http://127.0.0.1:${server.address().port}`
+
+  try {
+    const environments = [
+      [undefined, undefined],
+      ['development', undefined],
+      ['production', 'true'],
+      ['test', 'true'],
+      ['qa', 'false'],
+    ]
+
+    for (const [env, flag] of environments) {
+      if (env === undefined) {
+        delete process.env.NODE_ENV
+      } else {
+        process.env.NODE_ENV = env
+      }
+
+      if (flag === undefined) {
+        delete process.env.ENABLE_FAMILY_INTEGRAL_API
+      } else {
+        process.env.ENABLE_FAMILY_INTEGRAL_API = flag
+      }
+
+      for (const [path, method] of [
+        ['registro-integral', 'POST'],
+        ['opciones/programas', 'GET'],
+        ['1/expediente', 'GET'],
+      ]) {
+        const response = await fetch(
+          `${base}/api/v1/familias/${path}`,
+          { method },
+        )
+
+        assert.equal(response.status, 404)
+      }
+    }
+
+    process.env.NODE_ENV = 'qa'
+    process.env.ENABLE_FAMILY_INTEGRAL_API = 'true'
+
+    const invalid = await fetch(
+      `${base}/api/v1/familias/registro-integral`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...valid(),
+          integrantes: [],
+        }),
+      },
+    )
+
+    assert.equal(invalid.status, 400)
+    assert.equal(
+      (await invalid.json()).error.details[0].field,
+      'integrantes',
+    )
+
+    const invalidId = await fetch(
+      `${base}/api/v1/familias/invalid/expediente`,
+    )
+    assert.equal(invalidId.status, 400)
+
+    const invalidBody = await fetch(
+      `${base}/api/v1/familias`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      },
+    )
+    assert.equal(invalidBody.status, 400)
+  } finally {
+    await new Promise((resolve) => server.close(resolve))
+
+    if (previous.node === undefined) {
+      delete process.env.NODE_ENV
+    } else {
+      process.env.NODE_ENV = previous.node
+    }
+
+    if (previous.flag === undefined) {
+      delete process.env.ENABLE_FAMILY_INTEGRAL_API
+    } else {
+      process.env.ENABLE_FAMILY_INTEGRAL_API = previous.flag
+    }
   }
 })
