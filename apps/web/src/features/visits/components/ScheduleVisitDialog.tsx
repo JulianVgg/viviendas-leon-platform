@@ -18,6 +18,10 @@ export default function ScheduleVisitDialog({ date, onClose, onSaved }: {
   onSaved: () => void
 }) {
   const { usuario } = useAuth()
+  // Mostrar el nombre completo del responsable autenticado (no el nombre de su rol).
+  const nombreResponsable = [usuario?.nombre?.trim(), usuario?.apellido?.trim()]
+    .filter(Boolean)
+    .join(' ')
   const [families, setFamilies] = useState<FamilyListItem[]>([])
   const [familyId, setFamilyId] = useState('')
   const [scheduledDate, setScheduledDate] = useState('')
@@ -98,8 +102,8 @@ export default function ScheduleVisitDialog({ date, onClose, onSaved }: {
       </div>
       <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm dark:border-gray-700 dark:bg-gray-800/40">
         <p className="font-medium text-gray-800 dark:text-gray-200">Responsable</p>
-        <p className="mt-1 text-gray-600 dark:text-gray-300">{usuario?.nombre ?? 'No hay una sesión autenticada'}</p>
-        <p className="mt-1 text-xs text-gray-500">Se asignará automáticamente al usuario de la sesión. El servidor verifica esta identidad.</p>
+        <p className="mt-1 font-medium text-gray-800 dark:text-gray-100">{nombreResponsable || 'No hay una sesión autenticada'}</p>
+        {usuario && <p className="mt-1 text-xs text-gray-500">Rol: {usuario.roles.join(', ') || 'Sin rol asignado'}</p>}
       </div>
       {success && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">{success}</p>}
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">{error}</p>}

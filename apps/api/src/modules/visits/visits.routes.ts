@@ -6,15 +6,18 @@ import { Router, raw, type Request, type Response } from 'express'
 import { getPrismaClient } from '../../config/prisma.js'
 import { requireAuth } from '../auth/auth.middleware.js'
 import { getAuthenticatedUser } from '../auth/auth.service.js'
+import { esDireccionGeneral } from '../auth/require-permission.middleware.js'
 
 export const visitsRouter = Router()
 visitsRouter.use(requireAuth)
 visitsRouter.use(async (req, res, next) => {
   try {
     const user = await getAuthenticatedUser(req.session.userId!)
-    const allowed = req.method === 'GET'
-      ? ['SYN-VISITAS-WRITE','VISITAS_READ','VISITAS_WRITE'].some(p => user?.permisos.includes(p))
-      : ['SYN-VISITAS-WRITE','VISITAS_WRITE'].some(p => user?.permisos.includes(p))
+    const allowed =
+      esDireccionGeneral(user?.roles ?? []) ||
+      (req.method === 'GET'
+        ? ['SYN-VISITAS-WRITE', 'VISITAS_READ', 'VISITAS_WRITE'].some(p => user?.permisos.includes(p))
+        : ['SYN-VISITAS-WRITE', 'VISITAS_WRITE'].some(p => user?.permisos.includes(p)))
     if (!allowed) { res.status(403).json({ error: 'No tienes permiso para gestionar visitas.' }); return }
     next()
   } catch (error) { next(error) }
