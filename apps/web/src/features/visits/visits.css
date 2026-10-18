@@ -33,3 +33,12 @@ dialog.visit-detail-modal::backdrop {
 @media (prefers-reduced-motion: reduce) {
   dialog.visit-detail-modal[open], dialog.visit-detail-modal::backdrop { animation: none; }
 }
+
+/* Edición de seguimientos: misma profundidad visual del detalle fotográfico. */
+dialog.visit-followup-modal::backdrop {
+  background: rgba(15, 23, 42, .55);
+  backdrop-filter: blur(7px);
+  -webkit-backdrop-filter: blur(7px);
+}
+dialog.visit-followup-modal[open] { animation: visit-modal-show 260ms cubic-bezier(.2,.8,.25,1) both; }
+@media (prefers-reduced-motion: reduce) { dialog.visit-followup-modal[open] { animation: none; } }
