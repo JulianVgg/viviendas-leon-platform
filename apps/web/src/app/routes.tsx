@@ -32,6 +32,7 @@ import MiPerfilPage from '@/features/profile/pages/MiPerfilPage'
 // AUTH-04: Administración de usuarios, roles y permisos
 import UsuariosPage from '@/features/admin/pages/UsuariosPage'
 import RolesPermisosPage from '@/features/admin/pages/RolesPermisosPage'
+import CommunitiesPage from '@/features/catalogs/pages/CommunitiesPage'
 import DirectoraRoute from '@/features/auth/components/DirectoraRoute'
 
 const module = (
@@ -318,6 +319,9 @@ export default function AppRoutes() {
               ['Sección', 'Estado'],
             )}
           />
+
+          {/* FAM-06: Comunidades (Dirección general y Coordinación autorizada) */}
+          <Route path="administracion/comunidades" element={<CommunitiesPage />} />
 
           {/* AUTH-04: Acceso exclusivo de Directora */}
           <Route element={<DirectoraRoute />}>
