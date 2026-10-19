@@ -34,6 +34,7 @@ export const SCREEN_PERMISSIONS: Record<string, string> = {
   '/reportes/alertas': 'PANTALLA_ALERTAS',
   '/administracion': 'PANTALLA_ADMINISTRACION',
   '/administracion/comunidades': 'PANTALLA_COMUNIDADES',
+  '/administracion/municipios': 'PANTALLA_MUNICIPIOS',
   '/administracion/usuarios': 'PANTALLA_USUARIOS',
   '/administracion/roles-permisos': 'PANTALLA_ROLES_PERMISOS',
   '/administracion/configuracion': 'PANTALLA_CONFIGURACION',
@@ -59,6 +60,10 @@ export function canWriteFamilies(usuario: PermissionUser): boolean {
 
 export function canWriteCommunities(usuario: PermissionUser): boolean {
   return isDireccionGeneral(usuario) || usuario.permisos.includes('COMUNIDADES_WRITE')
+}
+
+export function canWriteMunicipalities(usuario: PermissionUser): boolean {
+  return isDireccionGeneral(usuario) || usuario.permisos.includes('MUNICIPIOS_WRITE')
 }
 
 export function canViewPath(usuario: PermissionUser, path: string): boolean {

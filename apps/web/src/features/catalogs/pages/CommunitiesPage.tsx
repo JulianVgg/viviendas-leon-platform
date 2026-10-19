@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router'
 import { MapPin, Pencil, Plus, RefreshCcw, Search } from 'lucide-react'
 import PageMeta from '@/components/common/PageMeta'
 import PageHeader from '@/components/common/PageHeader'
@@ -92,6 +93,7 @@ export default function CommunitiesPage() {
         setLoading(true); setError(''); setSuccess('')
         void refresh().catch((cause: unknown) => setError(cause instanceof Error ? cause.message : 'Error al actualizar.')).finally(() => setLoading(false))
       }}><RefreshCcw size={16} /> Actualizar</Button>
+      {usuario && canViewPath(usuario, '/administracion/municipios') && <Link to="/administracion/municipios" className="inline-flex min-h-11 items-center rounded-lg border border-gray-300 px-4 text-sm font-medium text-gray-700 dark:border-gray-700 dark:text-gray-200">Administrar municipios</Link>}
       {canWrite && <Button disabled={!isOnline || !municipalities.length} onClick={() => { setEditing(null); setDialogOpen(true); setError(''); setSuccess('') }}><Plus size={18} /> Nueva comunidad</Button>}
     </>} />
     {!isOnline && <div className="mb-4"><Alert variant="warning" title="Sin conexión">Se requiere conexión para administrar comunidades.</Alert></div>}
