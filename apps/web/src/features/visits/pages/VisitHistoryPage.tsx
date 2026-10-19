@@ -86,7 +86,7 @@ export default function VisitHistoryPage() {
   const getFor = (row: VisitListItem) => followUpsByVisit.get(row.operationId ?? `visit-${row.id}`) ?? []
   const visible = rows.filter(row => {
     const term = search.trim().toLocaleLowerCase('es')
-    if (term && !`${row.familyName} ${row.community}`.toLocaleLowerCase('es').includes(term)) return false
+    if (term && !`${row.familyName} ${row.community} ${row.responsibleName ?? ''}`.toLocaleLowerCase('es').includes(term)) return false
     if (filter === 'PENDIENTES') return row.syncStatus === 'pending' || row.syncStatus === 'syncing' || row.syncStatus === 'failed'
     if (filter === 'PROGRAMADA' || filter === 'REALIZADA') return row.status === filter
     if (filter === 'INCUMPLIDOS') return nonComplianceCount(row, getFor(row)) > 0
@@ -112,12 +112,12 @@ export default function VisitHistoryPage() {
     <section className={card} aria-label="Registro de visitas">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 p-5 dark:border-gray-800"><h2 className="font-semibold text-gray-900 dark:text-white">Registro de visitas</h2><Button size="sm" variant="secondary" type="button" onClick={() => void refresh()} disabled={loading}><RefreshCw size={15} /> Actualizar</Button></header>
       <div className="grid gap-3 p-5 md:grid-cols-[1fr_240px]">
-        <label className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 dark:border-gray-700 dark:bg-gray-900"><Search size={17} className="text-gray-400" /><input aria-label="Buscar por familia o comunidad" value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar familia o comunidad" className="h-11 min-w-0 flex-1 bg-transparent text-sm text-gray-800 outline-none dark:text-white" /></label>
+        <label className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 dark:border-gray-700 dark:bg-gray-900"><Search size={17} className="text-gray-400" /><input aria-label="Buscar por familia, comunidad o responsable" value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar familia, comunidad o responsable" className="h-11 min-w-0 flex-1 bg-transparent text-sm text-gray-800 outline-none dark:text-white" /></label>
         <select aria-label="Filtrar por estado" value={filter} onChange={e => setFilter(e.target.value)} className="h-11 rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white">
           <option value="TODAS">Todos los estados</option><option value="REALIZADA">Realizadas</option><option value="PROGRAMADA">Programadas</option><option value="INCUMPLIDOS">Con compromisos no cumplidos</option><option value="PENDIENTES">Pendientes de sincronizar</option>
         </select>
       </div>
-      <div className="overflow-x-auto"><table className="w-full min-w-[810px] text-left text-sm"><thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500 dark:bg-gray-800/40"><tr><th className="px-5 py-3">Familia</th><th className="px-5 py-3">Comunidad</th><th className="px-5 py-3">Fecha</th><th className="px-5 py-3">Estado de visita</th><th className="px-5 py-3">Seguimientos</th><th className="px-5 py-3">Detalle</th></tr></thead>
+      <div className="overflow-x-auto"><table className="w-full min-w-[950px] text-left text-sm"><thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500 dark:bg-gray-800/40"><tr><th className="px-5 py-3">Familia</th><th className="px-5 py-3">Comunidad</th><th className="px-5 py-3">Fecha</th><th className="px-5 py-3">Responsable</th><th className="px-5 py-3">Estado de visita</th><th className="px-5 py-3">Seguimientos</th><th className="px-5 py-3">Detalle</th></tr></thead>
         <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
           {visible.map(row => {
             const key = row.operationId ?? `visit-${row.id}`
@@ -128,6 +128,7 @@ export default function VisitHistoryPage() {
               <td className="px-5 py-4 font-medium text-gray-900 dark:text-white">{row.familyName}</td>
               <td className="px-5 py-4">{row.community}</td>
               <td className="px-5 py-4">{dateLabel(row.date)}</td>
+              <td className="px-5 py-4">{row.responsibleName ?? (row.responsibleUserId === usuario?.id ? [usuario?.nombre, usuario?.apellido].filter(Boolean).join(' ') : '—')}</td>
               <td className="px-5 py-4"><span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${visitStatusColor(row)}`}>{statusName(row)}</span></td>
               <td className="px-5 py-4"><div className="flex flex-wrap gap-1.5">
                 {notCompleted > 0 && <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700 dark:bg-red-500/10 dark:text-red-300">No cumplido ({notCompleted})</span>}

@@ -41,6 +41,10 @@ export default function VisitAgendaPage() {
   const [expandedDay, setExpandedDay] = useState<string | null>(null)
   const carousel = useRef<HTMLDivElement>(null)
   const today = dateKey(new Date())
+  // VIS-05: Dirección puede consultar todos los eventos. Las modificaciones
+  // de una visita o compromiso ajeno permanecen reservadas a su responsable.
+  const canManageVisit = (visit: VisitListItem) => visit.responsibleUserId === usuario?.id
+  const canManageFollowUp = (followup: VisitFollowUp) => followup.responsibleUserId === usuario?.id
 
   const refresh = useCallback(async () => {
     if (!usuario) { setLoading(false); return }
@@ -109,7 +113,7 @@ export default function VisitAgendaPage() {
   const openFollowUp = (f: VisitFollowUp) => { setSelected(null); setEditing(f) }
   const openReschedule = (v: VisitListItem) => { setSelected(null); setRescheduling(v) }
   const requestDelete = (v: VisitListItem) => {
-    if (v.status !== 'PROGRAMADA' || !v.id || (v.syncStatus && v.syncStatus !== 'synced')) return
+    if (!canManageVisit(v) || v.status !== 'PROGRAMADA' || !v.id || (v.syncStatus && v.syncStatus !== 'synced')) return
     setSelected(null)
     setDeleteError('')
     setDeleteTarget(v)
@@ -162,7 +166,7 @@ export default function VisitAgendaPage() {
                 {daily.slice(0,3).map(event => <button key={event.key} type="button"
                   onClick={() => event.visit ? setSelected(event.visit) : event.followup && openFollowUp(event.followup)}
                   onDoubleClick={e => e.stopPropagation()}
-                  title={event.kind === 'visit' ? `Ver visita: ${event.label}` : `Editar seguimiento: ${event.label}`}
+                  title={event.kind === 'visit' ? `Ver visita: ${event.label}` : `Ver seguimiento: ${event.label}`}
                   className={`block w-full truncate rounded-md border-l-[3px] px-1.5 py-1 text-left text-[11px] font-medium transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-brand-500 ${event.kind==='followup' ? event.followup?.status === 'NO_CUMPLIDO' ? 'border-red-500 bg-red-50 text-red-800 dark:bg-red-500/10 dark:text-red-300' : 'border-amber-500 bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300' :event.visit?.status==='REALIZADA'?'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300':'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-200'}`}>
                   {event.kind === 'followup' && <Clock3 size={10} className="mr-1 inline"/>}{event.label}
                 </button>)}
@@ -193,9 +197,9 @@ export default function VisitAgendaPage() {
               <p className="mt-1 line-clamp-3 text-sm leading-5 text-gray-600 dark:text-gray-300">{item.description}</p>
               <div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold text-brand-600 dark:text-brand-400">
                 {item.visit && <><button type="button" onClick={()=>setSelected(item.visit!)} className="hover:underline">Ver detalle →</button>
-                  <button type="button" disabled={!item.visit.id || Boolean(item.visit.syncStatus && item.visit.syncStatus !== 'synced')} onClick={()=>openReschedule(item.visit!)} className="hover:underline disabled:cursor-not-allowed disabled:opacity-40">Cambiar fecha</button></>}
-                {item.followup && <button type="button" onClick={()=>openFollowUp(item.followup!)} className="inline-flex items-center gap-1 hover:underline"><Edit3 size={13}/> Editar seguimiento</button>}
-                <Link to={`/visitas/nueva?familia=${item.visit?.familyId ?? item.followup?.familyId}&fecha=${today}${item.visit?.id && item.visit.status === 'PROGRAMADA' ? `&programada=${item.visit.id}` : ''}`} className="hover:underline">Registrar visita ↗</Link>
+                  {canManageVisit(item.visit) && <button type="button" disabled={!item.visit.id || Boolean(item.visit.syncStatus && item.visit.syncStatus !== 'synced')} onClick={()=>openReschedule(item.visit!)} className="hover:underline disabled:cursor-not-allowed disabled:opacity-40">Cambiar fecha</button>}</>}
+                {item.followup && <button type="button" onClick={()=>openFollowUp(item.followup!)} className="inline-flex items-center gap-1 hover:underline"><Edit3 size={13}/> {canManageFollowUp(item.followup) ? 'Editar seguimiento' : 'Ver seguimiento'}</button>}
+                {item.visit ? (canManageVisit(item.visit) && <Link to={`/visitas/nueva?familia=${item.visit.familyId}&fecha=${today}${item.visit.id && item.visit.status === 'PROGRAMADA' ? `&programada=${item.visit.id}` : ''}`} className="hover:underline">Registrar visita ↗</Link>) : (item.followup && canManageFollowUp(item.followup) && <Link to={`/visitas/nueva?familia=${item.followup.familyId}&fecha=${today}`} className="hover:underline">Registrar visita ↗</Link>)}
               </div>
             </article>)}
           </div>
@@ -226,12 +230,12 @@ export default function VisitAgendaPage() {
       <h3 className="mb-3 font-semibold text-gray-900 dark:text-white">Seguimientos de esta familia</h3>
       {detailsFollowUps.length===0 ? <p className="text-sm text-gray-500">Sin compromisos pendientes.</p> : <div className="space-y-2">{detailsFollowUps.map(f=><div key={f.id} className="rounded-lg bg-gray-50 p-3 text-sm dark:bg-gray-800">
         <p className="break-words text-gray-800 dark:text-gray-200">{f.text}</p><p className="mt-1 text-xs text-gray-500">{f.status==='CUMPLIDO'?'Cumplido':f.status==='NO_CUMPLIDO'?'No cumplido':'Pendiente'}{f.due?` · ${dateLabel(f.due)}`:''}</p>
-        <button type="button" onClick={()=>openFollowUp(f)} className="mt-2 text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400">Editar seguimiento →</button>
+        <button type="button" onClick={()=>openFollowUp(f)} className="mt-2 text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400">{canManageFollowUp(f) ? 'Editar seguimiento →' : 'Ver seguimiento →'}</button>
       </div>)}</div>}
       <div className="mt-3 flex flex-wrap gap-4">
-        {selected.status === 'PROGRAMADA' && <button type="button" disabled={!selected.id} onClick={()=>openReschedule(selected)} className="text-xs font-semibold text-brand-600 hover:underline disabled:opacity-40 dark:text-brand-400">Cambiar fecha programada</button>}
-        {selected.status === 'PROGRAMADA' && <button type="button" disabled={!selected.id || Boolean(selected.syncStatus && selected.syncStatus !== 'synced')} onClick={()=>requestDelete(selected)} className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:underline disabled:cursor-not-allowed disabled:opacity-40 dark:text-red-400"><Trash2 size={14}/> Eliminar visita</button>}
-        <Link className="text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400" to={`/visitas/nueva?familia=${selected.familyId}${selected.id && selected.status === 'PROGRAMADA' ? `&programada=${selected.id}` : ''}`}>Registrar siguiente visita ↗</Link>
+        {canManageVisit(selected) && selected.status === 'PROGRAMADA' && <button type="button" disabled={!selected.id} onClick={()=>openReschedule(selected)} className="text-xs font-semibold text-brand-600 hover:underline disabled:opacity-40 dark:text-brand-400">Cambiar fecha programada</button>}
+        {canManageVisit(selected) && selected.status === 'PROGRAMADA' && <button type="button" disabled={!selected.id || Boolean(selected.syncStatus && selected.syncStatus !== 'synced')} onClick={()=>requestDelete(selected)} className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:underline disabled:cursor-not-allowed disabled:opacity-40 dark:text-red-400"><Trash2 size={14}/> Eliminar visita</button>}
+        {canManageVisit(selected) && <Link className="text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400" to={`/visitas/nueva?familia=${selected.familyId}${selected.id && selected.status === 'PROGRAMADA' ? `&programada=${selected.id}` : ''}`}>Registrar siguiente visita ↗</Link>}
       </div>
     </section> : undefined}/>
     <Dialog open={Boolean(deleteTarget)} onClose={() => { if (!deleteBusy) setDeleteTarget(null) }}
@@ -249,6 +253,6 @@ export default function VisitAgendaPage() {
       {deleteError && <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">{deleteError}</p>}
     </Dialog>
     <RescheduleVisitDialog key={rescheduling?.operationId ?? rescheduling?.id ?? 'dialog-reschedule'} visit={rescheduling} onClose={()=>setRescheduling(null)} onSaved={()=>{setRescheduling(null);void refresh()}}/>
-    <FollowUpEditDialog key={editing?.id ?? 'dialog-followup'} item={editing} onClose={()=>setEditing(null)} onSaved={()=>{setEditing(null); void refresh()}} />
+    <FollowUpEditDialog key={editing?.id ?? 'dialog-followup'} item={editing} readOnly={Boolean(editing && !canManageFollowUp(editing))} onClose={()=>setEditing(null)} onSaved={()=>{setEditing(null); void refresh()}} />
   </div>
 }

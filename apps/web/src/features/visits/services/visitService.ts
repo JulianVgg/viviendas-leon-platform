@@ -7,7 +7,7 @@ export const MAX_VISIT_PHOTOS = 4
 export const MAX_VISIT_PHOTO_BYTES = 2 * 1024 * 1024
 export type FollowUpStatus = 'PENDIENTE' | 'CUMPLIDO' | 'NO_CUMPLIDO'
 export type VisitTimeSlot = 'MANANA' | 'TARDE'
-export type VisitFollowUp = { id: string; sourceVisitId: number | null; familyId: number; familyName: string; community: string; date: string; text: string; category: 'Familia' | 'ONG'; due: string | null; status: FollowUpStatus; observation?: string | null; local?: boolean }
+export type VisitFollowUp = { id: string; sourceVisitId: number | null; responsibleUserId?: number; familyId: number; familyName: string; community: string; date: string; text: string; category: 'Familia' | 'ONG'; due: string | null; status: FollowUpStatus; observation?: string | null; local?: boolean }
 export type FollowUpReview = { id: string; status: FollowUpStatus }
 export type VisitPhotoFile = { id: string; name: string; blob: Blob }
 export type VisitEvidence = { id: number; name: string; url: string }
@@ -29,7 +29,7 @@ export type VisitCapture = {
 }
 type OwnedVisitCapture = { ownerId: number; familyName: string; community: string; capture: VisitCapture; photos?: VisitPhotoFile[] }
 export type VisitListItem = {
-  id: number | null; operationId: string | null; date: string; status: string; responsibleName?: string
+  id: number | null; operationId: string | null; date: string; status: string; responsibleName?: string; responsibleUserId?: number
   familyId: number; familyName: string; community: string
   capture: VisitCapture | null; evidences?: VisitEvidence[]; localPhotos?: VisitPhotoFile[]
   syncStatus?: 'pending' | 'syncing' | 'failed' | 'synced'
@@ -75,7 +75,7 @@ export async function getVisitList(userId: number): Promise<{ items: VisitListIt
   const extras = candidates.filter(o => !syncedIds.has(o.id) && (local || o.status !== 'synced')).map(o => {
     const p = o.payload as OwnedVisitCapture
     return {
-      id: null, operationId: o.id, date: p.capture.date, status: p.capture.status,
+      id: null, operationId: o.id, date: p.capture.date, status: p.capture.status, responsibleUserId: userId,
       familyId: p.capture.familyId, familyName: p.familyName, community: p.community,
       capture: p.capture, localPhotos: p.photos, syncStatus: o.status,
     } satisfies VisitListItem
@@ -165,7 +165,7 @@ export async function getVisitFollowUps(userId: number): Promise<{ items: VisitF
       for (const commitment of payload.capture.commitments ?? []) {
         if (!commitment.id || merged.has(commitment.id)) continue
         merged.set(commitment.id, {
-          id: commitment.id, familyId: payload.capture.familyId,
+          id: commitment.id, responsibleUserId: userId, familyId: payload.capture.familyId,
           familyName: payload.familyName, community: payload.community,
           sourceVisitId: null, date: payload.capture.date, text: commitment.text,
           category: commitment.category, due: commitment.due, status: 'PENDIENTE', local: true,
