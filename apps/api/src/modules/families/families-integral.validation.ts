@@ -78,9 +78,14 @@ export function validateIntegralFamilyInput(body: unknown): { data?: IntegralFam
       const entry = optionalDate(program.fechaIngreso, `${path}fechaIngreso`, details)
       const exit = optionalDate(program.fechaSalida, `${path}fechaSalida`, details)
       if (entry && exit && exit < entry) details.push({ field: `${path}fechaSalida`, message: 'La fecha de salida no puede ser anterior a la fecha de ingreso.' })
+      // El wizard anterior enviaba null. Respetamos esa compatibilidad, sin dejar un nuevo estado vacío.
+      const estado = program.estado == null ? (exit ? 'FINALIZADO' : 'ACTIVO') : program.estado
+      if (typeof estado !== 'string' || !['ACTIVO', 'FINALIZADO', 'RETIRADO'].includes(estado)) {
+        details.push({ field: `${path}estado`, message: 'Selecciona ACTIVO, FINALIZADO o RETIRADO.' })
+      }
       programs.push({
         programaId: id as number, fechaIngreso: entry, fechaSalida: exit,
-        estado: optionalText(program.estado, `${path}estado`, details),
+        estado: typeof estado === 'string' ? estado : null,
         observaciones: optionalText(program.observaciones, `${path}observaciones`, details),
       })
     })

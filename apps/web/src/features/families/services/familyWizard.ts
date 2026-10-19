@@ -83,7 +83,7 @@ export function buildIntegralPayload(draft: FamilyWizardInput): IntegralFamilyIn
     })),
     programas: draft.programas.map((row) => ({
       programaId: Number(row.programaId), fechaIngreso: optional(row.fechaIngreso), fechaSalida: optional(row.fechaSalida),
-      estado: null, observaciones: optional(row.observaciones),
+      estado: row.fechaSalida ? 'FINALIZADO' : 'ACTIVO', observaciones: optional(row.observaciones),
     })),
   }
 }

@@ -16,6 +16,7 @@ import type { CommunityOption } from '../types/family'
 import type { IntegralFamilyRecord } from '../types/familyIntegral'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { buildFamilyUpdate, familyDraftFrom, validateFamilyDraft, type FamilyEditDraft, type FamilyEditErrors } from '../services/familyManagement'
+import FamilyProgramsSection from '../components/FamilyProgramsSection'
 
 const control = formControlClassName
 
@@ -133,5 +134,6 @@ export default function FamilyEditPage() {
       </div></CardBody></Card>
       <div className="sticky bottom-3 z-10 flex flex-wrap justify-end gap-3 rounded-xl border border-gray-200 bg-white/95 p-3 shadow-theme-lg backdrop-blur-sm dark:border-gray-800 dark:bg-gray-900/95"><Button type="button" variant="secondary" disabled={saving} onClick={cancel}>Cancelar</Button><Button type="submit" disabled={saving || !dirty || !isOnline}>{saving && <LoaderCircle size={17} className="animate-spin motion-reduce:animate-none" />}{saving ? 'Guardando cambios...' : 'Guardar cambios'}</Button></div>
     </form>}
+    {!loading && family && <FamilyProgramsSection family={family} onUpdated={setFamily} />}
   </>
 }
