@@ -31,16 +31,15 @@ after(() => {
 
 const valid = () => ({ nombreReferencia: ' QA FAMILY ', comunidadId: 1, integrantes: [{ nombreCompleto: ' QA PERSON ' }], programas: [{ programaId: 1 }] })
 
-test('normalizes optional values without inventing participation states', () => {
+test('normalizes optional values and assigns an explicit participation status', () => {
   const body = valid()
   body.integrantes[0].telefono = '  '
-  body.programas[0].estado = ' HISTORICAL CUSTOM STATE '
   const result = validateIntegralFamilyInput(body)
   assert.deepEqual(result.details, [])
   assert.equal(result.data.nombreReferencia, 'QA FAMILY')
   assert.equal(result.data.integrantes[0].nombreCompleto, 'QA PERSON')
   assert.equal(result.data.integrantes[0].telefono, null)
-  assert.equal(result.data.programas[0].estado, 'HISTORICAL CUSTOM STATE')
+  assert.equal(result.data.programas[0].estado, 'ACTIVO')
   assert.equal(result.data.programas[0].fechaIngreso, null)
 })
 
