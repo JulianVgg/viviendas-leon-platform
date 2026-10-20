@@ -15,6 +15,7 @@ import { FamilyApiError, updateFamilyMemberState } from '../services/familyServi
 import type { FamilyMemberRecord, IntegralFamilyRecord } from '../types/familyIntegral'
 import FamilyMemberDialog from './FamilyMemberDialog'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import FamilyProgramHistory from './FamilyProgramHistory'
 
 const tabs = [
   { id: 'general', label: 'Información general' },
@@ -89,14 +90,6 @@ export default function FamilyIntegralRecord({ family, onRefresh }: { family: In
     <Badge key={`active-${member.id}`} variant={member.activo ? 'success' : 'neutral'}>{member.activo ? 'Activo' : 'Inactivo'}</Badge>,
     canManage ? <div key={`actions-${member.id}`} className="flex min-w-48 flex-wrap gap-2"><Button type="button" size="sm" variant="secondary" onClick={() => setMemberDialog({ member })}><Pencil size={15} />Editar</Button><Button type="button" size="sm" variant={member.activo ? 'danger' : 'secondary'} disabled={!isOnline} onClick={() => { setMemberError(undefined); setStateMember(member) }}><Power size={15} />{member.activo ? 'Desactivar' : 'Reactivar'}</Button></div> : <span key={`actions-${member.id}`} className="text-xs text-gray-500">Solo lectura</span>,
   ])
-  const programRows = family.programas.map((association) => [
-    <div key={`program-${association.id}`} className={`${textClass} min-w-44`}><span className="font-medium text-slate-900 dark:text-slate-100">{association.programa.nombre}</span><span className="mt-1 block text-xs leading-5 text-slate-500 dark:text-slate-400">Programa #{association.programaId}<br />Asociación #{association.id}</span></div>,
-    formatRecordDate(association.fechaIngreso),
-    formatRecordDate(association.fechaSalida),
-    <Badge key={`state-${association.id}`} className="max-w-64 whitespace-normal break-words [overflow-wrap:anywhere]">{association.estado || 'Sin estado definido'}</Badge>,
-    <span key={`notes-${association.id}`} className={`${textClass} min-w-48`}>{association.observaciones || 'Sin observaciones'}</span>,
-  ])
-
   return <div className="min-w-0 space-y-6">
     <Card aria-label="Identificación del expediente">
       <CardBody><div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -123,7 +116,7 @@ export default function FamilyIntegralRecord({ family, onRefresh }: { family: In
         <Card><CardHeader title="Integrantes" description="Personas activas e inactivas asociadas a esta familia." actions={canManage ? <Button type="button" size="sm" onClick={() => { setMemberNotice(undefined); setMemberDialog({}) }}><Plus size={16} />Agregar integrante</Button> : undefined} /><CardBody>{canManage && !isOnline && <Alert variant="warning" title="Sin conexión" className="mb-4">Las escrituras están deshabilitadas hasta recuperar conexión con el servidor.</Alert>}{memberNotice && <Alert variant="success" title="Expediente actualizado" className="mb-4">{memberNotice}</Alert>}{memberError && <Alert variant="error" title="No se pudo cambiar el estado" className="mb-4">{memberError}</Alert>}{memberRows.length ? <DataTableContainer columns={['Nombre completo', 'Fecha de nacimiento', 'Sexo', 'Parentesco', 'Teléfono', 'Estado', 'Acciones']} rows={memberRows} caption="Integrantes de la familia" /> : <EmptyState title="Sin integrantes registrados" description="Esta familia no tiene integrantes asociados en el expediente consultado." action={canManage ? <Button type="button" onClick={() => setMemberDialog({})}>Agregar integrante</Button> : undefined} />}</CardBody></Card>
       </section>
       <section role="tabpanel" id={panelId('programs')} aria-labelledby={tabId('programs')} hidden={selected !== 'programs'} tabIndex={0} className="layout-focus min-w-0 rounded-2xl">
-        <Card><CardHeader title="Programas" description="El ID del programa es distinto del ID de su asociación con la familia." /><CardBody>{programRows.length ? <DataTableContainer columns={['Programa y asociación', 'Fecha de ingreso', 'Fecha de salida', 'Estado de participación', 'Observaciones']} rows={programRows} caption="Programas de la familia" /> : <EmptyState title="Sin programas asociados" description="Esta familia no tiene participaciones en programas en el expediente consultado." />}</CardBody></Card>
+        <FamilyProgramHistory participations={family.programas} />
       </section>
       {memberDialog && <FamilyMemberDialog familyId={family.id} member={memberDialog.member} onClose={() => setMemberDialog(undefined)} onSaved={replaceMember} />}
       {stateMember && <Dialog open title={stateMember.activo ? 'Desactivar integrante' : 'Reactivar integrante'} description={`${stateMember.nombreCompleto} · Expediente #${family.id}`} onClose={() => { if (!stateSaving) setStateMember(undefined) }} actions={<><Button type="button" variant="secondary" disabled={stateSaving} onClick={() => setStateMember(undefined)}>Cancelar</Button><Button type="button" variant={stateMember.activo ? 'danger' : 'primary'} disabled={stateSaving || !isOnline} onClick={changeMemberState}>{stateMember.activo ? 'Confirmar desactivación' : 'Confirmar reactivación'}</Button></>}><p className="text-sm leading-6">{stateMember.activo ? 'El integrante quedará inactivo, pero conservará todas sus relaciones históricas. La familia debe mantener al menos un integrante activo.' : 'El integrante volverá a mostrarse como activo en el expediente.'}</p>{!isOnline && <Alert variant="warning" className="mt-4">Reconecta antes de confirmar esta operación.</Alert>}{memberError && <Alert variant="error" className="mt-4">{memberError}</Alert>}</Dialog>}
