@@ -39,6 +39,7 @@ export type IntegralFamilyRecord = {
   }>
   programas: Array<Omit<FamilyProgramInput, 'fechaIngreso' | 'fechaSalida'> & {
     id: number
+    version: string
     programa: { id: number; nombre: string }
     fechaIngreso: string | null
     fechaSalida: string | null

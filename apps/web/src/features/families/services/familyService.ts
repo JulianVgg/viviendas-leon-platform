@@ -1,5 +1,5 @@
 import type { CommunityOption, FamilyCreateInput, FamilyDetail, FamilyListParams, FamilyListResponse } from '@/features/families/types/family'
-import type { FamilyMemberInput, FamilyMemberRecord, FamilyMemberUpdateInput, FamilyProgramOption, FamilyUpdateInput, IntegralFamilyInput, IntegralFamilyRecord } from '@/features/families/types/familyIntegral'
+import type { FamilyMemberInput, FamilyMemberRecord, FamilyMemberUpdateInput, FamilyProgramOption, FamilyUpdateInput, IntegralFamilyInput, IntegralFamilyRecord, FamilyParticipationRecord, FamilyParticipationCreateInput, FamilyParticipationUpdateInput } from '@/features/families/types/familyIntegral'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL?.trim() || '/api'
 
@@ -62,6 +62,18 @@ export async function createIntegralFamily(input: IntegralFamilyInput) {
 
 export function updateFamily(id: number, input: FamilyUpdateInput) {
   return requestData<IntegralFamilyRecord>(`v1/familias/${id}`, { method: 'PATCH', body: JSON.stringify(input) })
+}
+
+export function createFamilyProgram(familyId: number, input: FamilyParticipationCreateInput, idempotencyKey: string) {
+  return requestData<FamilyParticipationRecord>(`v1/familias/${familyId}/programas`, {
+    method: 'POST', headers: { 'Idempotency-Key': idempotencyKey }, body: JSON.stringify(input),
+  })
+}
+
+export function updateFamilyProgram(familyId: number, participationId: number, input: FamilyParticipationUpdateInput) {
+  return requestData<FamilyParticipationRecord>(`v1/familias/${familyId}/programas/${participationId}`, {
+    method: 'PATCH', body: JSON.stringify(input),
+  })
 }
 
 export function createFamilyMember(id: number, input: FamilyMemberInput, idempotencyKey: string) {

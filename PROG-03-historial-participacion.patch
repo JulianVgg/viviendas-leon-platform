@@ -1,0 +1,287 @@
+diff --git a/apps/web/src/features/families/components/FamilyIntegralRecord.tsx b/apps/web/src/features/families/components/FamilyIntegralRecord.tsx
+--- a/apps/web/src/features/families/components/FamilyIntegralRecord.tsx
++++ b/apps/web/src/features/families/components/FamilyIntegralRecord.tsx
+@@ -17,2 +17,3 @@
+ import { useOnlineStatus } from '@/hooks/useOnlineStatus'
++import FamilyProgramHistory from './FamilyProgramHistory'
+ 
+@@ -91,10 +92,2 @@
+   ])
+-  const programRows = family.programas.map((association) => [
+-    <div key={`program-${association.id}`} className={`${textClass} min-w-44`}><span className="font-medium text-slate-900 dark:text-slate-100">{association.programa.nombre}</span><span className="mt-1 block text-xs leading-5 text-slate-500 dark:text-slate-400">Programa #{association.programaId}<br />Asociación #{association.id}</span></div>,
+-    formatRecordDate(association.fechaIngreso),
+-    formatRecordDate(association.fechaSalida),
+-    <Badge key={`state-${association.id}`} className="max-w-64 whitespace-normal break-words [overflow-wrap:anywhere]">{association.estado || 'Sin estado definido'}</Badge>,
+-    <span key={`notes-${association.id}`} className={`${textClass} min-w-48`}>{association.observaciones || 'Sin observaciones'}</span>,
+-  ])
+-
+   return <div className="min-w-0 space-y-6">
+@@ -125,3 +118,3 @@
+       <section role="tabpanel" id={panelId('programs')} aria-labelledby={tabId('programs')} hidden={selected !== 'programs'} tabIndex={0} className="layout-focus min-w-0 rounded-2xl">
+-        <Card><CardHeader title="Programas" description="El ID del programa es distinto del ID de su asociación con la familia." /><CardBody>{programRows.length ? <DataTableContainer columns={['Programa y asociación', 'Fecha de ingreso', 'Fecha de salida', 'Estado de participación', 'Observaciones']} rows={programRows} caption="Programas de la familia" /> : <EmptyState title="Sin programas asociados" description="Esta familia no tiene participaciones en programas en el expediente consultado." />}</CardBody></Card>
++        <FamilyProgramHistory participations={family.programas} />
+       </section>
+diff --git a/apps/web/tests/familyRecord.test.mjs b/apps/web/tests/familyRecord.test.mjs
+--- a/apps/web/tests/familyRecord.test.mjs
++++ b/apps/web/tests/familyRecord.test.mjs
+@@ -99,2 +99,5 @@
+         { id: 902, programaId: 72, programa: { id: 72, nombre: 'QA PROGRAM TWO' }, fechaIngreso: null, fechaSalida: '2026-10-15T00:00:00.000Z', estado: 'QA CUSTOM VALUE', observaciones: null },
++        { id: 903, programaId: 73, programa: { id: 73, nombre: 'QA ACTIVE PROGRAM' }, fechaIngreso: '2026-10-19T00:00:00.000Z', fechaSalida: null, estado: 'ACTIVO', observaciones: null },
++        { id: 904, programaId: 74, programa: { id: 74, nombre: 'QA FINISHED PROGRAM' }, fechaIngreso: '2026-02-01T00:00:00.000Z', fechaSalida: '2026-07-01T00:00:00.000Z', estado: 'FINALIZADO', observaciones: 'Participación completada' },
++        { id: 905, programaId: 75, programa: { id: 75, nombre: 'QA RETIRED PROGRAM' }, fechaIngreso: '2026-01-01T00:00:00.000Z', fechaSalida: '2026-02-01T00:00:00.000Z', estado: 'RETIRADO', observaciones: null },
+       ],
+@@ -135,3 +138,3 @@
+     assert.equal(await evaluate("document.querySelector('[aria-label=\"Resumen de integrantes\"]').innerText.includes('2')"), true)
+-    assert.equal(await evaluate("document.querySelector('[aria-label=\"Resumen de programas\"]').innerText.includes('2')"), true)
++    assert.equal(await evaluate("document.querySelector('[aria-label=\"Resumen de programas\"]').innerText.includes('5')"), true)
+     assert.equal(await evaluate("document.querySelector('[aria-label=\"Identificación del expediente\"]').innerText.includes('RETIRADA')"), true)
+@@ -149,2 +152,20 @@
+     for (const text of ['Programa #71', 'Asociación #901', 'Sin estado definido', 'QA CUSTOM VALUE', '15/10/2026']) assert.equal(await evaluate(`document.querySelector('[role=tabpanel]:not([hidden])').innerText.includes(${JSON.stringify(text)})`), true)
++    const totals = await evaluate("[...document.querySelectorAll('[aria-label=\"Resumen del historial\"] > div')].map(element => element.innerText)")
++    assert.deepEqual(totals.map((value) => Number(value.match(/\d+/)?.[0])), [5, 1, 2, 2])
++    const historyCount = () => evaluate("document.querySelectorAll('[aria-label=\"Participaciones de la familia\"] > li').length")
++    const familyRequestsBeforeFilters = requests.filter(({ path }) => path.endsWith('/expediente')).length
++    assert.equal(await historyCount(), 5)
++    await evaluate("document.querySelector('[aria-label=\"Filtrar participaciones\"] button:nth-child(2)').click()")
++    assert.equal(await historyCount(), 1)
++    assert.equal(await evaluate("document.querySelector('[aria-label=\"Participaciones de la familia\"]').innerText.includes('QA ACTIVE PROGRAM')"), true)
++    await evaluate("document.querySelector('[aria-label=\"Filtrar participaciones\"] button:nth-child(3)').click()")
++    assert.equal(await historyCount(), 2)
++    assert.equal(await evaluate("document.querySelector('[aria-label=\"Participaciones de la familia\"]').innerText.includes('QA FINISHED PROGRAM')"), true)
++    await evaluate("document.querySelector('[aria-label=\"Filtrar participaciones\"] button:nth-child(4)').click()")
++    assert.equal(await historyCount(), 2)
++    assert.equal(await evaluate("document.querySelector('[aria-label=\"Participaciones de la familia\"]').innerText.includes('QA CUSTOM VALUE')"), true)
++    await evaluate("document.querySelector('[aria-label=\"Filtrar participaciones\"] button:nth-child(1)').click()")
++    assert.equal(await historyCount(), 5)
++    assert.equal(requests.filter(({ path }) => path.endsWith('/expediente')).length, familyRequestsBeforeFilters)
++    await evaluate("document.querySelectorAll('[role=tab]')[2].focus()")
+     await key('ArrowRight', 39)
+diff --git a/apps/api/tests/families-record.qa.test.mjs b/apps/api/tests/families-record.qa.test.mjs
+--- a/apps/api/tests/families-record.qa.test.mjs
++++ b/apps/api/tests/families-record.qa.test.mjs
+@@ -180,5 +180,18 @@
+       await clickTab(2)
+-      const programs = (await sql.query('SELECT fp.id,fp.programa_id,p.nombre FROM familia_programa fp JOIN programa p ON p.id=fp.programa_id WHERE fp.familia_id=$1', [multiple.id])).rows
++      const programs = (await sql.query("SELECT fp.id, fp.programa_id, p.nombre, TO_CHAR(fp.fecha_ingreso, 'DD/MM/YYYY') AS ingreso, TO_CHAR(fp.fecha_salida, 'DD/MM/YYYY') AS salida, fp.estado FROM familia_programa fp JOIN programa p ON p.id=fp.programa_id WHERE fp.familia_id=$1", [multiple.id])).rows
+       const text = await panelText()
+-      for (const row of programs) { assert.ok(text.includes(row.nombre)); assert.ok(text.includes(`Programa #${row.programa_id}`)); assert.ok(text.includes(`Asociación #${row.id}`)) }
++      const visibleIds = await evaluate("[...document.querySelectorAll('[aria-label=\"Participaciones de la familia\"] > li')].map(item => Number(/Asociación #(\\d+)/.exec(item.innerText)?.[1])).sort((a,b) => a-b)")
++      assert.deepEqual(visibleIds, programs.map(({ id }) => id).sort((a, b) => a - b), 'El historial debe corresponder exactamente al expediente consultado')
++      for (const row of programs) {
++        assert.ok(text.includes(row.nombre))
++        assert.ok(text.includes(`Programa #${row.programa_id}`))
++        assert.ok(text.includes(`Asociación #${row.id}`))
++        assert.ok(text.includes(row.ingreso ?? 'Sin fecha'))
++        assert.ok(text.includes(row.salida ?? 'Sin fecha'))
++        if (row.estado === null) assert.ok(text.includes('Sin estado definido'))
++        else if (row.estado === 'ACTIVO') assert.ok(text.includes('Activo'))
++        else if (row.estado === 'FINALIZADO') assert.ok(text.includes('Finalizado'))
++        else if (row.estado === 'RETIRADO') assert.ok(text.includes('Retirado'))
++        else assert.ok(text.includes(row.estado))
++      }
+       await command('Page.reload')
+diff --git a/apps/web/src/features/families/components/FamilyProgramHistory.tsx b/apps/web/src/features/families/components/FamilyProgramHistory.tsx
+new file mode 100644
+--- /dev/null
++++ b/apps/web/src/features/families/components/FamilyProgramHistory.tsx
+@@ -0,0 +1,63 @@
++import { useMemo, useState } from 'react'
++import Badge from '@/components/ui/Badge'
++import Button from '@/components/ui/Button'
++import Card, { CardBody, CardHeader } from '@/components/ui/Card'
++import EmptyState from '@/components/common/EmptyState'
++import { formatRecordDate } from '../services/familyRecord'
++import { filterParticipations, orderParticipations, participationCategory, participationStateLabel, participationSummary, type ParticipationFilter } from '../services/familyProgramHistory'
++import type { FamilyParticipationRecord } from '../types/familyIntegral'
++
++const filters: Array<{ id: ParticipationFilter; label: string }> = [
++  { id: 'TODOS', label: 'Todas' },
++  { id: 'ACTIVOS', label: 'Activas' },
++  { id: 'ANTERIORES', label: 'Anteriores' },
++  { id: 'OTROS', label: 'Sin clasificar' },
++]
++
++const textClass = 'min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]'
++
++export default function FamilyProgramHistory({ participations }: { participations: FamilyParticipationRecord[] }) {
++  const [filter, setFilter] = useState<ParticipationFilter>('TODOS')
++  const ordered = useMemo(() => orderParticipations(participations), [participations])
++  const summary = useMemo(() => participationSummary(participations), [participations])
++  const visible = useMemo(() => filterParticipations(ordered, filter), [ordered, filter])
++
++  return <Card aria-label="Historial de participación familiar">
++    <CardHeader title="Historial de participación" description="Participaciones actuales y anteriores de esta familia. Los programas inactivos conservan su historial." />
++    <CardBody>
++      {!participations.length ? <EmptyState title="Sin programas asociados" description="Esta familia no tiene participaciones en programas en el expediente consultado." /> : <div className="min-w-0 space-y-5">
++        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Resumen del historial">
++          {([
++            ['Total', summary.total], ['Activas', summary.activos], ['Anteriores', summary.anteriores], ['Sin clasificar', summary.otros],
++          ] as const).map(([label, count]) => <div key={label} className="min-w-0 rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-white/[0.03]">
++            <p className="break-words text-xs text-gray-500 dark:text-gray-400">{label}</p>
++            <p className="mt-1 text-2xl font-semibold tabular-nums text-gray-900 dark:text-white">{count}</p>
++          </div>)}
++        </div>
++        <div role="group" aria-label="Filtrar participaciones" className="flex flex-wrap gap-2">
++          {filters.map(({ id, label }) => <Button key={id} type="button" size="sm" variant={filter === id ? 'primary' : 'secondary'} aria-pressed={filter === id} onClick={() => setFilter(id)}>{label}</Button>)}
++        </div>
++        <p role="status" className="text-xs text-gray-500 dark:text-gray-400">Mostrando {visible.length} de {participations.length} participaciones.</p>
++        {visible.length ? <ol className="min-w-0 space-y-3" aria-label="Participaciones de la familia">
++          {visible.map((association) => {
++            const category = participationCategory(association.estado)
++            return <li key={association.id} className="min-w-0 rounded-xl border border-gray-200 p-4 dark:border-gray-800 sm:p-5">
++              <div className="flex min-w-0 flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
++                <div className="min-w-0 flex-1">
++                  <h3 className={`font-medium text-slate-900 dark:text-slate-100 ${textClass}`}>{association.programa.nombre}</h3>
++                  <p className={`mt-1 text-xs text-slate-500 dark:text-slate-400 ${textClass}`}>Programa #{association.programaId} · Asociación #{association.id}</p>
++                </div>
++                <Badge variant={category === 'ACTIVOS' ? 'success' : association.estado?.trim().toUpperCase() === 'RETIRADO' ? 'warning' : 'neutral'} className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere]">{participationStateLabel(association.estado)}</Badge>
++              </div>
++              <dl className="mt-4 grid min-w-0 grid-cols-1 gap-3 border-t border-gray-100 pt-4 sm:grid-cols-2 dark:border-gray-800">
++                <div className="min-w-0"><dt className="text-xs text-slate-500 dark:text-slate-400">Fecha de ingreso</dt><dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">{formatRecordDate(association.fechaIngreso)}</dd></div>
++                <div className="min-w-0"><dt className="text-xs text-slate-500 dark:text-slate-400">Fecha de salida</dt><dd className="mt-1 text-sm text-slate-800 dark:text-slate-200">{formatRecordDate(association.fechaSalida)}</dd></div>
++                <div className="min-w-0 sm:col-span-2"><dt className="text-xs text-slate-500 dark:text-slate-400">Observaciones</dt><dd className={`mt-1 text-sm text-slate-700 dark:text-slate-300 ${textClass}`}>{association.observaciones || 'Sin observaciones'}</dd></div>
++              </dl>
++            </li>
++          })}
++        </ol> : <p className="rounded-xl border border-dashed border-gray-200 p-5 text-sm text-gray-500 dark:border-gray-800" role="status">No hay participaciones en esta categoría. Selecciona «Todas» para consultar el historial completo.</p>}
++      </div>}
++    </CardBody>
++  </Card>
++}
+diff --git a/apps/web/src/features/families/services/familyProgramHistory.ts b/apps/web/src/features/families/services/familyProgramHistory.ts
+new file mode 100644
+--- /dev/null
++++ b/apps/web/src/features/families/services/familyProgramHistory.ts
+@@ -0,0 +1,52 @@
++import type { FamilyParticipationRecord } from '../types/familyIntegral'
++
++// Los registros antiguos pueden tener estados nulos o personalizados.
++// No deben clasificarse como finalizados sin una decisión institucional.
++export type ParticipationFilter = 'TODOS' | 'ACTIVOS' | 'ANTERIORES' | 'OTROS'
++export type ParticipationCategory = Exclude<ParticipationFilter, 'TODOS'>
++
++export function participationCategory(estado: string | null): ParticipationCategory {
++  const normalized = estado?.trim().toUpperCase()
++  if (normalized === 'ACTIVO') return 'ACTIVOS'
++  if (normalized === 'FINALIZADO' || normalized === 'RETIRADO') return 'ANTERIORES'
++  return 'OTROS'
++}
++
++export function participationStateLabel(estado: string | null): string {
++  if (!estado?.trim()) return 'Sin estado definido'
++  const normalized = estado.trim().toUpperCase()
++  if (normalized === 'ACTIVO') return 'Activo'
++  if (normalized === 'FINALIZADO') return 'Finalizado'
++  if (normalized === 'RETIRADO') return 'Retirado'
++  return estado
++}
++
++function dayKey(value: string | null): string {
++  const day = value?.slice(0, 10) ?? ''
++  return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : ''
++}
++
++/** La fuente es el expediente de la familia consultada; nunca se mezcla con otros expedientes. */
++export function orderParticipations<T extends Pick<FamilyParticipationRecord, 'id' | 'fechaIngreso'>>(rows: readonly T[]): T[] {
++  return [...rows].sort((a, b) => {
++    const dateA = dayKey(a.fechaIngreso)
++    const dateB = dayKey(b.fechaIngreso)
++    if (dateA !== dateB) return dateA > dateB ? -1 : 1
++    return b.id - a.id
++  })
++}
++
++export function participationSummary(rows: readonly Pick<FamilyParticipationRecord, 'estado'>[]) {
++  const summary = { total: rows.length, activos: 0, anteriores: 0, otros: 0 }
++  for (const row of rows) {
++    const category = participationCategory(row.estado)
++    if (category === 'ACTIVOS') summary.activos += 1
++    else if (category === 'ANTERIORES') summary.anteriores += 1
++    else summary.otros += 1
++  }
++  return summary
++}
++
++export function filterParticipations<T extends Pick<FamilyParticipationRecord, 'estado'>>(rows: readonly T[], filter: ParticipationFilter): T[] {
++  return filter === 'TODOS' ? [...rows] : rows.filter((row) => participationCategory(row.estado) === filter)
++}
+diff --git a/apps/web/tests/familyProgramHistory.test.mjs b/apps/web/tests/familyProgramHistory.test.mjs
+new file mode 100644
+--- /dev/null
++++ b/apps/web/tests/familyProgramHistory.test.mjs
+@@ -0,0 +1,41 @@
++import assert from 'node:assert/strict'
++import { test } from 'node:test'
++import { filterParticipations, orderParticipations, participationCategory, participationStateLabel, participationSummary } from '../src/features/families/services/familyProgramHistory.ts'
++
++const fixtures = [
++  { id: 5, fechaIngreso: null, estado: null },
++  { id: 1, fechaIngreso: '2026-01-01T00:00:00.000Z', estado: 'FINALIZADO' },
++  { id: 4, fechaIngreso: '2026-10-19T00:00:00.000Z', estado: 'ACTIVO' },
++  { id: 3, fechaIngreso: '2026-10-19T00:00:00.000Z', estado: 'RETIRADO' },
++  { id: 2, fechaIngreso: null, estado: 'LEGADO' },
++]
++
++test('ordena por fecha de ingreso descendente, deja fechas nulas al final y no altera el arreglo recibido', () => {
++  const original = [...fixtures]
++  assert.deepEqual(orderParticipations(fixtures).map(({ id }) => id), [4, 3, 1, 5, 2])
++  assert.deepEqual(fixtures, original)
++})
++
++test('clasifica solo estados documentados y conserva nulos o estados heredados sin inventar su significado', () => {
++  assert.equal(participationCategory('ACTIVO'), 'ACTIVOS')
++  assert.equal(participationCategory('FINALIZADO'), 'ANTERIORES')
++  assert.equal(participationCategory('RETIRADO'), 'ANTERIORES')
++  assert.equal(participationCategory(null), 'OTROS')
++  assert.equal(participationCategory('LEGADO'), 'OTROS')
++  assert.equal(participationStateLabel(null), 'Sin estado definido')
++  assert.equal(participationStateLabel('LEGADO'), 'LEGADO')
++  assert.equal(participationStateLabel('FINALIZADO'), 'Finalizado')
++})
++
++test('contabiliza todas las asociaciones, incluidas anteriores y heredadas', () => {
++  assert.deepEqual(participationSummary(fixtures), { total: 5, activos: 1, anteriores: 2, otros: 2 })
++  assert.deepEqual(participationSummary([]), { total: 0, activos: 0, anteriores: 0, otros: 0 })
++})
++
++test('los filtros no eliminan el historial ni solicitan datos de otro expediente', () => {
++  assert.deepEqual(filterParticipations(fixtures, 'ACTIVOS').map(({ id }) => id), [4])
++  assert.deepEqual(filterParticipations(fixtures, 'ANTERIORES').map(({ id }) => id), [1, 3])
++  assert.deepEqual(filterParticipations(fixtures, 'OTROS').map(({ id }) => id), [5, 2])
++  assert.deepEqual(filterParticipations(fixtures, 'TODOS').map(({ id }) => id), [5, 1, 4, 3, 2])
++  assert.equal(fixtures.length, 5)
++})
+diff --git a/docs/sprints/sprint-2/prog-03-historial-participacion.md b/docs/sprints/sprint-2/prog-03-historial-participacion.md
+new file mode 100644
+--- /dev/null
++++ b/docs/sprints/sprint-2/prog-03-historial-participacion.md
+@@ -0,0 +1,29 @@
++# PROG-03 — Historial de participación familiar
++
++## Alcance
++
++El historial se presenta **dentro del expediente integral de la familia**, en su pestaña «Programas». La consulta existente `GET /api/v1/familias/:id/expediente` devuelve todas las relaciones `familia_programa` de la familia consultada, incluso las participaciones finalizadas y retiradas. La vista no realiza solicitudes adicionales, modificaciones ni almacenamiento offline de datos personales.
++
++## Visualización
++
++- Resumen de total, activas, anteriores y sin clasificar.
++- Filtros locales de solo lectura: todas, activas, anteriores y sin clasificar.
++- Orden descendente por fecha de ingreso, fechas faltantes al final; en empate, asociación de mayor ID primero.
++- Programa, identificadores de programa y asociación, fechas de ingreso/salida, estado y observaciones.
++- Los estados `ACTIVO`, `FINALIZADO` y `RETIRADO` se clasifican; valores nulos o personalizados **no** se infieren como finalizados y permanecen en «Sin clasificar».
++- Sin relaciones: «Sin programas asociados». Un filtro vacío no implica eliminación de datos.
++- Las participaciones con programas institucionales inactivos siguen consultables porque el expediente no filtra por `programa.estado`.
++
++## Contrato y conservación
++
++Se reutilizan `findIntegralFamily` y `IntegralFamilyRecord.programas`, sin cambios de rutas, permisos, Prisma o estructura PostgreSQL. La relación `familia_programa` conserva **un registro por pareja familia-programa** (`@@unique([familiaId, programaId])`): PROG-03 permite ver los estados actuales y anteriores de programas distintos, pero no versiones sucesivas ni múltiples ciclos históricos de una misma pareja. La bitácora de PROG-02 registra modificaciones sin convertirse en una nueva línea de tiempo en este alcance.
++
++## Pruebas
++
++`node --experimental-strip-types --test apps/web/tests/familyProgramHistory.test.mjs` verifica orden, filtrado, categorías heredadas, conteos y no mutación. La suite existente `familyRecord.test.mjs` prueba además la interfaz del expediente, con HTTP simulado y el navegador configurado según los scripts del proyecto. La prueba QA `families-record.qa.test.mjs` compara las participaciones devueltas con SQL independiente por ID familiar. La ejecución de suites de navegador y QA real debe realizarse en un entorno que disponga de esas dependencias.
++
++## Criterios de aceptación
++
++- Se muestran todas las participaciones registradas para el expediente.
++- Ningún registro de otro expediente se añade a la consulta ni al filtrado local.
++- Las participaciones anteriores y los estados heredados se conservan y siguen disponibles al seleccionar «Todas».

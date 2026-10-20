@@ -27,11 +27,14 @@ export type IntegralFamilyInput = {
 }
 
 export type FamilyProgramOption = { id: number; nombre: string; descripcion: string | null; estado: string }
+export type FamilyParticipationRecord = FamilyProgramInput & { id: number; version: string; programa: { id: number; nombre: string } }
+export type FamilyParticipationCreateInput = FamilyProgramInput
+export type FamilyParticipationUpdateInput = Partial<Omit<FamilyProgramInput, 'programaId'>> & { version: string }
 
 export type IntegralFamilyRecord = FamilyDetail & {
   version: string
   integrantes: Array<FamilyMemberInput & { id: number; version: string; activo: boolean }>
-  programas: Array<FamilyProgramInput & { id: number; programa: { id: number; nombre: string } }>
+  programas: FamilyParticipationRecord[]
 }
 
 export type MemberDraft = { localId: string } & { [K in keyof FamilyMemberInput]: string }

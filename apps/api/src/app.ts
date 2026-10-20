@@ -8,6 +8,7 @@ import { familiesRouter } from './modules/families/families.routes.js';
 import { communitiesRouter } from './modules/catalogs/catalogs.routes.js';
 import { adminCommunitiesRouter } from './modules/catalogs/communities.routes.js';
 import { municipalitiesRouter } from './modules/catalogs/municipalities.routes.js';
+import { programsRouter } from './modules/catalogs/programs.routes.js';
 import { offlineDemoRouter } from './modules/offline/offline.routes.js';
 import { visitsRouter } from './modules/visits/visits.routes.js';
 
@@ -78,6 +79,7 @@ app.use('/api/v1/familias', familiesRouter);
 app.use('/api/v1/comunidades', adminCommunitiesRouter);
 app.use('/api/v1/comunidades', communitiesRouter);
 app.use('/api/v1/municipios', municipalitiesRouter);
+app.use('/api/v1/programas', programsRouter);
 app.use('/api/v1/offline', offlineDemoRouter);
 app.use('/api/v1/visitas', visitsRouter);
 

@@ -98,11 +98,15 @@ function validate(input: unknown, operationId: unknown): { familyId: number; dat
 }
 
 function serialize(row: {
-  id: number; fecha: Date; estado: string; usuarioResponsable: { nombre: string }; familia: { id: number; nombreReferencia: string; comunidad: { nombre: string } };
+  id: number; fecha: Date; estado: string; usuarioResponsableId: number;
+  usuarioResponsable: { nombre: string; apellido: string | null };
+  familia: { id: number; nombreReferencia: string; comunidad: { nombre: string } };
 }, captura: { operation_id: string; datos: unknown } | null, evidences: { id: number; name: string }[]) {
   return {
     id: row.id, operationId: captura?.operation_id ?? null,
-    date: row.fecha.toISOString().slice(0,10), status: row.estado, responsibleName: row.usuarioResponsable.nombre,
+    date: row.fecha.toISOString().slice(0,10), status: row.estado,
+    responsibleUserId: row.usuarioResponsableId,
+    responsibleName: [row.usuarioResponsable.nombre, row.usuarioResponsable.apellido].filter(Boolean).join(' '),
     familyId: row.familia.id, familyName: row.familia.nombreReferencia,
     community: row.familia.comunidad.nombre, capture: captura?.datos ?? null,
     evidences: evidences.map(item => ({ ...item, url: `/api/v1/visitas/${row.id}/evidencias/${item.id}` })),
@@ -114,15 +118,25 @@ visitsRouter.get('/', async (req: Request, res: Response) => {
     const userId = req.session.userId
     if (!userId) { res.status(401).json({ error: 'Sesión requerida.' }); return }
     const prisma = getPrismaClient()
+    const user = await getAuthenticatedUser(userId)
+    if (!user) { res.status(401).json({ error: 'Sesión no válida.' }); return }
+    // VIS-05: Dirección general supervisa todas las visitas; cada técnico
+    // mantiene exclusivamente sus registros. La comprobación se hace en la API.
+    const canViewAll = esDireccionGeneral(user.roles)
     const rows = await prisma.visita.findMany({
-      where: { usuarioResponsableId: userId },
-      include: { usuarioResponsable: { select: { nombre: true } }, familia: { select: { id: true, nombreReferencia: true, comunidad: { select: { nombre: true } } } } },
+      where: canViewAll ? {} : { usuarioResponsableId: userId },
+      include: { usuarioResponsable: { select: { nombre: true, apellido: true } }, familia: { select: { id: true, nombreReferencia: true, comunidad: { select: { nombre: true } } } } },
       orderBy: [{ fecha: 'desc' }, { id: 'desc' }], take: 300,
     })
-    const captures = await prisma.$queryRaw<Array<{ visita_id: number; operation_id: string; datos: unknown }>>`
-      SELECT "visita_id", "operation_id"::text, "datos" FROM "visita_captura" WHERE "usuario_id" = ${userId}
-    `
-    const byVisit = new Map(captures.map(c => [c.visita_id, c]))
+    // Buscar capturas por las visitas autorizadas y no por el dueño de la
+    // sesión: Dirección debe consultar también los formularios del técnico.
+    const captures = rows.length ? await prisma.visitaCaptura.findMany({
+      where: { visitaId: { in: rows.map(row => row.id) } },
+      select: { visitaId: true, operationId: true, datos: true },
+    }) : []
+    const byVisit = new Map(captures.map(c => [c.visitaId, {
+      operation_id: c.operationId, datos: c.datos,
+    }]))
     const evidenceRows = rows.length ? await prisma.visitaEvidencia.findMany({
       where: { visitaId: { in: rows.map(row => row.id) } },
       include: { evidencia: { select: { id: true, nombreArchivo: true } } },
@@ -341,7 +355,9 @@ visitsRouter.get('/seguimientos', async (req: Request, res: Response) => {
     })
     res.setHeader('Cache-Control', 'no-store')
     res.json({ data: rows.map(r => ({
-      id: r.id, sourceVisitId: r.visitaOrigenId, familyId: r.visitaOrigen.familiaId,
+      id: r.id, sourceVisitId: r.visitaOrigenId,
+      responsibleUserId: r.visitaOrigen.usuarioResponsableId,
+      familyId: r.visitaOrigen.familiaId,
       familyName: r.visitaOrigen.familia.nombreReferencia,
       community: r.visitaOrigen.familia.comunidad.nombre,
       date: r.visitaOrigen.fecha.toISOString().slice(0,10),
@@ -365,8 +381,10 @@ visitsRouter.patch('/seguimientos/:id', async (req: Request, res: Response) => {
   }
   try {
     const prisma = getPrismaClient()
+    // La lectura de compromisos es compartida, pero su edición corresponde
+    // exclusivamente al técnico dueño de la visita de origen.
     const result = await prisma.seguimientoVisita.updateMany({
-      where: { id },
+      where: { id, visitaOrigen: { usuarioResponsableId: req.session.userId! } },
       data: { estado: status, fechaLimite: due ? new Date(`${due}T12:00:00Z`) : null,
         texto: text.trim(), observacionCierre: observation?.trim() || null },
     })
@@ -384,8 +402,14 @@ visitsRouter.get('/:visitId/evidencias/:evidenceId', async (req: Request, res: R
   }
   try {
     const prisma = getPrismaClient()
+    const user = await getAuthenticatedUser(req.session.userId!)
+    if (!user) { res.status(401).end(); return }
+    const canViewAll = esDireccionGeneral(user.roles)
     const relation = await prisma.visitaEvidencia.findFirst({
-      where: { visitaId: visitId, evidenciaId: evidenceId, visita: { usuarioResponsableId: req.session.userId! } },
+      where: {
+        visitaId: visitId, evidenciaId: evidenceId,
+        ...(canViewAll ? {} : { visita: { usuarioResponsableId: user.id } }),
+      },
       include: { evidencia: { select: { rutaArchivo: true } } },
     })
     const pathMatch = /^visits\/([0-9a-f-]{36})\/([0-9a-f-]{36})\.jpg$/.exec(relation?.evidencia.rutaArchivo ?? '')

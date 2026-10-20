@@ -127,7 +127,7 @@ test('payload matches backend validator and never leaks local/server-owned field
   assert.equal(payload.nombreReferencia, 'QA FAMILY')
   assert.equal(payload.fechaIngreso, '2026-10-14')
   assert.equal(payload.integrantes[0].fechaNacimiento, '2000-01-15')
-  assert.equal(payload.programas[0].estado, null)
+  assert.equal(payload.programas[0].estado, 'ACTIVO')
   assert.equal(payload.programas[0].fechaIngreso, null)
   assert.equal(payload.observaciones, null)
   const { validateIntegralFamilyInput } = await import('../../api/dist/modules/families/families-integral.validation.js')

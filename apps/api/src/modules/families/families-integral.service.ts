@@ -29,13 +29,14 @@ function serializeRecord(
   record: Prisma.FamiliaGetPayload<{ select: typeof recordSelect }>,
   version: string,
   memberVersions: Map<number, string>,
+  programVersions: Map<number, string>,
 ): IntegralFamilyRecord {
   return {
     ...record,
     version,
     fechaIngreso: record.fechaIngreso?.toISOString() ?? null,
     integrantes: record.integrantes.map((member) => ({ ...member, version: memberVersions.get(member.id) ?? '', fechaNacimiento: member.fechaNacimiento?.toISOString() ?? null })),
-    programas: record.programas.map((program) => ({ ...program, fechaIngreso: program.fechaIngreso?.toISOString() ?? null, fechaSalida: program.fechaSalida?.toISOString() ?? null })),
+    programas: record.programas.map((program) => ({ ...program, version: programVersions.get(program.id) ?? '', fechaIngreso: program.fechaIngreso?.toISOString() ?? null, fechaSalida: program.fechaSalida?.toISOString() ?? null })),
   }
 }
 
@@ -64,7 +65,12 @@ export async function findIntegralFamily(id: number): Promise<IntegralFamilyReco
     const memberVersions = record.integrantes.length
       ? await transaction.$queryRaw<Array<{ id: number; version: string }>>(Prisma.sql`SELECT id, xmin::text AS version FROM integrante_familia WHERE familia_id = ${id}`)
       : []
-    return serializeRecord(record, familyVersions[0].version, new Map(memberVersions.map((item) => [item.id, item.version])))
+    const programVersions = record.programas.length
+      ? await transaction.$queryRaw<Array<{ id: number; version: string }>>`SELECT id, xmin::text AS version FROM familia_programa WHERE familia_id = ${id}`
+      : []
+    return serializeRecord(record, familyVersions[0].version,
+      new Map(memberVersions.map((item) => [item.id, item.version])),
+      new Map(programVersions.map((item) => [item.id, item.version])))
   }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead })
 }
 
@@ -105,6 +111,9 @@ export async function createIntegralFamily(input: IntegralFamilyInput, prisma = 
     const associations = await transaction.familiaPrograma.findMany({ where: { familiaId: created.id }, ...programSelection })
     const familyVersions = await transaction.$queryRaw<Array<{ version: string }>>`SELECT xmin::text AS version FROM familia WHERE id = ${created.id}`
     const memberVersions = await transaction.$queryRaw<Array<{ id: number; version: string }>>`SELECT id, xmin::text AS version FROM integrante_familia WHERE familia_id = ${created.id}`
-    return serializeRecord({ ...general, integrantes: members, programas: associations }, familyVersions[0].version, new Map(memberVersions.map((item) => [item.id, item.version])))
+    const programVersions = await transaction.$queryRaw<Array<{ id: number; version: string }>>`SELECT id, xmin::text AS version FROM familia_programa WHERE familia_id = ${created.id}`
+    return serializeRecord({ ...general, integrantes: members, programas: associations }, familyVersions[0].version,
+      new Map(memberVersions.map((item) => [item.id, item.version])),
+      new Map(programVersions.map((item) => [item.id, item.version])))
   })
 }
