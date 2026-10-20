@@ -178,9 +178,22 @@ test('Brave integral record / real read-only family requests / isolated PostgreS
       await clickTab(1)
       assert.equal(await evaluate("document.querySelector('[role=tabpanel]:not([hidden]) tbody').rows.length"), multiple.members)
       await clickTab(2)
-      const programs = (await sql.query('SELECT fp.id,fp.programa_id,p.nombre FROM familia_programa fp JOIN programa p ON p.id=fp.programa_id WHERE fp.familia_id=$1', [multiple.id])).rows
+      const programs = (await sql.query("SELECT fp.id, fp.programa_id, p.nombre, TO_CHAR(fp.fecha_ingreso, 'DD/MM/YYYY') AS ingreso, TO_CHAR(fp.fecha_salida, 'DD/MM/YYYY') AS salida, fp.estado FROM familia_programa fp JOIN programa p ON p.id=fp.programa_id WHERE fp.familia_id=$1", [multiple.id])).rows
       const text = await panelText()
-      for (const row of programs) { assert.ok(text.includes(row.nombre)); assert.ok(text.includes(`Programa #${row.programa_id}`)); assert.ok(text.includes(`Asociación #${row.id}`)) }
+      const visibleIds = await evaluate("[...document.querySelectorAll('[aria-label=\"Participaciones de la familia\"] > li')].map(item => Number(/Asociación #(\\d+)/.exec(item.innerText)?.[1])).sort((a,b) => a-b)")
+      assert.deepEqual(visibleIds, programs.map(({ id }) => id).sort((a, b) => a - b), 'El historial debe corresponder exactamente al expediente consultado')
+      for (const row of programs) {
+        assert.ok(text.includes(row.nombre))
+        assert.ok(text.includes(`Programa #${row.programa_id}`))
+        assert.ok(text.includes(`Asociación #${row.id}`))
+        assert.ok(text.includes(row.ingreso ?? 'Sin fecha'))
+        assert.ok(text.includes(row.salida ?? 'Sin fecha'))
+        if (row.estado === null) assert.ok(text.includes('Sin estado definido'))
+        else if (row.estado === 'ACTIVO') assert.ok(text.includes('Activo'))
+        else if (row.estado === 'FINALIZADO') assert.ok(text.includes('Finalizado'))
+        else if (row.estado === 'RETIRADO') assert.ok(text.includes('Retirado'))
+        else assert.ok(text.includes(row.estado))
+      }
       await command('Page.reload')
       await wait("document.querySelector('[role=tab][aria-selected=true]')?.textContent === 'Información general'")
     })
