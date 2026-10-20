@@ -15,7 +15,6 @@ import {
   LayoutDashboard,
   Leaf,
   Package,
-  MapPinned,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
@@ -55,7 +54,8 @@ const icons = {
   phytosanitary: <Bug size={size} strokeWidth={strokeWidth} />,
   supplies: <Package size={size} strokeWidth={strokeWidth} />,
   visits: <ClipboardCheck size={size} strokeWidth={strokeWidth} />,
-  agenda: <CalendarDays size={size} strokeWidth={strokeWidth} />,
+  agenda: <CalendarDays size={size} strokeWidth={strokeWidth} /> ,
+  institutionalCalendar: <CalendarDays size={size} strokeWidth={strokeWidth} />,
   register: <ClipboardPenLine size={size} strokeWidth={strokeWidth} />,
   history: <History size={size} strokeWidth={strokeWidth} />,
   activities: <Activity size={size} strokeWidth={strokeWidth} />,
@@ -64,7 +64,6 @@ const icons = {
   documents: <FileText size={size} strokeWidth={strokeWidth} />,
   alerts: <Bell size={size} strokeWidth={strokeWidth} />,
   admin: <Settings size={size} strokeWidth={strokeWidth} />,
-  communities: <MapPinned size={size} strokeWidth={strokeWidth} />,
   users: <UsersRound size={size} strokeWidth={strokeWidth} />,
   permissions: <SlidersHorizontal size={size} strokeWidth={strokeWidth} />,
   audit: <ShieldCheck size={size} strokeWidth={strokeWidth} />,
@@ -77,6 +76,7 @@ export const navigationGroups: { id: string; name: string; items: NavigationItem
     items: [
       { id: 'dashboard', name: 'Dashboard', path: '/', icon: icons.dashboard, roles: ['fieldWorker', 'coordination', 'operationsDirector', 'administration', 'audit'] },
       { id: 'profile', name: 'Mi perfil', path: '/mi-perfil', icon: icons.profile, roles: ['fieldWorker', 'coordination', 'operationsDirector', 'administration', 'audit'] },
+      { id: 'institutional-calendar', name: 'Calendario', path: '/calendario', icon: icons.institutionalCalendar },
       { id: 'families', name: 'Familias y beneficiarios', path: '/familias', icon: icons.families, roles: ['fieldWorker', 'coordination'], children: [
         { id: 'families-list', name: 'Listado de familias', path: '/familias', icon: icons.familyList, exact: true },
         { id: 'families-create', name: 'Registrar familias', path: '/familias/nueva', icon: icons.familyCreate, exact: true },
@@ -110,9 +110,7 @@ export const navigationGroups: { id: string; name: string; items: NavigationItem
         { id: 'indicators', name: 'Indicadores', path: '/reportes/indicadores', icon: icons.reports },
         { id: 'alerts', name: 'Alertas', path: '/reportes/alertas', icon: icons.alerts },
       ] },
-      { id: 'admin', name: 'Administración', path: '/administracion', icon: icons.admin, roles: ['administration', 'coordination'], children: [
-        { id: 'communities', name: 'Comunidades', path: '/administracion/comunidades', icon: icons.communities },
-        { id: 'municipalities', name: 'Municipios', path: '/administracion/municipios', icon: icons.communities },
+      { id: 'admin', name: 'Administración', path: '/administracion', icon: icons.admin, roles: ['administration'], children: [
         { id: 'users', name: 'Usuarios', path: '/administracion/usuarios', icon: icons.users },
         { id: 'roles', name: 'Roles y permisos', path: '/administracion/roles-permisos', icon: icons.permissions },
         { id: 'settings', name: 'Configuración', path: '/administracion/configuracion', icon: icons.admin },
