@@ -306,6 +306,7 @@ model Visita {
   tipo                 String?
   estado               String
   observaciones        String?
+  versionNotificacion  Int       @default(0) @map("version_notificacion")
 
   familia            Familia             @relation(fields: [familiaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   usuarioResponsable Usuario             @relation(fields: [usuarioResponsableId], references: [id], onDelete: Restrict, onUpdate: Cascade)
@@ -709,6 +710,7 @@ model Notificacion {
   referencia    String?   @db.VarChar(255)
   fechaCreacion DateTime  @default(now()) @map("fecha_creacion") @db.Timestamptz(6)
   fechaLectura  DateTime? @map("fecha_lectura") @db.Timestamptz(6)
+  claveEvento   String?   @unique @map("clave_evento") @db.VarChar(191)
 
   usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
@@ -863,6 +865,8 @@ model EventoInstitucional {
   creadoPorId Int @map("creado_por_id")
   creadoEn DateTime @default(now()) @map("creado_en")
   actualizadoEn DateTime @updatedAt @map("actualizado_en")
+  versionNotificacion Int @default(0) @map("version_notificacion")
+  operacionCreacionId String? @unique @map("operacion_creacion_id") @db.Uuid
 
   responsable Usuario @relation("EventoResponsable", fields: [responsableId], references: [id], onDelete: Restrict)
   creadoPor Usuario @relation("EventoCreador", fields: [creadoPorId], references: [id], onDelete: Restrict)
