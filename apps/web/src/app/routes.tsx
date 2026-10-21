@@ -19,6 +19,7 @@ import VisitAgendaPage from '@/features/visits/pages/VisitAgendaPage'
 import VisitRegisterPage from '@/features/visits/pages/VisitRegisterPage'
 import VisitHistoryPage from '@/features/visits/pages/VisitHistoryPage'
 import InstitutionalCalendarPage from '@/features/calendar/pages/InstitutionalCalendarPage'
+import NotificacionesPage from '@/features/notifications/pages/NotificacionesPage'
 
 // AUTH-02: Autenticación
 import LoginPage from '@/features/auth/pages/LoginPage'
@@ -71,6 +72,9 @@ export default function AppRoutes() {
 
         {/* Diseño principal de Viviendas León */}
         <Route element={<AppLayout />}>
+
+          {/* NTF-02: Centro de notificaciones personales */}
+          <Route path="notificaciones" element={<NotificacionesPage />} />
 
           {/* Dashboard */}
           <Route

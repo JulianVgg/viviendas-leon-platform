@@ -11,6 +11,7 @@ export const SCREEN_PERMISSIONS: Record<string, string> = {
   '/': 'PANTALLA_DASHBOARD',
   '/calendario': 'PANTALLA_CALENDARIO',
   '/mi-perfil': 'PANTALLA_MI_PERFIL',
+  '/notificaciones': 'PANTALLA_NOTIFICACIONES',
   '/familias': 'PANTALLA_FAMILIAS',
   '/familias/nueva': 'PANTALLA_FAMILIAS_CREAR',
   '/familias/editar': 'PANTALLA_FAMILIAS_EDITAR',
@@ -74,7 +75,8 @@ export function canWritePrograms(usuario: PermissionUser): boolean {
 
 export function canViewPath(usuario: PermissionUser, path: string): boolean {
   if (isDireccionGeneral(usuario)) return true
-  if (path === '/' || path === '/mi-perfil') return true
+  // Bandeja personal disponible para cualquier usuario autenticado.
+  if (path === '/' || path === '/mi-perfil' || path === '/notificaciones') return true
   const codigo = permissionForPath(path)
   if (!codigo) return false
   if (path.startsWith('/offline-') && !import.meta.env.DEV) return false
