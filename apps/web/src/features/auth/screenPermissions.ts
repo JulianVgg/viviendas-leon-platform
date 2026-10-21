@@ -15,6 +15,7 @@ export const SCREEN_PERMISSIONS: Record<string, string> = {
   '/familias/editar': 'PANTALLA_FAMILIAS_EDITAR',
   '/gestion-agricola': 'PANTALLA_GESTION_AGRICOLA',
   '/gestion-agricola/huertos': 'PANTALLA_HUERTOS',
+  '/gestion-agricola/huertos/nuevo': 'PANTALLA_HUERTOS',
   '/gestion-agricola/cultivos': 'PANTALLA_CULTIVOS',
   '/gestion-agricola/produccion': 'PANTALLA_PRODUCCION',
   '/gestion-agricola/control-fitosanitario': 'PANTALLA_CONTROL_FITOSANITARIO',
@@ -59,6 +60,10 @@ export function canWriteFamilies(usuario: PermissionUser): boolean {
   return isDireccionGeneral(usuario) || usuario.permisos.includes('FAMILIAS_WRITE')
 }
 
+export function canWriteGardens(usuario: PermissionUser): boolean {
+  return isDireccionGeneral(usuario) || usuario.permisos.includes('HUERTOS_WRITE')
+}
+
 export function canWriteCommunities(usuario: PermissionUser): boolean {
   return isDireccionGeneral(usuario) || usuario.permisos.includes('COMUNIDADES_WRITE')
 }
@@ -78,5 +83,6 @@ export function canViewPath(usuario: PermissionUser, path: string): boolean {
   if (!codigo) return false
   if (path.startsWith('/offline-') && !import.meta.env.DEV) return false
   if ((path === '/familias/nueva' || path === '/familias/editar' || /^\/familias\/[^/]+\/editar$/.test(path)) && !canWriteFamilies(usuario)) return false
+  if (path === '/gestion-agricola/huertos/nuevo' && !canWriteGardens(usuario)) return false
   return usuario.permisos.includes(codigo)
 }

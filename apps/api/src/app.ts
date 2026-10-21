@@ -11,6 +11,7 @@ import { municipalitiesRouter } from './modules/catalogs/municipalities.routes.j
 import { programsRouter } from './modules/catalogs/programs.routes.js';
 import { offlineDemoRouter } from './modules/offline/offline.routes.js';
 import { visitsRouter } from './modules/visits/visits.routes.js';
+import { gardensRouter } from './modules/agriculture/gardens.routes.js';
 
 // AUTH-04: Administración de usuarios
 import { usersRouter } from './modules/users/users.routes.js';
@@ -82,6 +83,7 @@ app.use('/api/v1/municipios', municipalitiesRouter);
 app.use('/api/v1/programas', programsRouter);
 app.use('/api/v1/offline', offlineDemoRouter);
 app.use('/api/v1/visitas', visitsRouter);
+app.use('/api/v1/huertos', gardensRouter);
 
 // Manejo global de errores
 const handleRequestError: ErrorRequestHandler = (

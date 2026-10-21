@@ -16,11 +16,13 @@ import type { FamilyMemberRecord, IntegralFamilyRecord } from '../types/familyIn
 import FamilyMemberDialog from './FamilyMemberDialog'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import FamilyProgramHistory from './FamilyProgramHistory'
+import FamilyGardensSection from '@/features/agriculture/components/FamilyGardensSection'
 
 const tabs = [
   { id: 'general', label: 'Información general' },
   { id: 'members', label: 'Integrantes' },
   { id: 'programs', label: 'Programas' },
+  { id: 'gardens', label: 'Huertos' },
 ] as const
 type RecordTab = typeof tabs[number]['id']
 const textClass = 'block min-w-0 max-w-80 whitespace-pre-wrap break-words [overflow-wrap:anywhere]'
@@ -102,7 +104,7 @@ export default function FamilyIntegralRecord({ family, onRefresh }: { family: In
       <Card aria-label="Resumen de programas"><CardBody><p className="text-sm font-medium text-slate-600 dark:text-slate-300">Programas asociados</p><p className="mt-2 text-3xl font-semibold tabular-nums text-slate-900 dark:text-white">{family.programas.length}</p><p className="mt-2 text-xs leading-5 text-slate-500 dark:text-slate-400">Participaciones registradas en el expediente.</p></CardBody></Card>
     </div>
     <div className="min-w-0 space-y-5">
-      <div role="tablist" aria-label="Secciones del expediente familiar" aria-orientation="horizontal" className="grid grid-cols-3 gap-1 rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-900">
+      <div role="tablist" aria-label="Secciones del expediente familiar" aria-orientation="horizontal" className="grid grid-cols-4 gap-1 rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-800 dark:bg-slate-900">
         {tabs.map((tab, index) => <button key={tab.id} ref={(element) => { buttons.current[index] = element }} type="button" role="tab" id={tabId(tab.id)} aria-controls={panelId(tab.id)} aria-selected={selected === tab.id} tabIndex={selected === tab.id ? 0 : -1} onClick={() => setSelected(tab.id)} onKeyDown={(event) => handleTabKey(event, index)} className={`layout-focus min-h-11 min-w-0 rounded-lg px-2 py-3 text-xs font-medium break-words sm:px-4 sm:text-sm ${selected === tab.id ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300' : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-white/5'}`}>{tab.label}</button>)}
       </div>
       <section role="tabpanel" id={panelId('general')} aria-labelledby={tabId('general')} hidden={selected !== 'general'} tabIndex={0} className="layout-focus min-w-0 rounded-2xl">
@@ -117,6 +119,9 @@ export default function FamilyIntegralRecord({ family, onRefresh }: { family: In
       </section>
       <section role="tabpanel" id={panelId('programs')} aria-labelledby={tabId('programs')} hidden={selected !== 'programs'} tabIndex={0} className="layout-focus min-w-0 rounded-2xl">
         <FamilyProgramHistory participations={family.programas} />
+      </section>
+      <section role="tabpanel" id={panelId('gardens')} aria-labelledby={tabId('gardens')} hidden={selected !== 'gardens'} tabIndex={0} className="layout-focus min-w-0 rounded-2xl">
+        {selected === 'gardens' && <FamilyGardensSection familyId={family.id} />}
       </section>
       {memberDialog && <FamilyMemberDialog familyId={family.id} member={memberDialog.member} onClose={() => setMemberDialog(undefined)} onSaved={replaceMember} />}
       {stateMember && <Dialog open title={stateMember.activo ? 'Desactivar integrante' : 'Reactivar integrante'} description={`${stateMember.nombreCompleto} · Expediente #${family.id}`} onClose={() => { if (!stateSaving) setStateMember(undefined) }} actions={<><Button type="button" variant="secondary" disabled={stateSaving} onClick={() => setStateMember(undefined)}>Cancelar</Button><Button type="button" variant={stateMember.activo ? 'danger' : 'primary'} disabled={stateSaving || !isOnline} onClick={changeMemberState}>{stateMember.activo ? 'Confirmar desactivación' : 'Confirmar reactivación'}</Button></>}><p className="text-sm leading-6">{stateMember.activo ? 'El integrante quedará inactivo, pero conservará todas sus relaciones históricas. La familia debe mantener al menos un integrante activo.' : 'El integrante volverá a mostrarse como activo en el expediente.'}</p>{!isOnline && <Alert variant="warning" className="mt-4">Reconecta antes de confirmar esta operación.</Alert>}{memberError && <Alert variant="error" className="mt-4">{memberError}</Alert>}</Dialog>}
