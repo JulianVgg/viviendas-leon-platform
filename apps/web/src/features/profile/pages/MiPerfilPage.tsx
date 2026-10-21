@@ -1,19 +1,286 @@
-
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import {
   LockKeyhole,
   UserRound,
   MapPin,
   ShieldCheck,
+  Pencil,
+  Camera,
+  Trash2,
+  X,
 } from 'lucide-react'
 
 import { useAuth } from '@/features/auth/AuthProvider'
 
-// AUTH-04: Formulario para editar datos personales
-import EditarDatosPerfil from '@/features/profile/components/EditarDatosPerfil'
-
 export default function MiPerfilPage() {
-  const { usuario } = useAuth()
+  const { usuario, verificarSesion } = useAuth()
+
+  // Modal de información personal y fotografía.
+  const modalPerfilRef = useRef<HTMLDialogElement>(null)
+  const [editandoPerfil, setEditandoPerfil] = useState(false)
+  const [perfilActualizado, setPerfilActualizado] = useState(false)
+  const [nombre, setNombre] = useState('')
+  const [apellido, setApellido] = useState('')
+  const [correo, setCorreo] = useState('')
+  const [telefono, setTelefono] = useState('')
+  const [guardandoPerfil, setGuardandoPerfil] = useState(false)
+  const [errorPerfil, setErrorPerfil] = useState('')
+
+  // La fotografía se consulta en la API autenticada, no en la sesión.
+  const [fotoUrl, setFotoUrl] = useState<string | null>(null)
+  const [fotoVersion, setFotoVersion] = useState(0)
+  const [fotoArchivo, setFotoArchivo] = useState<File | null>(null)
+  const [fotoPreviewUrl, setFotoPreviewUrl] = useState<string | null>(null)
+  const [quitarFoto, setQuitarFoto] = useState(false)
+
+  useEffect(() => {
+    if (!usuario?.id) {
+      setFotoUrl(null)
+      return
+    }
+
+    const controller = new AbortController()
+    let urlTemporal: string | null = null
+
+    async function cargarFotografia() {
+      setFotoUrl(null)
+      try {
+        const respuesta = await fetch('/api/v1/perfil/foto', {
+          credentials: 'same-origin',
+          cache: 'no-store',
+          signal: controller.signal,
+        })
+
+        if (!respuesta.ok) return
+        const imagen = await respuesta.blob()
+        if (controller.signal.aborted) return
+
+        urlTemporal = URL.createObjectURL(imagen)
+        setFotoUrl(urlTemporal)
+      } catch {
+        // Si no existe fotografía o falla la red, mostramos el avatar predeterminado.
+      }
+    }
+
+    void cargarFotografia()
+    return () => {
+      controller.abort()
+      if (urlTemporal) URL.revokeObjectURL(urlTemporal)
+    }
+  }, [usuario?.id, fotoVersion])
+
+  useEffect(() => {
+    if (!fotoArchivo) {
+      setFotoPreviewUrl(null)
+      return
+    }
+    const url = URL.createObjectURL(fotoArchivo)
+    setFotoPreviewUrl(url)
+    return () => URL.revokeObjectURL(url)
+  }, [fotoArchivo])
+
+  function abrirEditorPerfil() {
+    if (!usuario) return
+    setNombre(usuario.nombre)
+    setApellido(usuario.apellido ?? '')
+    setCorreo(usuario.correo)
+    setTelefono(usuario.telefono ?? '')
+    setFotoArchivo(null)
+    setQuitarFoto(false)
+    setErrorPerfil('')
+    setPerfilActualizado(false)
+    setEditandoPerfil(true)
+  }
+
+  function cerrarEditorPerfil() {
+    if (guardandoPerfil) return
+    setEditandoPerfil(false)
+    setFotoArchivo(null)
+    setQuitarFoto(false)
+    setErrorPerfil('')
+  }
+
+  function seleccionarFoto(event: ChangeEvent<HTMLInputElement>) {
+    const archivo = event.target.files?.[0]
+    event.target.value = ''
+    if (!archivo) return
+
+    if (archivo.type !== 'image/jpeg' && archivo.type !== 'image/png') {
+      setErrorPerfil('Selecciona una fotografía JPG o PNG.')
+      return
+    }
+    if (archivo.size === 0 || archivo.size > 2 * 1024 * 1024) {
+      setErrorPerfil('La fotografía debe pesar más de 0 bytes y máximo 2 MB.')
+      return
+    }
+    setErrorPerfil('')
+    setFotoArchivo(archivo)
+    setQuitarFoto(false)
+  }
+
+  useEffect(() => {
+    const modal = modalPerfilRef.current
+    if (!modal) return
+    if (editandoPerfil && !modal.open) modal.showModal()
+    if (!editandoPerfil && modal.open) modal.close()
+  }, [editandoPerfil])
+
+  async function guardarPerfil(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (guardandoPerfil) return
+    setErrorPerfil('')
+
+    if (!nombre.trim() || !correo.trim()) {
+      setErrorPerfil('El nombre y el correo son obligatorios.')
+      return
+    }
+
+    setGuardandoPerfil(true)
+    let datosGuardados = false
+    try {
+      const respuesta = await fetch('/api/v1/perfil', {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nombre: nombre.trim(),
+          apellido: apellido.trim(),
+          correo: correo.trim(),
+          telefono: telefono.trim(),
+        }),
+      })
+
+      if (!respuesta.ok) {
+        const datos = await respuesta.json().catch(() => null)
+        setErrorPerfil(datos?.error?.message ?? 'No fue posible guardar los cambios.')
+        return
+      }
+      datosGuardados = true
+
+      if (fotoArchivo || quitarFoto) {
+        const respuestaFoto = fotoArchivo
+          ? await fetch('/api/v1/perfil/foto', {
+              method: 'PUT',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': fotoArchivo.type },
+              body: fotoArchivo,
+            })
+          : await fetch('/api/v1/perfil/foto', {
+              method: 'DELETE',
+              credentials: 'same-origin',
+            })
+
+        if (!respuestaFoto.ok) {
+          const datos = await respuestaFoto.json().catch(() => null)
+          await verificarSesion()
+          setErrorPerfil(
+            'Los datos personales se guardaron, pero la fotografía no: ' +
+              (datos?.error?.message ?? 'No se pudo guardar la fotografía.'),
+          )
+          return
+        }
+        setFotoVersion((version) => version + 1)
+      }
+
+      if (!(await verificarSesion())) {
+        setErrorPerfil('Los cambios se guardaron, pero no pudimos actualizar la sesión. Inicia sesión otra vez.')
+        return
+      }
+
+      setPerfilActualizado(true)
+      setEditandoPerfil(false)
+      setFotoArchivo(null)
+      setQuitarFoto(false)
+    } catch {
+      setErrorPerfil(
+        datosGuardados
+          ? 'Los datos personales se guardaron, pero hubo un problema al actualizar la fotografía o la sesión.'
+          : 'No fue posible conectar con el servidor.',
+      )
+    } finally {
+      setGuardandoPerfil(false)
+    }
+  }
+
+  // Edición de dirección: solo Departamento, Municipio y Dirección.
+  const modalDireccionRef = useRef<HTMLDialogElement>(null)
+  const [editandoDireccion, setEditandoDireccion] = useState(false)
+  const [departamento, setDepartamento] = useState('')
+  const [municipio, setMunicipio] = useState('')
+  const [direccion, setDireccion] = useState('')
+  const [guardandoDireccion, setGuardandoDireccion] = useState(false)
+  const [errorDireccion, setErrorDireccion] = useState('')
+  const [direccionActualizada, setDireccionActualizada] = useState(false)
+
+  function abrirEditorDireccion() {
+    if (!usuario) return
+    setDepartamento(usuario.departamento ?? '')
+    setMunicipio(usuario.municipio ?? '')
+    setDireccion(usuario.direccion ?? '')
+    setErrorDireccion('')
+    setDireccionActualizada(false)
+    setEditandoDireccion(true)
+  }
+
+  function cerrarEditorDireccion() {
+    if (guardandoDireccion) return
+    setEditandoDireccion(false)
+    setErrorDireccion('')
+  }
+
+  useEffect(() => {
+    const modal = modalDireccionRef.current
+    if (!modal) return
+    if (editandoDireccion && !modal.open) modal.showModal()
+    if (!editandoDireccion && modal.open) modal.close()
+  }, [editandoDireccion])
+
+  async function guardarDireccion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (guardandoDireccion) return
+    setErrorDireccion('')
+
+    if (
+      departamento.trim().length > 100 ||
+      municipio.trim().length > 100 ||
+      direccion.trim().length > 255
+    ) {
+      setErrorDireccion('Revisa la longitud de los campos de dirección.')
+      return
+    }
+
+    setGuardandoDireccion(true)
+    try {
+      const respuesta = await fetch('/api/v1/perfil/direccion', {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          departamento: departamento.trim(),
+          municipio: municipio.trim(),
+          direccion: direccion.trim(),
+        }),
+      })
+
+      if (!respuesta.ok) {
+        const datos = await respuesta.json().catch(() => null)
+        setErrorDireccion(datos?.error?.message ?? 'No fue posible guardar la dirección.')
+        return
+      }
+
+      if (!(await verificarSesion())) {
+        setErrorDireccion('La dirección se guardó, pero no pudimos actualizar la sesión. Inicia sesión otra vez.')
+        return
+      }
+
+      setDireccionActualizada(true)
+      setEditandoDireccion(false)
+    } catch {
+      setErrorDireccion('No fue posible conectar con el servidor.')
+    } finally {
+      setGuardandoDireccion(false)
+    }
+  }
 
   const [passwordActual, setPasswordActual] = useState('')
   const [passwordNueva, setPasswordNueva] = useState('')
@@ -145,8 +412,12 @@ export default function MiPerfilPage() {
       {/* Tarjeta principal */}
       <section className={cardClass}>
         <div className="flex items-center gap-4">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600 dark:bg-blue-500/10">
-            <UserRound size={30} />
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-blue-50 text-blue-600 dark:bg-blue-500/10">
+            {fotoUrl ? (
+              <img src={fotoUrl} alt="Fotografía de perfil" className="h-full w-full object-cover" />
+            ) : (
+              <UserRound size={30} aria-hidden="true" />
+            )}
           </div>
 
           <div className="min-w-0">
@@ -167,13 +438,29 @@ export default function MiPerfilPage() {
 
       {/* Información personal */}
       <section className={cardClass}>
-        <div className="mb-6 flex items-center gap-3">
-          <UserRound className="text-blue-600" size={22} />
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <UserRound className="text-blue-600" size={22} />
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Información personal
+            </h2>
+          </div>
 
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Información personal
-          </h2>
+          <button
+            type="button"
+            onClick={abrirEditorPerfil}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-white dark:hover:bg-gray-800"
+          >
+            <Pencil size={16} />
+            Editar
+          </button>
         </div>
+
+        {perfilActualizado && (
+          <p role="status" className="mb-5 text-sm text-green-700 dark:text-green-400">
+            Tu información personal se actualizó correctamente.
+          </p>
+        )}
 
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
           {datos.map((dato) => (
@@ -190,29 +477,318 @@ export default function MiPerfilPage() {
         </div>
       </section>
 
-      {/* AUTH-04: Editar datos personales */}
-      <EditarDatosPerfil />
+      {/* Formulario modal de edición del perfil */}
+      <dialog
+        ref={modalPerfilRef}
+        aria-labelledby="titulo-editar-perfil"
+        onCancel={(event) => {
+          event.preventDefault()
+          cerrarEditorPerfil()
+        }}
+        className="fixed inset-0 m-auto max-h-[90vh] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto rounded-2xl border border-gray-200 bg-white p-0 shadow-xl backdrop:bg-black/50 dark:border-gray-800 dark:bg-gray-900"
+      >
+        <div className="p-6 sm:p-8">
+          <div className="mb-6 flex items-start justify-between gap-4">
+            <div>
+              <h2
+                id="titulo-editar-perfil"
+                className="text-xl font-bold text-gray-900 dark:text-white"
+              >
+                Editar información personal
+              </h2>
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                Actualiza tus datos personales.
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-label="Cerrar ventana"
+              onClick={cerrarEditorPerfil}
+              disabled={guardandoPerfil}
+              className="rounded-full p-2 text-gray-500 hover:bg-gray-100 disabled:opacity-50 dark:hover:bg-gray-800"
+            >
+              <X size={22} />
+            </button>
+          </div>
 
-      {/* Dirección */}
+          <form onSubmit={(event) => void guardarPerfil(event)}>
+            <div className="mb-6 rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-blue-50 text-blue-600 dark:bg-blue-500/10">
+                  {fotoPreviewUrl || (!quitarFoto && fotoUrl) ? (
+                    <img
+                      src={fotoPreviewUrl || fotoUrl || undefined}
+                      alt="Vista previa de fotografía de perfil"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <UserRound size={34} aria-hidden="true" />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <label htmlFor="foto-perfil" className="mb-2 flex items-center gap-2 text-sm font-semibold dark:text-white">
+                    <Camera size={17} /> Fotografía de perfil
+                  </label>
+                  <input
+                    id="foto-perfil"
+                    type="file"
+                    accept="image/png,image/jpeg"
+                    onChange={seleccionarFoto}
+                    disabled={guardandoPerfil}
+                    className="block w-full text-sm text-gray-700 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:font-medium file:text-blue-700 hover:file:bg-blue-100 dark:text-gray-200"
+                  />
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">JPG o PNG. Máximo 2 MB.</p>
+                  {(fotoUrl || fotoArchivo || quitarFoto) && (
+                    <button
+                      type="button"
+                      disabled={guardandoPerfil}
+                      onClick={() => {
+                        setFotoArchivo(null)
+                        setQuitarFoto(true)
+                        setErrorPerfil('')
+                      }}
+                      className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-red-600 hover:underline disabled:opacity-50"
+                    >
+                      <Trash2 size={15} /> Quitar fotografía
+                    </button>
+                  )}
+                  {quitarFoto && (
+                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                      La fotografía se eliminará al presionar Guardar cambios.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+              <div>
+                <label htmlFor="perfil-nombre" className="mb-2 block text-sm font-medium dark:text-white">
+                  Nombre
+                </label>
+                <input
+                  id="perfil-nombre"
+                  autoFocus
+                  className={inputClass}
+                  maxLength={100}
+                  required
+                  value={nombre}
+                  onChange={(event) => setNombre(event.target.value)}
+                />
+              </div>
+              <div>
+                <label htmlFor="perfil-apellido" className="mb-2 block text-sm font-medium dark:text-white">
+                  Apellido
+                </label>
+                <input
+                  id="perfil-apellido"
+                  className={inputClass}
+                  maxLength={100}
+                  value={apellido}
+                  onChange={(event) => setApellido(event.target.value)}
+                />
+              </div>
+              <div>
+                <label htmlFor="perfil-correo" className="mb-2 block text-sm font-medium dark:text-white">
+                  Correo electrónico
+                </label>
+                <input
+                  id="perfil-correo"
+                  type="email"
+                  className={inputClass}
+                  maxLength={254}
+                  required
+                  value={correo}
+                  onChange={(event) => setCorreo(event.target.value)}
+                />
+              </div>
+              <div>
+                <label htmlFor="perfil-telefono" className="mb-2 block text-sm font-medium dark:text-white">
+                  Teléfono
+                </label>
+                <input
+                  id="perfil-telefono"
+                  type="tel"
+                  className={inputClass}
+                  maxLength={30}
+                  value={telefono}
+                  onChange={(event) => setTelefono(event.target.value)}
+                />
+              </div>
+            </div>
+
+            <p className="mt-5 text-sm text-gray-500 dark:text-gray-400">
+              El rol y el estado de tu cuenta no se pueden modificar aquí.
+            </p>
+
+            {errorPerfil && (
+              <p role="alert" className="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                {errorPerfil}
+              </p>
+            )}
+
+            <div className="mt-7 flex flex-wrap justify-end gap-3 border-t border-gray-200 pt-5 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={cerrarEditorPerfil}
+                disabled={guardandoPerfil}
+                className="rounded-lg border border-gray-300 px-5 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-white dark:hover:bg-gray-800"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={guardandoPerfil}
+                className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+              >
+                {guardandoPerfil ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </dialog>
+
+      {/* Dirección en modo consulta */}
       <section className={cardClass}>
-        <div className="mb-4 flex items-center gap-3">
-          <MapPin className="text-blue-600" size={22} />
-
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-            Dirección
-          </h2>
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <MapPin className="text-blue-600" size={22} />
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Dirección</h2>
+          </div>
+          <button
+            type="button"
+            onClick={abrirEditorDireccion}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-white dark:hover:bg-gray-800"
+          >
+            <Pencil size={16} /> Editar
+          </button>
         </div>
 
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          No hay información de dirección registrada
-          para esta cuenta.
-        </p>
+        {direccionActualizada && (
+          <p role="status" className="mb-5 text-sm text-green-700 dark:text-green-400">
+            Tu dirección se actualizó correctamente.
+          </p>
+        )}
 
-        <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
-          Esta sección se conectará cuando el sistema
-          disponga de los campos de dirección del personal.
-        </p>
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+          <div>
+            <p className="mb-1 text-sm text-gray-500 dark:text-gray-400">Departamento</p>
+            <p className="break-words text-sm font-medium text-gray-900 dark:text-white">
+              {usuario.departamento || 'No registrado'}
+            </p>
+          </div>
+          <div>
+            <p className="mb-1 text-sm text-gray-500 dark:text-gray-400">Municipio</p>
+            <p className="break-words text-sm font-medium text-gray-900 dark:text-white">
+              {usuario.municipio || 'No registrado'}
+            </p>
+          </div>
+          <div className="sm:col-span-2">
+            <p className="mb-1 text-sm text-gray-500 dark:text-gray-400">Dirección</p>
+            <p className="break-words text-sm font-medium text-gray-900 dark:text-white">
+              {usuario.direccion || 'No registrada'}
+            </p>
+          </div>
+        </div>
       </section>
+
+      {/* Ventana modal de dirección */}
+      <dialog
+        ref={modalDireccionRef}
+        aria-labelledby="titulo-editar-direccion"
+        onCancel={(event) => {
+          event.preventDefault()
+          cerrarEditorDireccion()
+        }}
+        className="fixed inset-0 m-auto max-h-[90vh] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto rounded-2xl border border-gray-200 bg-white p-0 shadow-xl backdrop:bg-black/50 dark:border-gray-800 dark:bg-gray-900"
+      >
+        <div className="p-6 sm:p-8">
+          <div className="mb-6 flex items-start justify-between gap-4">
+            <div>
+              <h2 id="titulo-editar-direccion" className="text-xl font-bold text-gray-900 dark:text-white">
+                Editar dirección
+              </h2>
+              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                Actualiza tu departamento, municipio y dirección.
+              </p>
+            </div>
+            <button
+              type="button"
+              aria-label="Cerrar ventana de dirección"
+              onClick={cerrarEditorDireccion}
+              disabled={guardandoDireccion}
+              className="rounded-full p-2 text-gray-500 hover:bg-gray-100 disabled:opacity-50 dark:hover:bg-gray-800"
+            >
+              <X size={22} />
+            </button>
+          </div>
+
+          <form onSubmit={(event) => void guardarDireccion(event)}>
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+              <div>
+                <label htmlFor="perfil-departamento" className="mb-2 block text-sm font-medium dark:text-white">
+                  Departamento
+                </label>
+                <input
+                  id="perfil-departamento"
+                  autoFocus
+                  className={inputClass}
+                  maxLength={100}
+                  value={departamento}
+                  onChange={(event) => setDepartamento(event.target.value)}
+                />
+              </div>
+              <div>
+                <label htmlFor="perfil-municipio" className="mb-2 block text-sm font-medium dark:text-white">
+                  Municipio
+                </label>
+                <input
+                  id="perfil-municipio"
+                  className={inputClass}
+                  maxLength={100}
+                  value={municipio}
+                  onChange={(event) => setMunicipio(event.target.value)}
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label htmlFor="perfil-direccion" className="mb-2 block text-sm font-medium dark:text-white">
+                  Dirección
+                </label>
+                <textarea
+                  id="perfil-direccion"
+                  className={inputClass}
+                  rows={3}
+                  maxLength={255}
+                  value={direccion}
+                  onChange={(event) => setDireccion(event.target.value)}
+                />
+              </div>
+            </div>
+
+            {errorDireccion && (
+              <p role="alert" className="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                {errorDireccion}
+              </p>
+            )}
+            <div className="mt-7 flex flex-wrap justify-end gap-3 border-t border-gray-200 pt-5 dark:border-gray-800">
+              <button
+                type="button"
+                onClick={cerrarEditorDireccion}
+                disabled={guardandoDireccion}
+                className="rounded-lg border border-gray-300 px-5 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-white dark:hover:bg-gray-800"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={guardandoDireccion}
+                className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+              >
+                {guardandoDireccion ? 'Guardando...' : 'Guardar cambios'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </dialog>
 
       {/* Seguridad */}
       <section className={cardClass}>

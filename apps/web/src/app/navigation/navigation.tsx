@@ -11,6 +11,8 @@ import {
   FileText,
   GraduationCap,
   History,
+  HeartHandshake,
+  MapPinned,
   House,
   LayoutDashboard,
   Leaf,
@@ -64,6 +66,8 @@ const icons = {
   documents: <FileText size={size} strokeWidth={strokeWidth} />,
   alerts: <Bell size={size} strokeWidth={strokeWidth} />,
   admin: <Settings size={size} strokeWidth={strokeWidth} />,
+  communities: <MapPinned size={size} strokeWidth={strokeWidth} />,
+  programs: <HeartHandshake size={size} strokeWidth={strokeWidth} />,
   users: <UsersRound size={size} strokeWidth={strokeWidth} />,
   permissions: <SlidersHorizontal size={size} strokeWidth={strokeWidth} />,
   audit: <ShieldCheck size={size} strokeWidth={strokeWidth} />,
@@ -110,10 +114,12 @@ export const navigationGroups: { id: string; name: string; items: NavigationItem
         { id: 'indicators', name: 'Indicadores', path: '/reportes/indicadores', icon: icons.reports },
         { id: 'alerts', name: 'Alertas', path: '/reportes/alertas', icon: icons.alerts },
       ] },
-      { id: 'admin', name: 'Administración', path: '/administracion', icon: icons.admin, roles: ['administration'], children: [
+      { id: 'admin', name: 'Administración', path: '/administracion', icon: icons.admin, roles: ['administration', 'coordination'], children: [
+        { id: 'communities', name: 'Comunidades', path: '/administracion/comunidades', icon: icons.communities },
+        { id: 'municipalities', name: 'Municipios', path: '/administracion/municipios', icon: icons.communities },
+        { id: 'programs', name: 'Programas', path: '/administracion/programas', icon: icons.programs },
         { id: 'users', name: 'Usuarios', path: '/administracion/usuarios', icon: icons.users },
         { id: 'roles', name: 'Roles y permisos', path: '/administracion/roles-permisos', icon: icons.permissions },
-        { id: 'settings', name: 'Configuración', path: '/administracion/configuracion', icon: icons.admin },
       ] },
       { id: 'audit', name: 'Auditoría', path: '/auditoria', icon: icons.audit, roles: ['audit'], children: [
         { id: 'audit-log', name: 'Bitácora', path: '/auditoria/bitacora', icon: icons.history },

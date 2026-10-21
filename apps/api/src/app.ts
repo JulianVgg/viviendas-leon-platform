@@ -6,6 +6,9 @@ import type { ErrorRequestHandler } from 'express';
 // Rutas existentes del proyecto
 import { familiesRouter } from './modules/families/families.routes.js';
 import { communitiesRouter } from './modules/catalogs/catalogs.routes.js';
+import { adminCommunitiesRouter } from './modules/catalogs/communities.routes.js';
+import { municipalitiesRouter } from './modules/catalogs/municipalities.routes.js';
+import { programsRouter } from './modules/catalogs/programs.routes.js';
 import { offlineDemoRouter } from './modules/offline/offline.routes.js';
 import { visitsRouter } from './modules/visits/visits.routes.js';
 import { calendarRouter } from './modules/calendar/calendar.routes.js';
@@ -15,6 +18,8 @@ import { usersRouter } from './modules/users/users.routes.js';
 
 // AUTH-04: Perfil personal
 import { profileRouter } from './modules/profile/profile.routes.js';
+// Perfil: edición de dirección y fotografía
+import { profileExtrasRouter } from './modules/profile/profile-extras.routes.js';
 
 // AUTH-04: Roles y permisos
 import { rolesRouter } from './modules/admin/roles.routes.js';
@@ -61,6 +66,9 @@ app.use('/api/v1', requirePasswordChangeCompleted);
 // AUTH-04: Perfil del usuario autenticado
 app.use('/api/v1/perfil', profileRouter);
 
+// AUTH-06: Dirección y fotografía de perfil
+app.use('/api/v1/perfil', profileExtrasRouter);
+
 // AUTH-04: Administración de roles y permisos
 app.use('/api/v1/roles', rolesRouter);
 
@@ -70,6 +78,8 @@ app.use('/api/v1/usuarios', usersRouter);
 // Rutas existentes de Viviendas León
 app.use('/api/v1/familias', familiesRouter);
 app.use('/api/v1/comunidades', communitiesRouter);
+app.use('/api/v1/municipios', municipalitiesRouter);
+app.use('/api/v1/programas', programsRouter);
 app.use('/api/v1/offline', offlineDemoRouter);
 app.use('/api/v1/visitas', visitsRouter);
 app.use('/api/v1/calendario', calendarRouter);

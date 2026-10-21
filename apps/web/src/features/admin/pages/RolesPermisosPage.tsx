@@ -48,6 +48,8 @@ const GRUPOS: Grupo[] = [
   ] },
   { titulo: 'Administración', pantallas: [
     { codigo: 'PANTALLA_ADMINISTRACION', nombre: 'Vista general de administración', ruta: '/administracion' },
+    { codigo: 'PANTALLA_PROGRAMAS', nombre: 'Programas', ruta: '/administracion/programas' },
+    { codigo: 'PROGRAMAS_WRITE', nombre: 'Escritura de programas', ruta: 'Operaciones API', especial: true },
     { codigo: 'PANTALLA_USUARIOS', nombre: 'Usuarios', ruta: '/administracion/usuarios', especial: true },
     { codigo: 'PANTALLA_ROLES_PERMISOS', nombre: 'Roles y permisos', ruta: '/administracion/roles-permisos', especial: true },
     { codigo: 'PANTALLA_CONFIGURACION', nombre: 'Configuración', ruta: '/administracion/configuracion' },

@@ -8,6 +8,12 @@ export type AuthenticatedUser = {
   apellido: string | null
   telefono: string | null
   correo: string
+
+  // Dirección del usuario
+  departamento: string | null
+  municipio: string | null
+  direccion: string | null
+
   roles: string[]
   permisos: string[]
   debeCambiarPassword: boolean
@@ -85,6 +91,11 @@ export async function validateCredentials(
     apellido: usuario.apellido,
     telefono: usuario.telefono,
     correo: usuario.correo,
+
+    departamento: usuario.departamento,
+    municipio: usuario.municipio,
+    direccion: usuario.direccion,
+
     roles,
     permisos,
     debeCambiarPassword: usuario.debeCambiarPassword,
@@ -129,6 +140,11 @@ export async function getAuthenticatedUser(
     apellido: usuario.apellido,
     telefono: usuario.telefono,
     correo: usuario.correo,
+
+    departamento: usuario.departamento,
+    municipio: usuario.municipio,
+    direccion: usuario.direccion,
+
     roles: activeRoles.map((rol) => rol.nombre),
     permisos: [
       ...new Set(
@@ -176,7 +192,7 @@ export async function cambiarPassword(
 
   if (passwordActual === passwordNueva) {
     throw new Error(
-      'La nueva contraseña debe ser diferente a la actual.',
+      'La nueva contraseña debe ser diferente a la actual.'
     )
   }
 

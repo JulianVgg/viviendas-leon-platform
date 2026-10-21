@@ -701,11 +701,18 @@ model Alerta {
 
 
 
+
 model Usuario {
   id                  Int       @id @default(autoincrement())
   nombre              String
   apellido            String?
   telefono            String?
+
+  // Dirección del usuario
+  departamento        String?   @db.VarChar(100)
+  municipio           String?   @db.VarChar(100)
+  direccion           String?   @db.VarChar(255)
+
   correo              String    @unique
   passwordHash        String    @map("password_hash")
   debeCambiarPassword Boolean   @default(false) @map("debe_cambiar_password")
@@ -714,6 +721,7 @@ model Usuario {
   fechaCreacion       DateTime  @map("fecha_creacion")
 
   roles        UsuarioRol[]
+  fotoPerfil   UsuarioFotoPerfil?
   visitas      Visita[]
   entregas     EntregaInsumo[]
   seguimientos SeguimientoTecnico[]
@@ -723,6 +731,16 @@ model Usuario {
   eventosParticipante EventoInstitucionalParticipante[]
 
   @@map("usuario")
+}
+model UsuarioFotoPerfil {
+  usuarioId     Int      @id @map("usuario_id")
+  mimeType      String   @map("mime_type") @db.VarChar(30)
+  contenido     Bytes
+  actualizadaEn DateTime @default(now()) @map("actualizada_en")
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@map("usuario_foto_perfil")
 }
 
 

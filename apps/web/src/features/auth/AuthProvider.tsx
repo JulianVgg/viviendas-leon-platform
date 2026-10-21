@@ -9,16 +9,25 @@ import {
 } from 'react'
 
 
+
 type AuthUser = {
   id: number
   nombre: string
   apellido: string | null
   telefono: string | null
   correo: string
+
+  // Dirección del usuario
+  departamento: string | null
+  municipio: string | null
+  direccion: string | null
+
+  // Autenticación y permisos
   roles: string[]
   permisos: string[]
   debeCambiarPassword: boolean
 }
+
 
 
 type AuthContextValue = {

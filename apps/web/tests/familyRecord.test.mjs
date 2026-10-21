@@ -97,6 +97,9 @@ test('Brave record UI: real DOM, mocked HTTP, read-only tabs, errors, privacy an
       programas: [
         { id: 901, programaId: 71, programa: { id: 71, nombre: `QA PROGRAM ${'D'.repeat(400)}` }, fechaIngreso: '2026-10-14T00:00:00.000Z', fechaSalida: null, estado: null, observaciones: 'QA PROGRAM NOTES '.repeat(120) },
         { id: 902, programaId: 72, programa: { id: 72, nombre: 'QA PROGRAM TWO' }, fechaIngreso: null, fechaSalida: '2026-10-15T00:00:00.000Z', estado: 'QA CUSTOM VALUE', observaciones: null },
+        { id: 903, programaId: 73, programa: { id: 73, nombre: 'QA ACTIVE PROGRAM' }, fechaIngreso: '2026-10-19T00:00:00.000Z', fechaSalida: null, estado: 'ACTIVO', observaciones: null },
+        { id: 904, programaId: 74, programa: { id: 74, nombre: 'QA FINISHED PROGRAM' }, fechaIngreso: '2026-02-01T00:00:00.000Z', fechaSalida: '2026-07-01T00:00:00.000Z', estado: 'FINALIZADO', observaciones: 'Participación completada' },
+        { id: 905, programaId: 75, programa: { id: 75, nombre: 'QA RETIRED PROGRAM' }, fechaIngreso: '2026-01-01T00:00:00.000Z', fechaSalida: '2026-02-01T00:00:00.000Z', estado: 'RETIRADO', observaciones: null },
       ],
     }
     let mode = { status: 200 }
@@ -133,7 +136,7 @@ test('Brave record UI: real DOM, mocked HTTP, read-only tabs, errors, privacy an
     await wait("document.body.innerText.includes('Consultando expediente integral...')")
     await ready()
     assert.equal(await evaluate("document.querySelector('[aria-label=\"Resumen de integrantes\"]').innerText.includes('2')"), true)
-    assert.equal(await evaluate("document.querySelector('[aria-label=\"Resumen de programas\"]').innerText.includes('2')"), true)
+    assert.equal(await evaluate("document.querySelector('[aria-label=\"Resumen de programas\"]').innerText.includes('5')"), true)
     assert.equal(await evaluate("document.querySelector('[aria-label=\"Identificación del expediente\"]').innerText.includes('RETIRADA')"), true)
     assert.equal(await evaluate("document.querySelector('[role=tabpanel]:not([hidden])').innerText.includes('14/10/2026')"), true)
     const associations = await evaluate("[...document.querySelectorAll('[role=tab]')].map(tab=>({selected:tab.getAttribute('aria-selected'),tabIndex:tab.tabIndex,linked:document.getElementById(tab.getAttribute('aria-controls'))?.getAttribute('aria-labelledby')===tab.id}))")
@@ -147,6 +150,24 @@ test('Brave record UI: real DOM, mocked HTTP, read-only tabs, errors, privacy an
     await key('End', 35)
     await wait("document.activeElement?.textContent === 'Programas'")
     for (const text of ['Programa #71', 'Asociación #901', 'Sin estado definido', 'QA CUSTOM VALUE', '15/10/2026']) assert.equal(await evaluate(`document.querySelector('[role=tabpanel]:not([hidden])').innerText.includes(${JSON.stringify(text)})`), true)
+    const totals = await evaluate("[...document.querySelectorAll('[aria-label=\"Resumen del historial\"] > div')].map(element => element.innerText)")
+    assert.deepEqual(totals.map((value) => Number(value.match(/\d+/)?.[0])), [5, 1, 2, 2])
+    const historyCount = () => evaluate("document.querySelectorAll('[aria-label=\"Participaciones de la familia\"] > li').length")
+    const familyRequestsBeforeFilters = requests.filter(({ path }) => path.endsWith('/expediente')).length
+    assert.equal(await historyCount(), 5)
+    await evaluate("document.querySelector('[aria-label=\"Filtrar participaciones\"] button:nth-child(2)').click()")
+    assert.equal(await historyCount(), 1)
+    assert.equal(await evaluate("document.querySelector('[aria-label=\"Participaciones de la familia\"]').innerText.includes('QA ACTIVE PROGRAM')"), true)
+    await evaluate("document.querySelector('[aria-label=\"Filtrar participaciones\"] button:nth-child(3)').click()")
+    assert.equal(await historyCount(), 2)
+    assert.equal(await evaluate("document.querySelector('[aria-label=\"Participaciones de la familia\"]').innerText.includes('QA FINISHED PROGRAM')"), true)
+    await evaluate("document.querySelector('[aria-label=\"Filtrar participaciones\"] button:nth-child(4)').click()")
+    assert.equal(await historyCount(), 2)
+    assert.equal(await evaluate("document.querySelector('[aria-label=\"Participaciones de la familia\"]').innerText.includes('QA CUSTOM VALUE')"), true)
+    await evaluate("document.querySelector('[aria-label=\"Filtrar participaciones\"] button:nth-child(1)').click()")
+    assert.equal(await historyCount(), 5)
+    assert.equal(requests.filter(({ path }) => path.endsWith('/expediente')).length, familyRequestsBeforeFilters)
+    await evaluate("document.querySelectorAll('[role=tab]')[2].focus()")
     await key('ArrowRight', 39)
     await wait("document.activeElement?.textContent === 'Información general'")
     await key('ArrowLeft', 37)
