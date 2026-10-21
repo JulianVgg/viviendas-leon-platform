@@ -307,6 +307,7 @@ model Visita {
   estado               String
   observaciones        String?
   versionNotificacion  Int       @default(0) @map("version_notificacion")
+  recordatoriosConfig Json?     @map("recordatorios_config")
 
   familia            Familia             @relation(fields: [familiaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   usuarioResponsable Usuario             @relation(fields: [usuarioResponsableId], references: [id], onDelete: Restrict, onUpdate: Cascade)
@@ -751,6 +752,8 @@ model Usuario {
   seguimientos SeguimientoTecnico[]
   bitacoras    Bitacora[]
   notificaciones Notificacion[]
+  recordatorios Recordatorio[]
+  preferenciaRecordatorio PreferenciaRecordatorio?
   eventosResponsable EventoInstitucional[] @relation("EventoResponsable")
   eventosCreados EventoInstitucional[] @relation("EventoCreador")
   eventosParticipante EventoInstitucionalParticipante[]
@@ -867,6 +870,7 @@ model EventoInstitucional {
   actualizadoEn DateTime @updatedAt @map("actualizado_en")
   versionNotificacion Int @default(0) @map("version_notificacion")
   operacionCreacionId String? @unique @map("operacion_creacion_id") @db.Uuid
+  recordatoriosConfig Json? @map("recordatorios_config")
 
   responsable Usuario @relation("EventoResponsable", fields: [responsableId], references: [id], onDelete: Restrict)
   creadoPor Usuario @relation("EventoCreador", fields: [creadoPorId], references: [id], onDelete: Restrict)
@@ -886,4 +890,32 @@ model EventoInstitucionalParticipante {
   @@id([eventoId, usuarioId])
   @@index([usuarioId], map: "evento_institucional_participante_usuario_idx")
   @@map("evento_institucional_participante")
+}
+
+// NTF-04: recordatorios PENDIENTES; NTF-05 los despachará.
+// Origen polimórfico: se cancela explícitamente al eliminar la actividad.
+model Recordatorio {
+  id Int @id @default(autoincrement())
+  usuarioId Int @map("usuario_id")
+  tipoOrigen String @map("tipo_origen") @db.VarChar(12)
+  origenId Int @map("origen_id")
+  clave String @db.VarChar(80)
+  fechaProgramada DateTime @map("fecha_programada") @db.Timestamptz(6)
+  estado String @default("PENDIENTE") @db.VarChar(15)
+  creadoEn DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([tipoOrigen, origenId, usuarioId, clave], map: "recordatorio_origen_destinatario_clave_key")
+  @@index([estado, fechaProgramada], map: "recordatorio_pendiente_idx")
+  @@index([usuarioId, estado], map: "recordatorio_usuario_estado_idx")
+  @@map("recordatorio")
+}
+
+model PreferenciaRecordatorio {
+  usuarioId Int @id @map("usuario_id")
+  anticipaciones String[] @default(["DIA_ANTES"])
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@map("preferencia_recordatorio")
 }

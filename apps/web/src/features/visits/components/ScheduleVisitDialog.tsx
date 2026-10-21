@@ -8,6 +8,8 @@ import type { FamilyListItem } from '@/features/families/types/family'
 import { getOfflineData, saveOfflineData } from '@/db/offlineDb'
 import { saveVisitCapture, type VisitCapture, type VisitTimeSlot } from '@/features/visits/services/visitService'
 import { useAuth } from '@/features/auth/AuthProvider'
+import ReminderPicker from '@/features/notifications/components/ReminderPicker'
+import type { ConfigRecordatorios } from '@/features/notifications/services/remindersService'
 
 const validDate = (text: string) => /^\d{4}-\d{2}-\d{2}$/.test(text) && !Number.isNaN(Date.parse(`${text}T12:00:00Z`)) && new Date(`${text}T12:00:00Z`).toISOString().slice(0, 10) === text
 
@@ -26,6 +28,7 @@ export default function ScheduleVisitDialog({ date, onClose, onSaved }: {
   const [familyId, setFamilyId] = useState('')
   const [scheduledDate, setScheduledDate] = useState('')
   const [timeSlot, setTimeSlot] = useState<VisitTimeSlot>('MANANA')
+  const [recordatorios, setRecordatorios] = useState<ConfigRecordatorios>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -38,6 +41,7 @@ export default function ScheduleVisitDialog({ date, onClose, onSaved }: {
     setScheduledDate(date)
     setFamilyId('')
     setTimeSlot('MANANA')
+    setRecordatorios(null)
     setError('')
     setSuccess('')
     setLoading(true)
@@ -65,7 +69,7 @@ export default function ScheduleVisitDialog({ date, onClose, onSaved }: {
     if (!usuario) { setError('Inicia sesión para programar la visita. El rol simulado no sustituye la autenticación.'); return }
     if (!selected || !validDate(scheduledDate)) { setError('Selecciona una familia y una fecha válida.'); return }
     const payload: VisitCapture = {
-      familyId: selected.id, date: scheduledDate, status: 'PROGRAMADA', timeSlot,
+      familyId: selected.id, date: scheduledDate, status: 'PROGRAMADA', timeSlot, recordatorios,
       weather: '', checkIn: '', crops: [], recommendation: '', treatment: '', observations: '',
       commitments: [], reviews: [],
     }
@@ -105,6 +109,7 @@ export default function ScheduleVisitDialog({ date, onClose, onSaved }: {
         <p className="mt-1 font-medium text-gray-800 dark:text-gray-100">{nombreResponsable || 'No hay una sesión autenticada'}</p>
         {usuario && <p className="mt-1 text-xs text-gray-500">Rol: {usuario.roles.join(', ') || 'Sin rol asignado'}</p>}
       </div>
+      <ReminderPicker value={recordatorios} date={scheduledDate} onChange={setRecordatorios} disabled={saving || Boolean(success)} />
       {success && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">{success}</p>}
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">{error}</p>}
     </div>

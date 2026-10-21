@@ -4,6 +4,7 @@ import { requireAuth } from '../auth/auth.middleware.js'
 import { getAuthenticatedUser } from '../auth/auth.service.js'
 import { esDireccionGeneral, requirePermission } from '../auth/require-permission.middleware.js'
 import { crearNotificacionesDeActividad, type AvisoActividad } from '../notifications/notifications.service.js'
+import { actualizarRecordatorios, cancelarRecordatorios, configGuardada, configParaPrisma, parseReglas } from '../notifications/reminders.service.js'
 import { descripcionAvisoCalendario, eventoTieneCambios, planificarCambioCalendario, type EventoResumen, type TipoAvisoCalendario } from '../notifications/notifications.activity.js'
 
 export const calendarRouter = Router()
@@ -57,7 +58,9 @@ function parseEvent(input: unknown) {
       !Array.isArray(participants) || participants.length > 300 ||
       !participants.every(id => Number.isSafeInteger(id) && id > 0) ||
       new Set(participants).size !== participants.length) return null
-  return { titulo: title, categoria, descripcion, date, participantesIds: participants as number[] }
+  const recordatorios = parseReglas(data.recordatorios, date)
+  if (recordatorios === undefined) return null
+  return { titulo: title, categoria, descripcion, date, participantesIds: participants as number[], recordatorios }
 }
 
 // El destinatario se determina en el servidor a partir de participantes reales.
@@ -126,6 +129,7 @@ calendarRouter.get('/', async (req: Request, res: Response) => {
       horaInicio: e.horaInicio, horaFin: e.horaFin,
       responsable: person(e.responsable), creadoPor: [e.creadoPor.nombre, e.creadoPor.apellido].filter(Boolean).join(' '),
       participantes: e.participantes.map(a => person(a.usuario)),
+      recordatorios: configGuardada(e.recordatoriosConfig, e.fechaInicio.toISOString().slice(0, 10)),
     })) })
   } catch (error) { console.error('Error consultando calendario:', error); res.status(503).json({ error: 'No se pudo consultar el calendario.' }) }
 })
@@ -174,7 +178,8 @@ calendarRouter.post('/', async (req: Request, res: Response) => {
             previo.categoria === data.categoria && (previo.descripcion ?? '') === data.descripcion &&
             previo.fechaInicio.toISOString().slice(0, 10) === data.date &&
             previo.participantes.length === data.participantesIds.length &&
-            previo.participantes.every(p => data.participantesIds.includes(p.usuarioId))
+            previo.participantes.every(p => data.participantesIds.includes(p.usuarioId)) &&
+            JSON.stringify(configGuardada(previo.recordatoriosConfig, data.date)) === JSON.stringify(data.recordatorios)
           if (!mismosDatos) throw new Error('CALENDAR_OPERATION_CONFLICT')
           return { id: previo.id, duplicate: true }
         }
@@ -183,11 +188,12 @@ calendarRouter.post('/', async (req: Request, res: Response) => {
         titulo: data.titulo, categoria: data.categoria, descripcion: data.descripcion || null, lugar: null,
         fechaInicio: new Date(`${data.date}T12:00:00Z`), fechaFin: new Date(`${data.date}T12:00:00Z`),
         horaInicio: null, horaFin: null, responsableId: autorId,
-        creadoPorId: autorId, operacionCreacionId: operationId,
+        creadoPorId: autorId, operacionCreacionId: operationId, recordatoriosConfig: configParaPrisma(data.recordatorios),
         participantes: { create: data.participantesIds.map(usuarioId => ({ usuarioId })) },
       } })
       const resumen: EventoResumen = { titulo: data.titulo, categoria: data.categoria,
         descripcion: data.descripcion || null, fecha: data.date, participantesIds: data.participantesIds }
+      await actualizarRecordatorios(tx, 'CALENDARIO', evento.id, data.date, data.participantesIds, data.recordatorios)
       await crearNotificacionesDeActividad(data.participantesIds.map(usuarioId =>
         avisoCalendario(evento.id, 'CREACION', usuarioId, 'CALENDARIO_ASIGNACION', resumen)), tx)
       return { id: evento.id, duplicate: false }
@@ -207,7 +213,8 @@ calendarRouter.post('/', async (req: Request, res: Response) => {
           previo.categoria === data.categoria && (previo.descripcion ?? '') === data.descripcion &&
           previo.fechaInicio.toISOString().slice(0, 10) === data.date &&
           previo.participantes.length === data.participantesIds.length &&
-          previo.participantes.every(p => data.participantesIds.includes(p.usuarioId))) {
+          previo.participantes.every(p => data.participantesIds.includes(p.usuarioId)) &&
+          JSON.stringify(configGuardada(previo.recordatoriosConfig, data.date)) === JSON.stringify(data.recordatorios)) {
         res.status(200).json({ accepted: true, id: previo.id, duplicate: true }); return
       }
       res.status(409).json({ error: 'El identificador de la operación ya fue utilizado.' }); return
@@ -246,14 +253,17 @@ calendarRouter.put('/:id', async (req: Request, res: Response) => {
         fecha: data.date, participantesIds: data.participantesIds,
       }
       const cambios = planificarCambioCalendario(antes, despues)
-      if (!eventoTieneCambios(antes, despues)) return true // PUT repetido o sin cambios: idempotente.
+      const recordatoriosAntes = configGuardada(found.recordatoriosConfig, antes.fecha)
+      if (!eventoTieneCambios(antes, despues) && JSON.stringify(recordatoriosAntes) === JSON.stringify(data.recordatorios)) return true // PUT idempotente.
       const actualizado = await tx.eventoInstitucional.update({ where: { id }, data: {
         titulo: data.titulo, categoria: data.categoria, descripcion: data.descripcion || null, lugar: null,
         fechaInicio: new Date(`${data.date}T12:00:00Z`), fechaFin: new Date(`${data.date}T12:00:00Z`),
         horaInicio: null, horaFin: null, versionNotificacion: { increment: 1 },
+        recordatoriosConfig: configParaPrisma(data.recordatorios),
         // Mantiene al responsable original; no se altera la autoría.
         participantes: { deleteMany: {}, create: data.participantesIds.map(usuarioId => ({ usuarioId })) },
       } })
+      await actualizarRecordatorios(tx, 'CALENDARIO', id, data.date, data.participantesIds, data.recordatorios)
       await crearNotificacionesDeActividad(cambios.map(cambio =>
         avisoCalendario(id, `V${actualizado.versionNotificacion}`, cambio.usuarioId, cambio.tipo,
           cambio.tipo === 'CALENDARIO_DESASIGNACION' ? antes : despues)), tx)
@@ -281,6 +291,7 @@ calendarRouter.delete('/:id', async (req: Request, res: Response) => {
         fecha: evento.fechaInicio.toISOString().slice(0, 10),
         participantesIds: evento.participantes.map(participante => participante.usuarioId),
       }
+      await cancelarRecordatorios(tx, 'CALENDARIO', id)
       await tx.eventoInstitucional.delete({ where: { id } })
       await crearNotificacionesDeActividad(resumen.participantesIds.map(usuarioId =>
         avisoCalendario(id, 'CANCELACION', usuarioId, 'CALENDARIO_CANCELACION', resumen)), tx)
