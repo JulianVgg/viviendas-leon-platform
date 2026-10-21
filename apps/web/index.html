@@ -2,6 +2,15 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      try {
+        if (localStorage.getItem('theme') === 'dark') {
+          document.documentElement.classList.add('dark');
+          document.documentElement.setAttribute('data-color-scheme', 'dark');
+          document.documentElement.style.colorScheme = 'dark';
+        }
+      } catch (_) { /* Preferencias de tema no disponibles */ }
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/icons/pwa-192x192.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />

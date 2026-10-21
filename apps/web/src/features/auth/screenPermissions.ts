@@ -9,6 +9,7 @@ export function isDireccionGeneral(usuario: PermissionUser): boolean {
 
 export const SCREEN_PERMISSIONS: Record<string, string> = {
   '/': 'PANTALLA_DASHBOARD',
+  '/calendario': 'PANTALLA_CALENDARIO',
   '/mi-perfil': 'PANTALLA_MI_PERFIL',
   '/familias': 'PANTALLA_FAMILIAS',
   '/familias/nueva': 'PANTALLA_FAMILIAS_CREAR',

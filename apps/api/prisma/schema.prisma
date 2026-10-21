@@ -730,6 +730,9 @@ model Usuario {
   entregas     EntregaInsumo[]
   seguimientos SeguimientoTecnico[]
   bitacoras    Bitacora[]
+  eventosResponsable EventoInstitucional[] @relation("EventoResponsable")
+  eventosCreados EventoInstitucional[] @relation("EventoCreador")
+  eventosParticipante EventoInstitucionalParticipante[]
 
   @@map("usuario")
 }
@@ -824,4 +827,40 @@ model OfflineDemoNote {
   receivedAt  DateTime @default(now()) @map("received_at") @db.Timestamptz(6)
 
   @@map("offline_demo_note")
+}
+
+// Calendario institucional independiente de las visitas técnicas.
+model EventoInstitucional {
+  id Int @id @default(autoincrement())
+  titulo String @db.VarChar(160)
+  categoria String @db.VarChar(40)
+  descripcion String? @db.VarChar(2000)
+  lugar String? @db.VarChar(180)
+  fechaInicio DateTime @map("fecha_inicio") @db.Date
+  fechaFin DateTime @map("fecha_fin") @db.Date
+  horaInicio String? @map("hora_inicio") @db.VarChar(5)
+  horaFin String? @map("hora_fin") @db.VarChar(5)
+  responsableId Int @map("responsable_id")
+  creadoPorId Int @map("creado_por_id")
+  creadoEn DateTime @default(now()) @map("creado_en")
+  actualizadoEn DateTime @updatedAt @map("actualizado_en")
+
+  responsable Usuario @relation("EventoResponsable", fields: [responsableId], references: [id], onDelete: Restrict)
+  creadoPor Usuario @relation("EventoCreador", fields: [creadoPorId], references: [id], onDelete: Restrict)
+  participantes EventoInstitucionalParticipante[]
+
+  @@index([fechaInicio, fechaFin], map: "evento_institucional_fechas_idx")
+  @@index([responsableId], map: "evento_institucional_responsable_idx")
+  @@map("evento_institucional")
+}
+
+model EventoInstitucionalParticipante {
+  eventoId Int @map("evento_id")
+  usuarioId Int @map("usuario_id")
+  evento EventoInstitucional @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@id([eventoId, usuarioId])
+  @@index([usuarioId], map: "evento_institucional_participante_usuario_idx")
+  @@map("evento_institucional_participante")
 }

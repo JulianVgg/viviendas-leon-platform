@@ -8,6 +8,13 @@ import { requireAuth } from '../auth/auth.middleware.js'
 import { getAuthenticatedUser } from '../auth/auth.service.js'
 import { esDireccionGeneral } from '../auth/require-permission.middleware.js'
 
+// Dirección y Coordinación supervisan y pueden reprogramar citas institucionales.
+// Los demás técnicos conservan exclusivamente los registros propios.
+const isCoordinator = (roles: string[]) => roles.some(role =>
+  role.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() === 'coordinadora del programa agroforestal',
+)
+const isSupervisor = (roles: string[]) => esDireccionGeneral(roles) || isCoordinator(roles)
+
 export const visitsRouter = Router()
 visitsRouter.use(requireAuth)
 visitsRouter.use(async (req, res, next) => {
@@ -15,6 +22,12 @@ visitsRouter.use(async (req, res, next) => {
     const user = await getAuthenticatedUser(req.session.userId!)
     const allowed =
       esDireccionGeneral(user?.roles ?? []) ||
+      // Coordinación: lectura de agenda y gestión de citas; no puede registrar
+      // capturas técnicas ni cargar fotografías de otros usuarios.
+      (Boolean(user) && isCoordinator(user!.roles) && (
+        req.method === 'GET' ||
+        (['PATCH', 'DELETE'].includes(req.method) && /^\/agenda\/\d+$/.test(req.path))
+      )) ||
       (req.method === 'GET'
         ? ['SYN-VISITAS-WRITE', 'VISITAS_READ', 'VISITAS_WRITE'].some(p => user?.permisos.includes(p))
         : ['SYN-VISITAS-WRITE', 'VISITAS_WRITE'].some(p => user?.permisos.includes(p)))
@@ -122,7 +135,7 @@ visitsRouter.get('/', async (req: Request, res: Response) => {
     if (!user) { res.status(401).json({ error: 'Sesión no válida.' }); return }
     // VIS-05: Dirección general supervisa todas las visitas; cada técnico
     // mantiene exclusivamente sus registros. La comprobación se hace en la API.
-    const canViewAll = esDireccionGeneral(user.roles)
+    const canViewAll = isSupervisor(user.roles)
     const rows = await prisma.visita.findMany({
       where: canViewAll ? {} : { usuarioResponsableId: userId },
       include: { usuarioResponsable: { select: { nombre: true, apellido: true } }, familia: { select: { id: true, nombreReferencia: true, comunidad: { select: { nombre: true } } } } },
@@ -305,8 +318,14 @@ visitsRouter.patch('/agenda/:visitId', async (req: Request, res: Response) => {
     res.status(400).json({ error: 'Fecha o visita inválida.' }); return
   }
   try {
+    const user = await getAuthenticatedUser(req.session.userId!)
+    if (!user) { res.status(401).json({ error: 'Sesión inválida.' }); return }
     const result = await getPrismaClient().visita.updateMany({
-      where: { id: visitId, usuarioResponsableId: req.session.userId!, estado: 'PROGRAMADA' },
+      where: {
+        id: visitId,
+        ...(!isSupervisor(user.roles) ? { usuarioResponsableId: req.session.userId! } : {}),
+        estado: 'PROGRAMADA',
+      },
       data: { fecha: new Date(`${date}T12:00:00Z`) },
     })
     if (result.count !== 1) { res.status(404).json({ error: 'Visita programada no encontrada o ya realizada.' }); return }
@@ -321,10 +340,12 @@ visitsRouter.delete('/agenda/:visitId', async (req: Request, res: Response) => {
   const visitId = Number(req.params.visitId)
   if (!Number.isSafeInteger(visitId) || visitId <= 0) { res.status(400).json({ error: 'Visita inválida.' }); return }
   try {
+    const user = await getAuthenticatedUser(req.session.userId!)
+    if (!user) { res.status(401).json({ error: 'Sesión inválida.' }); return }
     const result = await getPrismaClient().visita.deleteMany({
       where: {
         id: visitId,
-        usuarioResponsableId: req.session.userId!,
+        ...(!isSupervisor(user.roles) ? { usuarioResponsableId: req.session.userId! } : {}),
         estado: 'PROGRAMADA',
         compromisosVisita: { none: {} },
         evaluaciones: { none: {} },
@@ -404,7 +425,7 @@ visitsRouter.get('/:visitId/evidencias/:evidenceId', async (req: Request, res: R
     const prisma = getPrismaClient()
     const user = await getAuthenticatedUser(req.session.userId!)
     if (!user) { res.status(401).end(); return }
-    const canViewAll = esDireccionGeneral(user.roles)
+    const canViewAll = isSupervisor(user.roles)
     const relation = await prisma.visitaEvidencia.findFirst({
       where: {
         visitaId: visitId, evidenciaId: evidenceId,
