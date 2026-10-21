@@ -696,6 +696,28 @@ model Alerta {
 }
 
 // ============================================================
+// NOTIFICACIONES POR USUARIO (NTF-01)
+// Son diferentes de las alertas operativas de la tabla alerta.
+// ============================================================
+
+model Notificacion {
+  id            Int       @id @default(autoincrement())
+  usuarioId     Int       @map("usuario_id")
+  tipo          String    @db.VarChar(50)
+  titulo        String    @db.VarChar(160)
+  mensaje       String    @db.Text
+  referencia    String?   @db.VarChar(255)
+  fechaCreacion DateTime  @default(now()) @map("fecha_creacion") @db.Timestamptz(6)
+  fechaLectura  DateTime? @map("fecha_lectura") @db.Timestamptz(6)
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([usuarioId, fechaCreacion(sort: Desc), id(sort: Desc)])
+  @@index([usuarioId, fechaLectura])
+  @@map("notificacion")
+}
+
+// ============================================================
 // USUARIOS, ROLES Y PERMISOS
 // ============================================================
 
@@ -726,6 +748,7 @@ model Usuario {
   entregas     EntregaInsumo[]
   seguimientos SeguimientoTecnico[]
   bitacoras    Bitacora[]
+  notificaciones Notificacion[]
   eventosResponsable EventoInstitucional[] @relation("EventoResponsable")
   eventosCreados EventoInstitucional[] @relation("EventoCreador")
   eventosParticipante EventoInstitucionalParticipante[]
