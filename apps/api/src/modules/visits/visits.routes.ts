@@ -7,6 +7,8 @@ import { getPrismaClient } from '../../config/prisma.js'
 import { requireAuth } from '../auth/auth.middleware.js'
 import { getAuthenticatedUser } from '../auth/auth.service.js'
 import { esDireccionGeneral } from '../auth/require-permission.middleware.js'
+import { crearNotificacionesDeActividad, type AvisoActividad } from '../notifications/notifications.service.js'
+import { descripcionAvisoVisita, type TipoAvisoVisita } from '../notifications/notifications.activity.js'
 
 // Dirección y Coordinación supervisan y pueden reprogramar citas institucionales.
 // Los demás técnicos conservan exclusivamente los registros propios.
@@ -35,6 +37,15 @@ visitsRouter.use(async (req, res, next) => {
     next()
   } catch (error) { next(error) }
 })
+
+function avisoVisita(visitaId: number, version: string, usuarioId: number,
+  tipo: TipoAvisoVisita, familia: string, fecha: string): AvisoActividad {
+  return {
+    usuarioId, tipo, ...descripcionAvisoVisita(tipo, familia, fecha),
+    referencia: '/visitas/agenda', permisoDestino: 'PANTALLA_VISITAS_AGENDA',
+    claveEvento: `VIS:${visitaId}:${version}:${usuarioId}`,
+  }
+}
 
 const evidenceRoot = resolve(process.env.VISIT_EVIDENCE_DIR || fileURLToPath(new URL('../../../storage/visits/', import.meta.url)))
 const maxPhotoBytes = 2 * 1024 * 1024
@@ -211,7 +222,10 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
         }
         return { conflict: false, visitId: existing[0].visita_id, duplicate: true }
       }
-      if (!await prisma.familia.findUnique({ where: { id: payload.familyId }, select: { id:true } })) return null
+      const familia = await prisma.familia.findUnique({
+        where: { id: payload.familyId }, select: { id: true, nombreReferencia: true },
+      })
+      if (!familia) return null
       const climate = payload.weather ? await prisma.condicionClimatica.findFirst({ where: { nombre: { equals: payload.weather, mode: 'insensitive' }, activo: true }, select: { id:true } }) : null
       const created = await prisma.$transaction(async tx => {
         let visitaId: number
@@ -284,6 +298,13 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
             VALUES (${visitaId}, ${userId}, CAST(${normalizedId} AS UUID), ${hash}, CAST(${JSON.stringify(payload)} AS JSONB))
           `
         }
+        // Solo la programación nueva produce este aviso. Reintentar el mismo
+        // operationId se resuelve antes de la transacción y no lo vuelve a crear.
+        if (payload.status === 'PROGRAMADA' && !payload.scheduledVisitId) {
+          await crearNotificacionesDeActividad([
+            avisoVisita(visitaId, 'CREACION', userId, 'VISITA_PROGRAMADA', familia.nombreReferencia, payload.date),
+          ], tx)
+        }
         return visitaId
       })
       return { conflict: false, visitId: created, duplicate: false }
@@ -320,15 +341,29 @@ visitsRouter.patch('/agenda/:visitId', async (req: Request, res: Response) => {
   try {
     const user = await getAuthenticatedUser(req.session.userId!)
     if (!user) { res.status(401).json({ error: 'Sesión inválida.' }); return }
-    const result = await getPrismaClient().visita.updateMany({
-      where: {
-        id: visitId,
-        ...(!isSupervisor(user.roles) ? { usuarioResponsableId: req.session.userId! } : {}),
-        estado: 'PROGRAMADA',
-      },
-      data: { fecha: new Date(`${date}T12:00:00Z`) },
+    const actualizado = await getPrismaClient().$transaction(async tx => {
+      await tx.$queryRaw`SELECT "id" FROM "visita" WHERE "id" = ${visitId} FOR UPDATE`
+      const visita = await tx.visita.findFirst({
+        where: {
+          id: visitId,
+          ...(!isSupervisor(user.roles) ? { usuarioResponsableId: req.session.userId! } : {}),
+          estado: 'PROGRAMADA',
+        },
+        select: { id: true, fecha: true, usuarioResponsableId: true,
+          familia: { select: { nombreReferencia: true } } },
+      })
+      if (!visita) return false
+      if (visita.fecha.toISOString().slice(0, 10) === date) return true
+      const cambiado = await tx.visita.update({ where: { id: visita.id },
+        data: { fecha: new Date(`${date}T12:00:00Z`), versionNotificacion: { increment: 1 } },
+        select: { versionNotificacion: true },
+      })
+      await crearNotificacionesDeActividad([avisoVisita(visita.id,
+        `V${cambiado.versionNotificacion}`, visita.usuarioResponsableId, 'VISITA_REPROGRAMADA',
+        visita.familia.nombreReferencia, date)], tx)
+      return true
     })
-    if (result.count !== 1) { res.status(404).json({ error: 'Visita programada no encontrada o ya realizada.' }); return }
+    if (!actualizado) { res.status(404).json({ error: 'Visita programada no encontrada o ya realizada.' }); return }
     res.json({ accepted: true })
   } catch (error) { console.error('Error reprogramando visita:', error); res.status(503).json({ error: 'No se pudo reprogramar la visita.' }) }
 })
@@ -342,18 +377,28 @@ visitsRouter.delete('/agenda/:visitId', async (req: Request, res: Response) => {
   try {
     const user = await getAuthenticatedUser(req.session.userId!)
     if (!user) { res.status(401).json({ error: 'Sesión inválida.' }); return }
-    const result = await getPrismaClient().visita.deleteMany({
-      where: {
+    const eliminado = await getPrismaClient().$transaction(async tx => {
+      await tx.$queryRaw`SELECT "id" FROM "visita" WHERE "id" = ${visitId} FOR UPDATE`
+      const where = {
         id: visitId,
         ...(!isSupervisor(user.roles) ? { usuarioResponsableId: req.session.userId! } : {}),
         estado: 'PROGRAMADA',
-        compromisosVisita: { none: {} },
-        evaluaciones: { none: {} },
-        evidencias: { none: {} },
-        alertas: { none: {} },
-      },
+        compromisosVisita: { none: {} }, evaluaciones: { none: {} },
+        evidencias: { none: {} }, alertas: { none: {} },
+      }
+      const visita = await tx.visita.findFirst({ where,
+        select: { fecha: true, usuarioResponsableId: true,
+          familia: { select: { nombreReferencia: true } } },
+      })
+      if (!visita) return false
+      const borrado = await tx.visita.deleteMany({ where })
+      if (borrado.count !== 1) return false
+      await crearNotificacionesDeActividad([avisoVisita(visitId, 'CANCELACION',
+        visita.usuarioResponsableId, 'VISITA_CANCELADA', visita.familia.nombreReferencia,
+        visita.fecha.toISOString().slice(0, 10))], tx)
+      return true
     })
-    if (result.count !== 1) {
+    if (!eliminado) {
       res.status(404).json({ error: 'La visita programada no existe, ya fue realizada o no puedes eliminarla.' }); return
     }
     res.setHeader('Cache-Control', 'no-store')

@@ -1,3 +1,4 @@
+import type { Prisma } from '../../generated/prisma/client.js'
 import { getPrismaClient } from '../../config/prisma.js'
 import type { ListarNotificacionesQuery } from './notifications.validation.js'
 
@@ -98,4 +99,55 @@ export async function marcarTodasComoLeidas(usuarioId: number, prisma = getPrism
     data: { fechaLectura: new Date() },
   })
   return { actualizadas: resultado.count }
+}
+
+// NTF-03: escritura transaccional con deduplicación a nivel de PostgreSQL.
+// Los permisos proceden únicamente de los roles activos, nunca del cliente.
+export type AvisoActividad = CrearNotificacionInput & {
+  claveEvento: string
+  permisoDestino: 'PANTALLA_CALENDARIO' | 'PANTALLA_VISITAS_AGENDA'
+}
+
+export async function crearNotificacionesDeActividad(
+  avisos: AvisoActividad[],
+  tx: Prisma.TransactionClient,
+): Promise<number> {
+  if (!avisos.length) return 0
+  for (const aviso of avisos) {
+    if (!Number.isSafeInteger(aviso.usuarioId) || aviso.usuarioId < 1 ||
+        aviso.claveEvento.length > 191 || !/^(CAL|VIS):[a-zA-Z0-9:-]+$/.test(aviso.claveEvento) ||
+        !aviso.titulo.trim() || aviso.titulo.length > 160 ||
+        !aviso.tipo.trim() || aviso.tipo.length > 50 ||
+        !aviso.mensaje.trim() || aviso.mensaje.length > 5000 ||
+        !aviso.referencia || !/^\/(?!\/)[^\\\r\n]*$/.test(aviso.referencia) ||
+        aviso.referencia.length > 255) {
+      throw new Error('Notificación de actividad inválida.')
+    }
+  }
+
+  const ids = [...new Set(avisos.map(aviso => aviso.usuarioId))]
+  const usuarios = await tx.usuario.findMany({
+    where: { id: { in: ids }, estado: 'ACTIVO' },
+    select: {
+      id: true,
+      roles: { where: { rol: { activo: true } }, select: { rol: {
+        select: { nombre: true, permisos: { select: { permiso: { select: { codigo: true } } } } },
+      } } },
+    },
+  })
+  const permitidos = new Map(usuarios.map(usuario => [usuario.id, new Set([
+    ...usuario.roles.flatMap(relacion => relacion.rol.permisos.map(p => p.permiso.codigo)),
+    ...(usuario.roles.some(relacion => relacion.rol.nombre.normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() === 'direccion general')
+      ? ['PANTALLA_CALENDARIO', 'PANTALLA_VISITAS_AGENDA'] : []),
+  ])]))
+  const aprobados = avisos.filter(aviso => permitidos.get(aviso.usuarioId)?.has(aviso.permisoDestino))
+  if (!aprobados.length) return 0
+  const resultado = await tx.notificacion.createMany({
+    data: aprobados.map(({ usuarioId, tipo, titulo, mensaje, referencia, claveEvento }) => ({
+      usuarioId, tipo, titulo, mensaje, referencia, claveEvento,
+    })),
+    skipDuplicates: true,
+  })
+  return resultado.count
 }

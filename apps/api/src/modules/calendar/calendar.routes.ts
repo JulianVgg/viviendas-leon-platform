@@ -3,6 +3,8 @@ import { getPrismaClient } from '../../config/prisma.js'
 import { requireAuth } from '../auth/auth.middleware.js'
 import { getAuthenticatedUser } from '../auth/auth.service.js'
 import { esDireccionGeneral, requirePermission } from '../auth/require-permission.middleware.js'
+import { crearNotificacionesDeActividad, type AvisoActividad } from '../notifications/notifications.service.js'
+import { descripcionAvisoCalendario, eventoTieneCambios, planificarCambioCalendario, type EventoResumen, type TipoAvisoCalendario } from '../notifications/notifications.activity.js'
 
 export const calendarRouter = Router()
 calendarRouter.use(requireAuth, requirePermission('PANTALLA_CALENDARIO'))
@@ -56,6 +58,16 @@ function parseEvent(input: unknown) {
       !participants.every(id => Number.isSafeInteger(id) && id > 0) ||
       new Set(participants).size !== participants.length) return null
   return { titulo: title, categoria, descripcion, date, participantesIds: participants as number[] }
+}
+
+// El destinatario se determina en el servidor a partir de participantes reales.
+function avisoCalendario(eventoId: number, version: string, usuarioId: number,
+  tipo: TipoAvisoCalendario, evento: EventoResumen): AvisoActividad {
+  return {
+    usuarioId, tipo, ...descripcionAvisoCalendario(tipo, evento),
+    referencia: '/calendario', permisoDestino: 'PANTALLA_CALENDARIO',
+    claveEvento: `CAL:${eventoId}:${version}:${usuarioId}`,
+  }
 }
 
 async function mayManage(req: Request, res: Response): Promise<boolean> {
@@ -139,21 +151,70 @@ calendarRouter.post('/', async (req: Request, res: Response) => {
   if (req.get('X-Requested-With') !== 'XMLHttpRequest') { res.status(403).json({ error: 'Solicitud no autorizada.' }); return }
   const data = parseEvent(req.body)
   if (!data) { res.status(400).json({ error: 'Revisa los datos del evento.' }); return }
+  const operationId = req.get('X-Operation-Id')?.toLowerCase() ?? null
+  if (operationId !== null && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(operationId)) {
+    res.status(400).json({ error: 'X-Operation-Id debe ser un UUID v4.' }); return
+  }
   // El responsable es el usuario autenticado que creó el evento, no un valor del formulario.
   const autorId = req.session.userId!
   try {
     if (!await usersValid([...new Set([autorId, ...data.participantesIds])])) {
       res.status(422).json({ error: 'Participantes inexistentes o inactivos.' }); return
     }
-    const created = await getPrismaClient().eventoInstitucional.create({ data: {
-      titulo: data.titulo, categoria: data.categoria, descripcion: data.descripcion || null, lugar: null,
-      fechaInicio: new Date(`${data.date}T12:00:00Z`), fechaFin: new Date(`${data.date}T12:00:00Z`),
-      horaInicio: null, horaFin: null, responsableId: autorId,
-      creadoPorId: autorId,
-      participantes: { create: data.participantesIds.map(usuarioId => ({ usuarioId })) },
-    } })
-    res.status(201).json({ accepted: true, id: created.id })
-  } catch (error) { console.error('Error creando evento:', error); res.status(503).json({ error: 'No se pudo crear el evento.' }) }
+    const prisma = getPrismaClient()
+    const created = await prisma.$transaction(async tx => {
+      // Reintentos con el mismo identificador no insertan otro evento.
+      if (operationId) {
+        const previo = await tx.eventoInstitucional.findUnique({
+          where: { operacionCreacionId: operationId },
+          include: { participantes: { select: { usuarioId: true } } },
+        })
+        if (previo) {
+          const mismosDatos = previo.creadoPorId === autorId && previo.titulo === data.titulo &&
+            previo.categoria === data.categoria && (previo.descripcion ?? '') === data.descripcion &&
+            previo.fechaInicio.toISOString().slice(0, 10) === data.date &&
+            previo.participantes.length === data.participantesIds.length &&
+            previo.participantes.every(p => data.participantesIds.includes(p.usuarioId))
+          if (!mismosDatos) throw new Error('CALENDAR_OPERATION_CONFLICT')
+          return { id: previo.id, duplicate: true }
+        }
+      }
+      const evento = await tx.eventoInstitucional.create({ data: {
+        titulo: data.titulo, categoria: data.categoria, descripcion: data.descripcion || null, lugar: null,
+        fechaInicio: new Date(`${data.date}T12:00:00Z`), fechaFin: new Date(`${data.date}T12:00:00Z`),
+        horaInicio: null, horaFin: null, responsableId: autorId,
+        creadoPorId: autorId, operacionCreacionId: operationId,
+        participantes: { create: data.participantesIds.map(usuarioId => ({ usuarioId })) },
+      } })
+      const resumen: EventoResumen = { titulo: data.titulo, categoria: data.categoria,
+        descripcion: data.descripcion || null, fecha: data.date, participantesIds: data.participantesIds }
+      await crearNotificacionesDeActividad(data.participantesIds.map(usuarioId =>
+        avisoCalendario(evento.id, 'CREACION', usuarioId, 'CALENDARIO_ASIGNACION', resumen)), tx)
+      return { id: evento.id, duplicate: false }
+    })
+    res.status(created.duplicate ? 200 : 201).json({ accepted: true, id: created.id, duplicate: created.duplicate })
+  } catch (error) {
+    if (error instanceof Error && error.message === 'CALENDAR_OPERATION_CONFLICT') {
+      res.status(409).json({ error: 'Este identificador de operación ya corresponde a otro evento.' }); return
+    }
+    // Dos POST paralelos con el mismo UUID: solo uno puede insertar la fila.
+    if (operationId && error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
+      const previo = await getPrismaClient().eventoInstitucional.findUnique({
+        where: { operacionCreacionId: operationId },
+        include: { participantes: { select: { usuarioId: true } } },
+      })
+      if (previo && previo.creadoPorId === autorId && previo.titulo === data.titulo &&
+          previo.categoria === data.categoria && (previo.descripcion ?? '') === data.descripcion &&
+          previo.fechaInicio.toISOString().slice(0, 10) === data.date &&
+          previo.participantes.length === data.participantesIds.length &&
+          previo.participantes.every(p => data.participantesIds.includes(p.usuarioId))) {
+        res.status(200).json({ accepted: true, id: previo.id, duplicate: true }); return
+      }
+      res.status(409).json({ error: 'El identificador de la operación ya fue utilizado.' }); return
+    }
+    console.error('Error creando evento:', error)
+    res.status(503).json({ error: 'No se pudo crear el evento.' })
+  }
 })
 
 calendarRouter.put('/:id', async (req: Request, res: Response) => {
@@ -168,15 +229,34 @@ calendarRouter.put('/:id', async (req: Request, res: Response) => {
       res.status(422).json({ error: 'Participantes inexistentes o inactivos.' }); return
     }
     const result = await prisma.$transaction(async tx => {
-      const found = await tx.eventoInstitucional.findUnique({ where: { id }, select: { id: true } })
+      // Bloquea este evento hasta terminar. Dos PUT simultáneos con el mismo
+      // contenido no pueden producir avisos duplicados.
+      await tx.$queryRaw`SELECT "id" FROM "evento_institucional" WHERE "id" = ${id} FOR UPDATE`
+      const found = await tx.eventoInstitucional.findUnique({
+        where: { id }, include: { participantes: { select: { usuarioId: true } } },
+      })
       if (!found) return false
-      await tx.eventoInstitucional.update({ where: { id }, data: {
+      const antes: EventoResumen = {
+        titulo: found.titulo, categoria: found.categoria,
+        descripcion: found.descripcion, fecha: found.fechaInicio.toISOString().slice(0, 10),
+        participantesIds: found.participantes.map(participante => participante.usuarioId),
+      }
+      const despues: EventoResumen = {
+        titulo: data.titulo, categoria: data.categoria, descripcion: data.descripcion || null,
+        fecha: data.date, participantesIds: data.participantesIds,
+      }
+      const cambios = planificarCambioCalendario(antes, despues)
+      if (!eventoTieneCambios(antes, despues)) return true // PUT repetido o sin cambios: idempotente.
+      const actualizado = await tx.eventoInstitucional.update({ where: { id }, data: {
         titulo: data.titulo, categoria: data.categoria, descripcion: data.descripcion || null, lugar: null,
         fechaInicio: new Date(`${data.date}T12:00:00Z`), fechaFin: new Date(`${data.date}T12:00:00Z`),
-        horaInicio: null, horaFin: null,
-        // Mantiene al responsable original; quien edita no cambia la autoría.
+        horaInicio: null, horaFin: null, versionNotificacion: { increment: 1 },
+        // Mantiene al responsable original; no se altera la autoría.
         participantes: { deleteMany: {}, create: data.participantesIds.map(usuarioId => ({ usuarioId })) },
       } })
+      await crearNotificacionesDeActividad(cambios.map(cambio =>
+        avisoCalendario(id, `V${actualizado.versionNotificacion}`, cambio.usuarioId, cambio.tipo,
+          cambio.tipo === 'CALENDARIO_DESASIGNACION' ? antes : despues)), tx)
       return true
     })
     if (!result) { res.status(404).json({ error: 'Evento no encontrado.' }); return }
@@ -190,8 +270,23 @@ calendarRouter.delete('/:id', async (req: Request, res: Response) => {
   const id = Number(req.params.id)
   if (!Number.isSafeInteger(id) || id < 1) { res.status(400).json({ error: 'Evento inválido.' }); return }
   try {
-    const deleted = await getPrismaClient().eventoInstitucional.deleteMany({ where: { id } })
-    if (!deleted.count) { res.status(404).json({ error: 'Evento no encontrado.' }); return }
+    const eliminado = await getPrismaClient().$transaction(async tx => {
+      await tx.$queryRaw`SELECT "id" FROM "evento_institucional" WHERE "id" = ${id} FOR UPDATE`
+      const evento = await tx.eventoInstitucional.findUnique({
+        where: { id }, include: { participantes: { select: { usuarioId: true } } },
+      })
+      if (!evento) return false
+      const resumen: EventoResumen = {
+        titulo: evento.titulo, categoria: evento.categoria, descripcion: evento.descripcion,
+        fecha: evento.fechaInicio.toISOString().slice(0, 10),
+        participantesIds: evento.participantes.map(participante => participante.usuarioId),
+      }
+      await tx.eventoInstitucional.delete({ where: { id } })
+      await crearNotificacionesDeActividad(resumen.participantesIds.map(usuarioId =>
+        avisoCalendario(id, 'CANCELACION', usuarioId, 'CALENDARIO_CANCELACION', resumen)), tx)
+      return true
+    })
+    if (!eliminado) { res.status(404).json({ error: 'Evento no encontrado.' }); return }
     res.json({ accepted: true })
   } catch (error) { console.error('Error eliminando evento:', error); res.status(503).json({ error: 'No se pudo eliminar el evento.' }) }
 })

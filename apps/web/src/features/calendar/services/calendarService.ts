@@ -71,7 +71,9 @@ export async function loadParticipants(): Promise<CalendarPerson[]> {
   return (await request<{data:CalendarPerson[]}>('/usuarios')).data
 }
 export async function saveEvent(data: CalendarEventInput, id?: number): Promise<void> {
-  await request(id ? `/${id}` : '/', { method: id ? 'PUT' : 'POST', body: JSON.stringify(data) })
+  await request(id ? `/${id}` : '/', { method: id ? 'PUT' : 'POST', body: JSON.stringify(data),
+    ...(!id ? { headers: { 'X-Operation-Id': crypto.randomUUID() } } : {}),
+  })
 }
 export async function removeEvent(id: number): Promise<void> {
   await request(`/${id}`, { method:'DELETE' })
