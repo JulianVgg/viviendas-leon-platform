@@ -17,6 +17,8 @@ import { usersRouter } from './modules/users/users.routes.js';
 
 // AUTH-04: Perfil personal
 import { profileRouter } from './modules/profile/profile.routes.js';
+// Perfil: edición de dirección y fotografía
+import { profileExtrasRouter } from './modules/profile/profile-extras.routes.js';
 
 // AUTH-04: Roles y permisos
 import { rolesRouter } from './modules/admin/roles.routes.js';
@@ -62,6 +64,9 @@ app.use('/api/v1', requirePasswordChangeCompleted);
 
 // AUTH-04: Perfil del usuario autenticado
 app.use('/api/v1/perfil', profileRouter);
+
+// AUTH-06: Dirección y fotografía de perfil
+app.use('/api/v1/perfil', profileExtrasRouter);
 
 // AUTH-04: Administración de roles y permisos
 app.use('/api/v1/roles', rolesRouter);

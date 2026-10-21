@@ -118,7 +118,6 @@ export const navigationGroups: { id: string; name: string; items: NavigationItem
         { id: 'programs', name: 'Programas', path: '/administracion/programas', icon: icons.programs },
         { id: 'users', name: 'Usuarios', path: '/administracion/usuarios', icon: icons.users },
         { id: 'roles', name: 'Roles y permisos', path: '/administracion/roles-permisos', icon: icons.permissions },
-        { id: 'settings', name: 'Configuración', path: '/administracion/configuracion', icon: icons.admin },
       ] },
       { id: 'audit', name: 'Auditoría', path: '/auditoria', icon: icons.audit, roles: ['audit'], children: [
         { id: 'audit-log', name: 'Bitácora', path: '/auditoria/bitacora', icon: icons.history },
