@@ -18,6 +18,7 @@ import OfflineSyncTestPage from '@/features/offline/pages/OfflineSyncTestPage'
 import VisitAgendaPage from '@/features/visits/pages/VisitAgendaPage'
 import VisitRegisterPage from '@/features/visits/pages/VisitRegisterPage'
 import VisitHistoryPage from '@/features/visits/pages/VisitHistoryPage'
+import InstitutionalCalendarPage from '@/features/calendar/pages/InstitutionalCalendarPage'
 
 // AUTH-02: Autenticación
 import LoginPage from '@/features/auth/pages/LoginPage'
@@ -124,6 +125,9 @@ export default function AppRoutes() {
               element={<OfflineSyncTestPage />}
             />
           )}
+
+          {/* Calendario institucional (distinto de la agenda técnica) */}
+          <Route path="calendario" element={<InstitutionalCalendarPage />} />
 
           {/* Visitas técnicas */}
           <Route
