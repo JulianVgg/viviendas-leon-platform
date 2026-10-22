@@ -20,6 +20,9 @@ import VisitRegisterPage from '@/features/visits/pages/VisitRegisterPage'
 import VisitHistoryPage from '@/features/visits/pages/VisitHistoryPage'
 import InstitutionalCalendarPage from '@/features/calendar/pages/InstitutionalCalendarPage'
 import NotificacionesPage from '@/features/notifications/pages/NotificacionesPage'
+import TrainingAgendaPage from '@/features/training/pages/TrainingAgendaPage'
+import TrainingRegisterPage from '@/features/training/pages/TrainingRegisterPage'
+import TrainingHistoryPage from '@/features/training/pages/TrainingHistoryPage'
 
 // AUTH-02: Autenticación
 import LoginPage from '@/features/auth/pages/LoginPage'
@@ -266,12 +269,10 @@ export default function AppRoutes() {
 
           <Route
             path="actividades/capacitaciones"
-            element={module(
-              'Capacitaciones',
-              'Registro base para capacitaciones y participantes.',
-              ['Actividad', 'Fecha', 'Responsable', 'Estado'],
-            )}
+            element={<TrainingAgendaPage />}
           />
+          <Route path="actividades/capacitaciones/registrar" element={<TrainingRegisterPage />} />
+          <Route path="actividades/capacitaciones/historial" element={<TrainingHistoryPage />} />
 
           {/* Voluntariado */}
           <Route

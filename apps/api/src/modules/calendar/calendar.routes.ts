@@ -113,8 +113,33 @@ calendarRouter.get('/', async (req: Request, res: Response) => {
       orderBy: [{ fecha: 'asc' }, { id: 'asc' }],
       take: 600,
     })
+    // Vista de solo lectura: las capacitaciones permanecen en su tabla original.
+    // No se incluyen asistentes, fotografías ni observaciones internas.
+    const trainings = await getPrismaClient().capacitacion.findMany({
+      where: {
+        fecha: {
+          gte: new Date(`${from}T00:00:00Z`),
+          lte: new Date(`${to}T23:59:59Z`),
+        },
+      },
+      select: {
+        id: true, tema: true, fecha: true, estado: true,
+        facilitadorNombre: true,
+        comunidad: { select: { nombre: true } },
+      },
+      orderBy: [{ fecha: 'asc' }, { id: 'asc' }],
+      take: 600,
+    })
     res.setHeader('Cache-Control', 'private, no-store')
     res.json({
+      capacitaciones: trainings.map(training => ({
+        id: training.id,
+        tema: training.tema,
+        fecha: training.fecha.toISOString().slice(0, 10),
+        estado: training.estado,
+        facilitador: training.facilitadorNombre ?? '',
+        comunidad: training.comunidad?.nombre ?? '',
+      })),
       visitasTecnicas: visits.map(visit => ({
         id: visit.id,
         fecha: visit.fecha.toISOString().slice(0, 10),

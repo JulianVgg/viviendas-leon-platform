@@ -56,6 +56,7 @@ model Familia {
   visitas        Visita[]
   entregasInsumo EntregaInsumo[]
   alertas        Alerta[]
+  asistenciasCapacitacion AsistenciaFamiliaCapacitacion[]
 
   @@index([comunidadId])
   @@map("familia")
@@ -593,6 +594,7 @@ model Capacitacion {
 
   participantes ParticipacionCapacitacion[]
   evidencias    CapacitacionEvidencia[]
+  asistenciasFamilia AsistenciaFamiliaCapacitacion[]
 
   @@index([comunidadId])
   @@index([fecha])
@@ -613,6 +615,21 @@ model ParticipacionCapacitacion {
   @@index([capacitacionId])
   @@index([integranteFamiliaId])
   @@map("participacion_capacitacion")
+}
+
+// CAP-02: asistencia por familia; no presupone qué integrante asistió.
+model AsistenciaFamiliaCapacitacion {
+  id             Int      @id @default(autoincrement())
+  capacitacionId Int      @map("capacitacion_id")
+  familiaId      Int      @map("familia_id")
+  creadoEn       DateTime @default(now()) @map("creado_en")
+
+  capacitacion Capacitacion @relation(fields: [capacitacionId], references: [id], onDelete: Cascade)
+  familia      Familia      @relation(fields: [familiaId], references: [id], onDelete: Restrict)
+
+  @@unique([capacitacionId, familiaId])
+  @@index([familiaId])
+  @@map("asistencia_familia_capacitacion")
 }
 
 // ============================================================
