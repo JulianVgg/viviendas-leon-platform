@@ -903,6 +903,11 @@ model Recordatorio {
   fechaProgramada DateTime @map("fecha_programada") @db.Timestamptz(6)
   estado String @default("PENDIENTE") @db.VarChar(15)
   creadoEn DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+  // NTF-05: estado durable de reintentos y trazabilidad de entrega interna.
+  intentos Int @default(0)
+  proximoIntento DateTime? @map("proximo_intento") @db.Timestamptz(6)
+  ultimoError String? @map("ultimo_error") @db.VarChar(500)
+  procesadoEn DateTime? @map("procesado_en") @db.Timestamptz(6)
   usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
   @@unique([tipoOrigen, origenId, usuarioId, clave], map: "recordatorio_origen_destinatario_clave_key")
