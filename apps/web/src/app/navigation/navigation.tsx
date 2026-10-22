@@ -99,8 +99,8 @@ export const navigationGroups: { id: string; name: string; items: NavigationItem
         { id: 'visits-history', name: 'Historial de visitas', path: '/visitas/historial', icon: icons.history },
       ] },
       { id: 'activities', name: 'Actividades de campo', path: '/actividades', icon: icons.activities, roles: ['fieldWorker', 'coordination'], children: [
-        { id: 'technical-assistance', name: 'Asistencia técnica', path: '/actividades/asistencia-tecnica', icon: icons.documents },
-        { id: 'training', name: 'Capacitaciones', path: '/actividades/capacitaciones', icon: icons.training },
+      { id: 'training', name: 'Agendar citas', path: '/actividades/capacitaciones', icon: icons.agenda, exact: true },        { id: 'training-register', name: 'Registrar capacitación', path: '/actividades/capacitaciones/registrar', icon: icons.register },
+        { id: 'training-history', name: 'Historial de capacitaciones', path: '/actividades/capacitaciones/historial', icon: icons.history },
       ] },
       { id: 'volunteering', name: 'Voluntariado', path: '/voluntariado', icon: icons.users, roles: ['coordination'] },
     ],

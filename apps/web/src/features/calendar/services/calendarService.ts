@@ -16,16 +16,26 @@ export type CalendarTechnicalVisit = {
   responsable: string
 }
 
+export type CalendarTraining = {
+  id: number
+  tema: string
+  fecha: string
+  estado: string
+  comunidad: string
+  facilitador: string
+}
+
 export type CalendarPerson = { id: number; nombre: string; cargos: string[] }
+import type { ConfigRecordatorios } from '@/features/notifications/services/remindersService'
 export type CalendarEvent = {
   id: number; titulo: string; categoria: InstitutionalCategory; descripcion: string; lugar: string
   fechaInicio: string; fechaFin: string; horaInicio: string | null; horaFin: string | null
-  responsable: CalendarPerson; creadoPor: string; participantes: CalendarPerson[]
+  responsable: CalendarPerson; creadoPor: string; participantes: CalendarPerson[]; recordatorios: ConfigRecordatorios
 }
 // La API asigna responsableId automáticamente al creador y conserva el original al editar.
 export type CalendarEventInput = {
   titulo: string; categoria: InstitutionalCategory; descripcion: string
-  fechaInicio: string; participantesIds: number[]
+  fechaInicio: string; participantesIds: number[]; recordatorios: ConfigRecordatorios
 }
 
 export const eventTypes: { id: InstitutionalCategory; text: string; className: string }[] = [
@@ -60,9 +70,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   return response.json() as Promise<T>
 }
-export async function loadCalendarView(from: string, to: string): Promise<{events:CalendarEvent[]; visits:CalendarTechnicalVisit[]}> {
-  const answer = await request<{data:CalendarEvent[]; visitasTecnicas:CalendarTechnicalVisit[]}>(`?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
-  return {events: answer.data, visits: answer.visitasTecnicas ?? []}
+export async function loadCalendarView(from: string, to: string): Promise<{events:CalendarEvent[]; visits:CalendarTechnicalVisit[]; trainings:CalendarTraining[]}> {
+  const answer = await request<{data:CalendarEvent[]; visitasTecnicas:CalendarTechnicalVisit[]; capacitaciones?:CalendarTraining[]}>(`?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
+  return { events: answer.data, visits: answer.visitasTecnicas ?? [], trainings: answer.capacitaciones ?? [] }
 }
 export async function loadEvents(from: string, to: string): Promise<CalendarEvent[]> {
   return (await loadCalendarView(from, to)).events
@@ -71,7 +81,9 @@ export async function loadParticipants(): Promise<CalendarPerson[]> {
   return (await request<{data:CalendarPerson[]}>('/usuarios')).data
 }
 export async function saveEvent(data: CalendarEventInput, id?: number): Promise<void> {
-  await request(id ? `/${id}` : '/', { method: id ? 'PUT' : 'POST', body: JSON.stringify(data) })
+  await request(id ? `/${id}` : '/', { method: id ? 'PUT' : 'POST', body: JSON.stringify(data),
+    ...(!id ? { headers: { 'X-Operation-Id': crypto.randomUUID() } } : {}),
+  })
 }
 export async function removeEvent(id: number): Promise<void> {
   await request(`/${id}`, { method:'DELETE' })

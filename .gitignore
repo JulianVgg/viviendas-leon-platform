@@ -31,3 +31,6 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# Private training evidence files (never commit photographs)
+/apps/api/storage/training/
