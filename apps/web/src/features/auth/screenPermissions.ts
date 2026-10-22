@@ -68,6 +68,10 @@ export function canWriteGardens(usuario: PermissionUser): boolean {
   return isDireccionGeneral(usuario) || usuario.permisos.includes('HUERTOS_WRITE')
 }
 
+export function canWriteCrops(usuario: PermissionUser): boolean {
+  return isDireccionGeneral(usuario) || usuario.permisos.includes('CULTIVOS_WRITE')
+}
+
 export function canWriteCommunities(usuario: PermissionUser): boolean {
   return isDireccionGeneral(usuario) || usuario.permisos.includes('COMUNIDADES_WRITE')
 }
