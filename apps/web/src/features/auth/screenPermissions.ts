@@ -27,6 +27,8 @@ export const SCREEN_PERMISSIONS: Record<string, string> = {
   '/actividades': 'PANTALLA_ACTIVIDADES',
   '/actividades/asistencia-tecnica': 'PANTALLA_ASISTENCIA_TECNICA',
   '/actividades/capacitaciones': 'PANTALLA_CAPACITACIONES',
+  '/actividades/capacitaciones/registrar': 'PANTALLA_CAPACITACIONES',
+  '/actividades/capacitaciones/historial': 'PANTALLA_CAPACITACIONES',
   '/voluntariado': 'PANTALLA_VOLUNTARIADO',
   '/reportes': 'PANTALLA_REPORTES',
   '/reportes/reportes': 'PANTALLA_REPORTES_LISTA',
