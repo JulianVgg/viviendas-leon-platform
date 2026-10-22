@@ -24,6 +24,7 @@ const GRUPOS: Grupo[] = [
   { titulo: 'Gestión agrícola', pantallas: [
     { codigo: 'PANTALLA_GESTION_AGRICOLA', nombre: 'Vista general de gestión agrícola', ruta: '/gestion-agricola' },
     { codigo: 'PANTALLA_HUERTOS', nombre: 'Huertos', ruta: '/gestion-agricola/huertos' },
+    { codigo: 'HUERTOS_WRITE', nombre: 'Registro e imágenes de huertos', ruta: 'Operaciones API', especial: true },
     { codigo: 'PANTALLA_CULTIVOS', nombre: 'Cultivos', ruta: '/gestion-agricola/cultivos' },
     { codigo: 'PANTALLA_PRODUCCION', nombre: 'Producción', ruta: '/gestion-agricola/produccion' },
     { codigo: 'PANTALLA_CONTROL_FITOSANITARIO', nombre: 'Control fitosanitario', ruta: '/gestion-agricola/control-fitosanitario' },

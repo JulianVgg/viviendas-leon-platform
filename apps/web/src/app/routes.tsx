@@ -8,6 +8,7 @@ import FamilyListPage from '@/features/families/pages/FamilyListPage'
 import FamilyCreatePage from '@/features/families/pages/FamilyCreatePage'
 import FamilyDetailPage from '@/features/families/pages/FamilyDetailPage'
 import FamilyEditPage from '@/features/families/pages/FamilyEditPage'
+import HuertosPage, { CreateGardenPage } from '@/features/agriculture/pages/HuertosPage'
 
 import OfflineTestPage from '@/features/offline/pages/OfflineTestPage'
 import OfflineOperationsTestPage from '@/features/offline/pages/OfflineOperationsTestPage'
@@ -203,14 +204,8 @@ export default function AppRoutes() {
             )}
           />
 
-          <Route
-            path="gestion-agricola/huertos"
-            element={module(
-              'Huertos',
-              'Registro base para huertos familiares y comunitarios.',
-              ['Huerto', 'Responsable', 'Estado'],
-            )}
-          />
+          <Route path="gestion-agricola/huertos" element={<HuertosPage />} />
+          <Route path="gestion-agricola/huertos/nuevo" element={<CreateGardenPage />} />
 
           <Route
             path="gestion-agricola/cultivos"

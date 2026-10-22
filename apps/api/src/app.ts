@@ -11,6 +11,7 @@ import { municipalitiesRouter } from './modules/catalogs/municipalities.routes.j
 import { programsRouter } from './modules/catalogs/programs.routes.js';
 import { offlineDemoRouter } from './modules/offline/offline.routes.js';
 import { visitsRouter } from './modules/visits/visits.routes.js';
+import { gardensRouter } from './modules/agriculture/gardens.routes.js';
 import { calendarRouter } from './modules/calendar/calendar.routes.js';
 import { notificationsRouter } from './modules/notifications/notifications.routes.js';
 import { remindersRouter } from './modules/notifications/reminders.routes.js';
@@ -81,11 +82,13 @@ app.use('/api/v1/usuarios', usersRouter);
 
 // Rutas existentes de Viviendas León
 app.use('/api/v1/familias', familiesRouter);
+app.use('/api/v1/comunidades', adminCommunitiesRouter);
 app.use('/api/v1/comunidades', communitiesRouter);
 app.use('/api/v1/municipios', municipalitiesRouter);
 app.use('/api/v1/programas', programsRouter);
 app.use('/api/v1/offline', offlineDemoRouter);
 app.use('/api/v1/visitas', visitsRouter);
+app.use('/api/v1/huertos', gardensRouter);
 app.use('/api/v1/calendario', calendarRouter);
 app.use('/api/v1/notificaciones', notificationsRouter);
 app.use('/api/v1/recordatorios', remindersRouter);

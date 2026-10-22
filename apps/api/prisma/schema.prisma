@@ -128,6 +128,10 @@ model Huerto {
   fechaInicio   DateTime? @map("fecha_inicio") @db.Date
   estado        String
   observaciones String?
+  imagenRuta String? @map("imagen_ruta")
+  imagenNombre String? @map("imagen_nombre")
+  imagenMime String? @map("imagen_mime")
+  imagenActualizadaEn DateTime? @map("imagen_actualizada_en")
 
   familia Familia @relation(fields: [familiaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
