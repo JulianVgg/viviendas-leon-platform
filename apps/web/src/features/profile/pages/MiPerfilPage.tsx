@@ -291,8 +291,8 @@ export default function MiPerfilPage() {
 
   const inputClass =
     'w-full rounded-lg border border-gray-300 bg-white px-4 py-3 ' +
-    'text-sm text-gray-900 outline-none focus:border-blue-500 ' +
-    'focus:ring-2 focus:ring-blue-500/20 ' +
+    'text-sm text-gray-900 outline-none focus:border-brand-500 ' +
+    'focus:ring-2 focus:ring-brand-500/20 ' +
     'dark:border-gray-700 dark:bg-gray-900 dark:text-white'
 
   const cardClass =
@@ -412,7 +412,7 @@ export default function MiPerfilPage() {
       {/* Tarjeta principal */}
       <section className={cardClass}>
         <div className="flex items-center gap-4">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-blue-50 text-blue-600 dark:bg-blue-500/10">
+          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-50 text-brand-600 dark:bg-brand-500/10">
             {fotoUrl ? (
               <img src={fotoUrl} alt="Fotografía de perfil" className="h-full w-full object-cover" />
             ) : (
@@ -440,7 +440,7 @@ export default function MiPerfilPage() {
       <section className={cardClass}>
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <UserRound className="text-blue-600" size={22} />
+            <UserRound className="text-brand-600" size={22} />
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
               Información personal
             </h2>
@@ -514,7 +514,7 @@ export default function MiPerfilPage() {
           <form onSubmit={(event) => void guardarPerfil(event)}>
             <div className="mb-6 rounded-xl border border-gray-200 p-4 dark:border-gray-700">
               <div className="flex flex-wrap items-center gap-4">
-                <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-blue-50 text-blue-600 dark:bg-blue-500/10">
+                <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-50 text-brand-600 dark:bg-brand-500/10">
                   {fotoPreviewUrl || (!quitarFoto && fotoUrl) ? (
                     <img
                       src={fotoPreviewUrl || fotoUrl || undefined}
@@ -535,7 +535,7 @@ export default function MiPerfilPage() {
                     accept="image/png,image/jpeg"
                     onChange={seleccionarFoto}
                     disabled={guardandoPerfil}
-                    className="block w-full text-sm text-gray-700 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:font-medium file:text-blue-700 hover:file:bg-blue-100 dark:text-gray-200"
+                    className="block w-full text-sm text-gray-700 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:font-medium file:text-brand-700 hover:file:bg-brand-100 dark:text-gray-200"
                   />
                   <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">JPG o PNG. Máximo 2 MB.</p>
                   {(fotoUrl || fotoArchivo || quitarFoto) && (
@@ -638,7 +638,7 @@ export default function MiPerfilPage() {
               <button
                 type="submit"
                 disabled={guardandoPerfil}
-                className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                className="rounded-lg bg-brand-500 px-5 py-3 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-60"
               >
                 {guardandoPerfil ? 'Guardando...' : 'Guardar cambios'}
               </button>
@@ -651,7 +651,7 @@ export default function MiPerfilPage() {
       <section className={cardClass}>
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <MapPin className="text-blue-600" size={22} />
+            <MapPin className="text-brand-600" size={22} />
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Dirección</h2>
           </div>
           <button
@@ -781,7 +781,7 @@ export default function MiPerfilPage() {
               <button
                 type="submit"
                 disabled={guardandoDireccion}
-                className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+                className="rounded-lg bg-brand-500 px-5 py-3 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-60"
               >
                 {guardandoDireccion ? 'Guardando...' : 'Guardar cambios'}
               </button>
@@ -793,7 +793,7 @@ export default function MiPerfilPage() {
       {/* Seguridad */}
       <section className={cardClass}>
         <div className="mb-4 flex items-center gap-3">
-          <ShieldCheck className="text-blue-600" size={22} />
+          <ShieldCheck className="text-brand-600" size={22} />
 
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
             Seguridad
@@ -915,7 +915,7 @@ export default function MiPerfilPage() {
           <button
             type="submit"
             disabled={guardando}
-            className="rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60"
+            className="rounded-lg bg-brand-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-brand-600 disabled:opacity-60"
           >
             {guardando
               ? 'Actualizando...'

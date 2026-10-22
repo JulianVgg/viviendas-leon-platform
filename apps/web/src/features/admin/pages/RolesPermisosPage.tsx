@@ -72,7 +72,7 @@ const catalogo = GRUPOS.flatMap((grupo) => grupo.pantallas)
 const codigosCatalogo = new Set(catalogo.map((pantalla) => pantalla.codigo))
 const tarjeta = 'rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 dark:border-gray-800 dark:bg-gray-900'
 const campo = 'w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-white'
-const boton = 'inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50'
+const boton = 'inline-flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-50'
 
 async function solicitar(url: string, opciones?: RequestInit) {
   const respuesta = await fetch(url, { credentials: 'same-origin', ...opciones })
@@ -332,7 +332,7 @@ export default function RolesPermisosPage() {
 
       <section className={tarjeta}>
         <div className="mb-5 flex items-center gap-2">
-          <ShieldCheck size={20} className="text-blue-600" />
+          <ShieldCheck size={20} className="text-brand-600" />
           <h2 className="text-lg font-semibold">Checklist de acceso por pantalla</h2>
         </div>
         {cargando ? <p className="text-sm">Cargando roles y permisos...</p> : (
@@ -344,7 +344,7 @@ export default function RolesPermisosPage() {
                   key={rol.id} type="button" disabled={guardando}
                   onClick={() => seleccionarRol(rol)}
                   aria-pressed={seleccionId === rol.id}
-                  className={`w-full rounded-lg border px-4 py-3 text-left text-sm disabled:opacity-60 ${seleccionId === rol.id ? 'border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-950/40' : 'border-gray-200 dark:border-gray-700'}`}
+                  className={`w-full rounded-lg border px-4 py-3 text-left text-sm disabled:opacity-60 ${seleccionId === rol.id ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/10' : 'border-gray-200 dark:border-gray-700'}`}
                 >
                   <span className="block font-semibold">{rol.nombre}</span>
                   <span className="text-xs text-gray-500">{rol.permisos.length} permisos · {rol.activo ? 'Activo' : 'Inactivo'}</span>
@@ -370,14 +370,14 @@ export default function RolesPermisosPage() {
                               <h3 className="font-semibold text-gray-900 dark:text-white">{grupo.titulo}</h3>
                               <span className="text-xs text-gray-500">{cuenta}/{grupo.pantallas.length}</span>
                             </div>
-                            {modificables.length > 0 && <button type="button" disabled={guardando} className="text-xs font-medium text-blue-600 underline disabled:opacity-50" onClick={() => marcarGrupo(grupo, !todosMarcados)}>{todosMarcados ? 'Desmarcar grupo' : 'Marcar grupo'}</button>}
+                            {modificables.length > 0 && <button type="button" disabled={guardando} className="text-xs font-medium text-brand-600 underline disabled:opacity-50" onClick={() => marcarGrupo(grupo, !todosMarcados)}>{todosMarcados ? 'Desmarcar grupo' : 'Marcar grupo'}</button>}
                           </div>
                           <div className="grid gap-3 sm:grid-cols-2">
                             {grupo.pantallas.map((pantalla) => (
                               <label key={pantalla.codigo} className="flex items-start gap-3 rounded-lg border border-gray-100 px-3 py-3 text-sm dark:border-gray-800">
                                 <input
                                   type="checkbox"
-                                  className="mt-1 size-4 accent-blue-600"
+                                  className="mt-1 size-4 accent-brand-500"
                                   disabled={guardando || pantalla.fija}
                                   checked={pantalla.fija || codigosSeleccionados.includes(pantalla.codigo)}
                                   onChange={(e) => marcar(pantalla.codigo, e.target.checked)}
@@ -403,7 +403,7 @@ export default function RolesPermisosPage() {
                       <div className="grid gap-3 sm:grid-cols-2">
                         {permisosAdicionales.map((permiso) => (
                           <label key={permiso.id} className="flex items-start gap-3 text-sm">
-                            <input type="checkbox" className="mt-1 size-4 accent-blue-600" disabled={guardando} checked={codigosSeleccionados.includes(permiso.codigo)} onChange={(e) => marcar(permiso.codigo, e.target.checked)} />
+                            <input type="checkbox" className="mt-1 size-4 accent-brand-500" disabled={guardando} checked={codigosSeleccionados.includes(permiso.codigo)} onChange={(e) => marcar(permiso.codigo, e.target.checked)} />
                             <span className="font-medium">
                               {permiso.nombre}
                             </span>

@@ -17,7 +17,7 @@ type Formulario = { nombre: string; apellido: string; correo: string; telefono: 
 const nuevoFormulario: Formulario = { nombre: '', apellido: '', correo: '', telefono: '', rolId: 0 }
 const tarjeta = 'rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900'
 const campo = 'w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm dark:border-gray-700 dark:bg-gray-900'
-const boton = 'rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50'
+const boton = 'rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-50'
 
 function lista<T>(respuesta: unknown, alternativa: string): T[] {
   if (!respuesta || typeof respuesta !== 'object') return []

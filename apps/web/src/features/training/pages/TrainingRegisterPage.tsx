@@ -160,7 +160,7 @@ export default function TrainingRegisterPage() {
           </div>
           <div className="grid gap-1 p-2 sm:grid-cols-2 lg:grid-cols-3">
             {group.items.map(f => <label key={f.id} className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-800 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-white/5">
-              <input type="checkbox" disabled={!canWrite || saving} checked={checked.includes(f.id)} onChange={() => toggle(f.id)} className="size-4 accent-blue-600" />
+              <input type="checkbox" disabled={!canWrite || saving} checked={checked.includes(f.id)} onChange={() => toggle(f.id)} className="size-4 accent-brand-500" />
               {f.nombreReferencia}
             </label>)}
           </div>

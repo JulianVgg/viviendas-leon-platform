@@ -1,16 +1,14 @@
-/* TailAdmin Pro 2.4 design tokens — fase 1.
-   Solo se importan las bases visuales necesarias; no los estilos de bibliotecas
-   (ApexCharts, FullCalendar, Flatpickr, etc.) aún no integradas.
-   Outfit se carga en línea con la plantilla; en campo sin conexión se utiliza
-   una fuente del sistema como alternativa sin impedir el uso de la PWA. */
-@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@100..900&display=swap") layer(base);
+/* Identidad institucional Viviendas León sobre TailAdmin.
+   PT Sans Regular/Bold: fuente corporativa (carga en línea).
+   En campo/offline la interfaz permanece legible con la alternativa del sistema. */
+@import url("https://fonts.googleapis.com/css2?family=PT+Sans:wght@400;700&display=swap") layer(base);
 @import "tailwindcss";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme {
-  --font-outfit: Outfit, ui-sans-serif, system-ui, sans-serif;
-  --font-sans: Outfit, ui-sans-serif, system-ui, sans-serif;
+  --font-pt-sans: "PT Sans", "Segoe UI", Arial, ui-sans-serif, sans-serif;
+  --font-sans: "PT Sans", "Segoe UI", Arial, ui-sans-serif, sans-serif;
 
   --breakpoint-2xsm: 375px;
   --breakpoint-xsm: 425px;
@@ -43,18 +41,20 @@
   --color-white: #ffffff;
   --color-black: #101828;
 
-  --color-brand-25: #f2f7ff;
-  --color-brand-50: #ecf3ff;
-  --color-brand-100: #dde9ff;
-  --color-brand-200: #c2d6ff;
-  --color-brand-300: #9cb9ff;
-  --color-brand-400: #7592ff;
-  --color-brand-500: #465fff;
-  --color-brand-600: #3641f5;
-  --color-brand-700: #2a31d8;
-  --color-brand-800: #252dae;
-  --color-brand-900: #262e89;
-  --color-brand-950: #161950;
+  /* Escala derivada de la identidad #3C6E8E.
+     brand-500: marca oficial. 600/700: hover y elementos de mayor contraste. */
+  --color-brand-25: #fafcfd;
+  --color-brand-50: #f1f6f9;
+  --color-brand-100: #e2edf3;
+  --color-brand-200: #c9dfe9;
+  --color-brand-300: #a7c9d9;
+  --color-brand-400: #79abc3;
+  --color-brand-500: #3c6e8e;
+  --color-brand-600: #315d79;
+  --color-brand-700: #254c66;
+  --color-brand-800: #1c3d53;
+  --color-brand-900: #163044;
+  --color-brand-950: #0f2131;
 
   --color-blue-light-25: #f5fbff;
   --color-blue-light-50: #f0f9ff;
@@ -153,7 +153,7 @@
     0px 20px 24px -4px rgba(16, 24, 40, 0.08),
     0px 8px 8px -4px rgba(16, 24, 40, 0.03);
   --shadow-datepicker: -5px 0 0 #262d3c, 5px 0 0 #262d3c;
-  --shadow-focus-ring: 0px 0px 0px 4px rgba(70, 95, 255, 0.12);
+  --shadow-focus-ring: 0px 0px 0px 4px rgba(60, 110, 142, 0.17);
   --shadow-slider-navigation:
     0px 1px 2px 0px rgba(16, 24, 40, 0.1), 0px 1px 3px 0px rgba(16, 24, 40, 0.1);
   --shadow-tooltip:
@@ -174,7 +174,7 @@
 
 @layer base {
   :root {
-    font-family: var(--font-outfit);
+    font-family: var(--font-pt-sans);
     color: var(--color-gray-700);
     background: var(--color-gray-50);
     font-synthesis: none;
@@ -187,12 +187,15 @@
   }
 
   body {
-    @apply relative min-h-screen bg-gray-50 font-outfit font-normal text-gray-700 dark:bg-gray-950 dark:text-gray-300;
+    @apply relative min-h-screen bg-gray-50 font-pt-sans font-normal text-gray-700 dark:bg-gray-950 dark:text-gray-300;
     margin: 0;
     min-width: 0;
   }
 
   button, input, select, textarea { font: inherit; }
+  /* Evita que los campos y controles vuelvan al azul nativo del navegador. */
+  input[type="checkbox"], input[type="radio"], progress { accent-color: var(--color-brand-500); }
+  ::selection { color: var(--color-brand-950); background: var(--color-brand-200); }
   button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
   button:disabled { cursor: not-allowed; }
 }
