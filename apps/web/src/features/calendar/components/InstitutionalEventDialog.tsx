@@ -13,7 +13,7 @@ const inputClass = 'min-h-11 w-full rounded-lg border border-gray-300 bg-white p
 const labelClass = 'mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-200'
 const initial = (date: string): CalendarEventInput => ({
   categoria: 'SOPORTE', titulo: 'Visita de soporte técnico',
-  fechaInicio: date, descripcion: '', participantesIds: [], recordatorios: null,
+  fechaInicio: date, descripcion: '', participantesIds: [], recordatorios: [{ tipo: 'DIA_ANTES' }],
 })
 const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 const isSelectableType = (category: string) => eventTypes.some(item => item.id === category)
@@ -47,7 +47,7 @@ export default function InstitutionalEventDialog({
       fechaInicio: selected.fechaInicio,
       descripcion: selected.descripcion,
       participantesIds: selected.participantes.map(person => person.id),
-      recordatorios: selected.recordatorios,
+      recordatorios: selected.recordatorios === null ? [{ tipo: 'DIA_ANTES' }] : selected.recordatorios.filter(item => item.tipo !== 'PERSONALIZADO'),
     } : initial(date))
     setSearch('')
     setBusy(false)

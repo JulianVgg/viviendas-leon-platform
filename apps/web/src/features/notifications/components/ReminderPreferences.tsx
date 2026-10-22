@@ -24,7 +24,7 @@ export default function ReminderPreferences({ usuarioId }: { usuarioId?: number 
   }
   return <section className="mt-5 rounded-2xl border border-gray-200 bg-white p-5 shadow-theme-xs dark:border-gray-800 dark:bg-gray-900" aria-label="Mis preferencias de recordatorios">
     <h2 className="flex items-center gap-2 text-base font-semibold text-gray-800 dark:text-gray-100"><BellRing size={18}/> Mis preferencias de recordatorios</h2>
-    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Estas opciones se aplicarán a las actividades nuevas o modificadas que utilicen las preferencias de cada participante.</p>
+    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Estas preferencias se conservan para actividades anteriores que las utilizaban. Las actividades nuevas se configuran directamente con tres opciones en su formulario.</p>
     {loading ? <p className="mt-3 text-sm text-gray-500">Cargando preferencias…</p> : <div className="mt-4 space-y-2">
       {OPCIONES_RECORDATORIO.map(item => <label key={item.tipo} className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200">
         <input type="checkbox" className="size-4 accent-brand-500" checked={opciones.includes(item.tipo)} disabled={saving} onChange={event => setOpciones(current => event.target.checked ? [...current, item.tipo] : current.filter(tipo => tipo !== item.tipo))}/>

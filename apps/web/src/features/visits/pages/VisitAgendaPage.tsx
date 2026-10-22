@@ -26,6 +26,7 @@ export default function VisitAgendaPage() {
   const { usuario } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const targetVisitId = searchParams.get('visitId')
+  const targetSeguimientoId = searchParams.get('seguimiento')
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1))
   const [items, setItems] = useState<VisitListItem[]>([])
   const [followups, setFollowups] = useState<VisitFollowUp[]>([])
@@ -82,6 +83,23 @@ export default function VisitAgendaPage() {
       return next
     }, {replace: true})
   }, [targetVisitId, loading, items, setSearchParams])
+  // NTF-07: abrir directamente el compromiso mencionado en el aviso.
+  useEffect(() => {
+    if (!targetSeguimientoId || loading) return
+    const found = followups.find(item => item.id === targetSeguimientoId)
+    if (found) {
+      setSelected(null)
+      setEditing(found)
+      if (found.due) setMonth(new Date(`${found.due}T12:00:00`))
+    } else {
+      setError('El seguimiento no está disponible o no tienes permiso para consultarlo.')
+    }
+    setSearchParams(previous => {
+      const next = new URLSearchParams(previous)
+      next.delete('seguimiento')
+      return next
+    }, { replace: true })
+  }, [targetSeguimientoId, loading, followups, setSearchParams])
   useEffect(() => {
     const onFocus = () => { void refresh() }
     window.addEventListener('focus', onFocus)

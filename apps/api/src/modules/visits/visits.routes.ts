@@ -9,6 +9,7 @@ import { getAuthenticatedUser } from '../auth/auth.service.js'
 import { esDireccionGeneral } from '../auth/require-permission.middleware.js'
 import { crearNotificacionesDeActividad, type AvisoActividad } from '../notifications/notifications.service.js'
 import { descripcionAvisoVisita, type TipoAvisoVisita } from '../notifications/notifications.activity.js'
+import { sincronizarAvisosSeguimiento } from '../notifications/followup-alerts.service.js'
 import { actualizarRecordatorios, cancelarRecordatorios, configGuardada, configParaPrisma, parseReglas, reglasTrasCambioFecha, type ReglaRecordatorio } from '../notifications/reminders.service.js'
 
 // Dirección y Coordinación supervisan y pueden reprogramar citas institucionales.
@@ -288,6 +289,10 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
           })
           if (updated.count !== 1) throw new Error('El compromiso anterior no está sincronizado o no corresponde a esta familia.')
         }
+        // NTF-07: nuevas tareas y revisiones offline se programan de forma atómica.
+        await sincronizarAvisosSeguimiento(tx, [
+          ...payload.commitments.map(c => String(c.id)), ...payload.reviews.map(r => r.id),
+        ])
         if (payload.scheduledVisitId) {
           // Conservar el ID de la visita y actualizar su captura; fotografía y
           // reintentos de realización se vinculan al nuevo operationId.
@@ -460,12 +465,17 @@ visitsRouter.patch('/seguimientos/:id', async (req: Request, res: Response) => {
     const prisma = getPrismaClient()
     // La lectura de compromisos es compartida, pero su edición corresponde
     // exclusivamente al técnico dueño de la visita de origen.
-    const result = await prisma.seguimientoVisita.updateMany({
-      where: { id, visitaOrigen: { usuarioResponsableId: req.session.userId! } },
-      data: { estado: status, fechaLimite: due ? new Date(`${due}T12:00:00Z`) : null,
-        texto: text.trim(), observacionCierre: observation?.trim() || null },
+    const updated = await prisma.$transaction(async tx => {
+      const result = await tx.seguimientoVisita.updateMany({
+        where: { id, visitaOrigen: { usuarioResponsableId: req.session.userId! } },
+        data: { estado: status, fechaLimite: due ? new Date(`${due}T12:00:00Z`) : null,
+          texto: text.trim(), observacionCierre: observation?.trim() || null },
+      })
+      if (result.count !== 1) return false
+      await sincronizarAvisosSeguimiento(tx, [id])
+      return true
     })
-    if (result.count !== 1) { res.status(404).json({ error: 'Compromiso no encontrado.' }); return }
+    if (!updated) { res.status(404).json({ error: 'Compromiso no encontrado.' }); return }
     res.json({ accepted: true })
   } catch (error) { console.error('Error actualizando seguimiento:', error); res.status(503).json({ error: 'No se pudo actualizar el compromiso.' }) }
 })

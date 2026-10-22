@@ -356,6 +356,7 @@ model SeguimientoVisita {
   creadoEn             DateTime  @default(now()) @map("creado_en")
 
   visitaOrigen Visita @relation(fields: [visitaOrigenId], references: [id], onDelete: Cascade)
+  avisos       AvisoSeguimiento[]
 
   @@index([visitaOrigenId])
   @@index([estado, fechaLimite])
@@ -752,6 +753,7 @@ model Usuario {
   seguimientos SeguimientoTecnico[]
   bitacoras    Bitacora[]
   notificaciones Notificacion[]
+  avisosSeguimiento AvisoSeguimiento[]
   recordatorios Recordatorio[]
   preferenciaRecordatorio PreferenciaRecordatorio?
   eventosResponsable EventoInstitucional[] @relation("EventoResponsable")
@@ -923,4 +925,29 @@ model PreferenciaRecordatorio {
   usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
   @@map("preferencia_recordatorio")
+}
+
+// NTF-07: agenda de alertas para compromisos VIS-04 (UUID del seguimiento).
+// Se conservan los avisos enviados al modificar/cerrar el compromiso.
+model AvisoSeguimiento {
+  id Int @id @default(autoincrement())
+  seguimientoId String @map("seguimiento_id") @db.Uuid
+  usuarioId Int @map("usuario_id")
+  tipo String @db.VarChar(16)
+  fechaLimite DateTime @map("fecha_limite") @db.Date
+  fechaProgramada DateTime @map("fecha_programada") @db.Timestamptz(6)
+  estado String @default("PENDIENTE") @db.VarChar(15)
+  intentos Int @default(0)
+  proximoIntento DateTime? @map("proximo_intento") @db.Timestamptz(6)
+  ultimoError String? @map("ultimo_error") @db.VarChar(500)
+  procesadoEn DateTime? @map("procesado_en") @db.Timestamptz(6)
+  creadoEn DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+
+  seguimiento SeguimientoVisita @relation(fields: [seguimientoId], references: [id], onDelete: Cascade)
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([seguimientoId, usuarioId, tipo, fechaLimite], map: "aviso_seguimiento_unico")
+  @@index([estado, proximoIntento, fechaProgramada], map: "aviso_seguimiento_programado_idx")
+  @@index([usuarioId, estado], map: "aviso_seguimiento_usuario_idx")
+  @@map("aviso_seguimiento")
 }
