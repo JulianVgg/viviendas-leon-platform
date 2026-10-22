@@ -22,6 +22,7 @@ export type MiAgendaResponse = {
   hoy: AgendaItem[]
   proximas: AgendaItem[]
   pendientes: AgendaItem[]
+  supervision: null | { visitasVencidas: number; visitas: { id: number; fecha: string; familia: string; comunidad: string; tecnico: string; destino: '/visitas/agenda' }[] }
   modulos: { calendario: boolean; visitas: boolean }
 }
 

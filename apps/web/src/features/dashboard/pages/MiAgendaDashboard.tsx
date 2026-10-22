@@ -103,6 +103,30 @@ export default function MiAgendaDashboard() {
         <SeccionAgenda titulo="Próximas actividades" descripcion="Planificación de los siguientes 30 días" items={agenda.proximas} hoy={agenda.fechaHoy} vacio="No tienes próximas actividades." icono={<Clock3 size={20}/>}/>
         <SeccionAgenda titulo="Mis pendientes" descripcion="Compromisos y visitas vencidas" items={agenda.pendientes} hoy={agenda.fechaHoy} vacio="No tienes compromisos o visitas vencidas." icono={<ClipboardList size={20}/>}/>
       </div>
+      {agenda.supervision && usuario && canViewPath(usuario, '/visitas/agenda') &&
+        <section className={estiloTarjeta} aria-label="Supervisión de visitas vencidas">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 pb-4 dark:border-gray-800">
+            <div className="flex items-center gap-3">
+              <AlertCircle size={22} className="text-warning-500" />
+              <div><h2 className="font-semibold text-gray-800 dark:text-white/90">Visitas vencidas del equipo</h2>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Dirección y Coordinación · Visitas programadas de fechas anteriores aún no realizadas</p></div>
+            </div>
+            <span className="rounded-lg bg-warning-50 px-3 py-1.5 text-xl font-semibold tabular-nums text-warning-700 dark:bg-warning-500/10 dark:text-warning-400" aria-label={`${agenda.supervision.visitasVencidas} visitas vencidas`}>
+              {agenda.supervision.visitasVencidas}
+            </span>
+          </div>
+          {agenda.supervision.visitas.length ? <ul className="divide-y divide-gray-100 dark:divide-gray-800">
+            {agenda.supervision.visitas.map(visita => <li key={visita.id}>
+              <Link to={visita.destino} className="layout-focus flex items-center gap-3 rounded-lg px-2 py-3 text-sm hover:bg-gray-50 dark:hover:bg-white/[0.04]">
+                <CalendarCheck2 size={18} className="shrink-0 text-warning-500" />
+                <span className="min-w-0 flex-1"><span className="block truncate font-medium text-gray-800 dark:text-white/90">{visita.familia}</span>
+                  <span className="block truncate text-xs text-gray-500 dark:text-gray-400">{visita.comunidad} · {visita.tecnico} · {fechaCorta(visita.fecha, agenda.fechaHoy)}</span>
+                </span><ChevronRight size={17} className="shrink-0 text-gray-400" />
+              </Link>
+            </li>)}
+          </ul> : <p className="py-6 text-center text-sm text-gray-500 dark:text-gray-400">No hay visitas vencidas por supervisar.</p>}
+          {agenda.supervision.visitasVencidas > agenda.supervision.visitas.length && <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">Se muestran las primeras 12 visitas vencidas. Abre la agenda para consultar todas.</p>}
+        </section>}
       <div className="flex flex-wrap items-center gap-3 text-sm">
         {usuario && agenda.modulos.calendario && canViewPath(usuario, '/calendario') && <Link to="/calendario" className="layout-focus font-medium text-brand-600 hover:underline dark:text-brand-400">Abrir calendario institucional →</Link>}
         {usuario && agenda.modulos.visitas && canViewPath(usuario, '/visitas/agenda') && <Link to="/visitas/agenda" className="layout-focus font-medium text-brand-600 hover:underline dark:text-brand-400">Abrir agenda de visitas →</Link>}
