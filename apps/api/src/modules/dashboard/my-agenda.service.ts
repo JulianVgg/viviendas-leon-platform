@@ -51,8 +51,12 @@ export async function obtenerMiAgenda(user: AuthenticatedUser, ahora = new Date(
   const hasta = new Date(`${fin}T12:00:00Z`)
   const veCalendario = puedeConsultarAgendaModulo(user, 'CALENDARIO')
   const veVisitas = puedeConsultarAgendaModulo(user, 'VISITAS')
+  const supervisor = veVisitas && user.roles.some(rol => {
+    const nombre = rol.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
+    return nombre === 'direccion general' || nombre === 'coordinadora del programa agroforestal'
+  })
 
-  const [eventos, visitas, vencidas, compromisos, totalVisitas, totalCompromisos] = await Promise.all([
+  const [eventos, visitas, vencidas, compromisos, totalVisitas, totalCompromisos, totalVencidasEquipo, vencidasEquipo] = await Promise.all([
     veCalendario ? db.eventoInstitucional.findMany({
       where: {
         fechaInicio: { lte: hasta }, fechaFin: { gte: desde },
@@ -79,6 +83,13 @@ export async function obtenerMiAgenda(user: AuthenticatedUser, ahora = new Date(
     }) : Promise.resolve([]),
     veVisitas ? db.visita.count({ where: { usuarioResponsableId: user.id, estado: 'PROGRAMADA' } }) : Promise.resolve(0),
     veVisitas ? db.seguimientoVisita.count({ where: { estado: 'PENDIENTE', visitaOrigen: { usuarioResponsableId: user.id } } }) : Promise.resolve(0),
+    supervisor ? db.visita.count({ where: { estado: 'PROGRAMADA', fecha: { lt: desde } } }) : Promise.resolve(0),
+    supervisor ? db.visita.findMany({
+      where: { estado: 'PROGRAMADA', fecha: { lt: desde } },
+      select: { id: true, fecha: true, usuarioResponsable: { select: { nombre: true, apellido: true } },
+        familia: { select: { nombreReferencia: true, comunidad: { select: { nombre: true } } } } },
+      orderBy: [{ fecha: 'asc' }, { id: 'asc' }], take: 12,
+    }) : Promise.resolve([]),
   ])
 
   const actividades: ActividadMiAgenda[] = [
@@ -120,6 +131,15 @@ export async function obtenerMiAgenda(user: AuthenticatedUser, ahora = new Date(
     },
     hoy: hoyItems.slice(0, 12), proximas: ordenadas.filter(item => item.fecha !== hoy).slice(0, 12),
     pendientes: pendientes.slice(0, 12),
+    supervision: supervisor ? {
+      visitasVencidas: totalVencidasEquipo,
+      visitas: vencidasEquipo.map(v => ({
+        id: v.id, fecha: v.fecha.toISOString().slice(0, 10),
+        familia: v.familia.nombreReferencia, comunidad: v.familia.comunidad.nombre,
+        tecnico: [v.usuarioResponsable.nombre, v.usuarioResponsable.apellido].filter(Boolean).join(' '),
+        destino: '/visitas/agenda' as const,
+      })),
+    } : null,
     modulos: { calendario: veCalendario, visitas: veVisitas },
   }
 }

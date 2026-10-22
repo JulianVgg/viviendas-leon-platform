@@ -10,6 +10,7 @@ import { esDireccionGeneral } from '../auth/require-permission.middleware.js'
 import { crearNotificacionesDeActividad, type AvisoActividad } from '../notifications/notifications.service.js'
 import { descripcionAvisoVisita, type TipoAvisoVisita } from '../notifications/notifications.activity.js'
 import { sincronizarAvisosSeguimiento } from '../notifications/followup-alerts.service.js'
+import { resolverAvisosVisitaVencida } from '../notifications/overdue-visits.worker.js'
 import { actualizarRecordatorios, cancelarRecordatorios, configGuardada, configParaPrisma, parseReglas, reglasTrasCambioFecha, type ReglaRecordatorio } from '../notifications/reminders.service.js'
 
 // Dirección y Coordinación supervisan y pueden reprogramar citas institucionales.
@@ -257,6 +258,7 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
           })
           if (changed.count !== 1) throw new Error('SCHEDULE_CONFLICT')
           visitaId = planned.id
+          await resolverAvisosVisitaVencida(tx, visitaId)
           await cancelarRecordatorios(tx, 'VISITA', visitaId)
           const plannedData = previous?.datos && typeof previous.datos === 'object' && !Array.isArray(previous.datos)
             ? previous.datos as Record<string, unknown> : {}
@@ -372,6 +374,7 @@ visitsRouter.patch('/agenda/:visitId', async (req: Request, res: Response) => {
           recordatoriosConfig: configParaPrisma(config) },
         select: { versionNotificacion: true },
       })
+      await resolverAvisosVisitaVencida(tx, visita.id)
       await actualizarRecordatorios(tx, 'VISITA', visita.id, date, [visita.usuarioResponsableId], config)
       await crearNotificacionesDeActividad([avisoVisita(visita.id,
         `V${cambiado.versionNotificacion}`, visita.usuarioResponsableId, 'VISITA_REPROGRAMADA',
@@ -408,6 +411,7 @@ visitsRouter.delete('/agenda/:visitId', async (req: Request, res: Response) => {
       if (!visita) return false
       const borrado = await tx.visita.deleteMany({ where })
       if (borrado.count !== 1) return false
+      await resolverAvisosVisitaVencida(tx, visitId)
       await cancelarRecordatorios(tx, 'VISITA', visitId)
       await crearNotificacionesDeActividad([avisoVisita(visitId, 'CANCELACION',
         visita.usuarioResponsableId, 'VISITA_CANCELADA', visita.familia.nombreReferencia,
