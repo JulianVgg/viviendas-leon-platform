@@ -1,0 +1,512 @@
+diff --git a/apps/api/src/modules/agriculture/crops.validation.ts b/apps/api/src/modules/agriculture/crops.validation.ts
+new file mode 100644
+--- /dev/null
++++ b/apps/api/src/modules/agriculture/crops.validation.ts
+@@ -0,0 +1,40 @@
++export type CropInput = { nombre: string; descripcion: string | null; activo: boolean }
++export type CropFieldError = { field: string; message: string }
++const allowed = new Set(['nombre', 'descripcion', 'activo'])
++const maxId = 2_147_483_647
++
++export function parseCropId(value: unknown): number | null {
++  if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) return null
++  const id = Number(value)
++  return Number.isSafeInteger(id) && id <= maxId ? id : null
++}
++
++export function validateCropInput(body: unknown): { data?: CropInput; details: CropFieldError[] } {
++  if (!body || typeof body !== 'object' || Array.isArray(body)) {
++    return { details: [{ field: 'body', message: 'Envía un objeto JSON con los datos del cultivo.' }] }
++  }
++  const raw = body as Record<string, unknown>
++  const details: CropFieldError[] = []
++  for (const key of Object.keys(raw)) {
++    if (!allowed.has(key)) details.push({ field: key, message: 'Este campo no está permitido.' })
++  }
++  const nombre = typeof raw.nombre === 'string' ? raw.nombre.normalize('NFC').trim().replace(/\s+/g, ' ') : ''
++  if (!nombre || nombre.length > 120 || /[\u0000-\u001f\u007f]/.test(raw.nombre as string ?? '')) {
++    details.push({ field: 'nombre', message: 'Ingresa un nombre válido de hasta 120 caracteres.' })
++  }
++  let descripcion: string | null = null
++  if (raw.descripcion !== undefined && raw.descripcion !== null) {
++    if (typeof raw.descripcion !== 'string' || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(raw.descripcion)) {
++      details.push({ field: 'descripcion', message: 'La descripción contiene caracteres no permitidos.' })
++    } else {
++      descripcion = raw.descripcion.normalize('NFC').trim() || null
++      if (descripcion && descripcion.length > 2000) {
++        details.push({ field: 'descripcion', message: 'La descripción no puede superar 2000 caracteres.' })
++      }
++    }
++  }
++  const activo = raw.activo === undefined ? true : raw.activo
++  if (typeof activo !== 'boolean') details.push({ field: 'activo', message: 'Selecciona un estado válido.' })
++  if (details.length) return { details }
++  return { data: { nombre, descripcion, activo: activo as boolean }, details }
++}
+diff --git a/apps/api/src/modules/agriculture/crops.routes.ts b/apps/api/src/modules/agriculture/crops.routes.ts
+new file mode 100644
+--- /dev/null
++++ b/apps/api/src/modules/agriculture/crops.routes.ts
+@@ -0,0 +1,123 @@
++import { Router, type NextFunction, type Response } from 'express'
++import { getPrismaClient } from '../../config/prisma.js'
++import { Prisma } from '../../generated/prisma/client.js'
++import { requireAuth } from '../auth/auth.middleware.js'
++import { requirePermission } from '../auth/require-permission.middleware.js'
++import { parseCropId, validateCropInput, type CropInput, type CropFieldError } from './crops.validation.js'
++
++export const cropsRouter = Router()
++cropsRouter.use(requireAuth)
++
++class CropError extends Error {
++  constructor(public readonly status: 404 | 409, public readonly code: string,
++    message: string, public readonly details: CropFieldError[] = []) { super(message) }
++}
++
++const cropSelect = {
++  id: true, nombre: true, descripcion: true, activo: true,
++  _count: { select: { ciclos: true } },
++} satisfies Prisma.CultivoSelect
++
++type CropRecord = Prisma.CultivoGetPayload<{ select: typeof cropSelect }>
++const serialize = ({ _count, ...crop }: CropRecord) => ({ ...crop, ciclosCount: _count.ciclos })
++
++function handleError(error: unknown, res: Response, next: NextFunction) {
++  if (error instanceof CropError) {
++    res.status(error.status).json({ error: { code: error.code, message: error.message, details: error.details } })
++    return
++  }
++  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
++    res.status(409).json({ error: { code: 'DUPLICATE_CROP', message: 'Ya existe un cultivo con ese nombre.' } })
++    return
++  }
++  next(error)
++}
++
++async function ensureUniqueName(tx: Prisma.TransactionClient, nombre: string, exceptId?: number) {
++  // Serializa los registros con nombres equivalentes, sin importar mayúsculas.
++  const key = `cultivo:${nombre.toLocaleLowerCase('es')}`
++  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`
++  const exists = await tx.cultivo.findFirst({
++    where: { nombre: { equals: nombre, mode: 'insensitive' }, ...(exceptId ? { id: { not: exceptId } } : {}) },
++    select: { id: true },
++  })
++  if (exists) throw new CropError(409, 'DUPLICATE_CROP', 'Ya existe un cultivo con ese nombre.',
++    [{ field: 'nombre', message: 'Utiliza un nombre diferente.' }])
++}
++
++// Para AGR-03: solo cultivos activos son opciones para registrar NUEVOS ciclos.
++// Los ciclos históricos conservan su relación aunque se desactive el cultivo.
++cropsRouter.get('/disponibles', async (_req, res, next) => {
++  try {
++    const data = await getPrismaClient().cultivo.findMany({
++      where: { activo: true }, orderBy: [{ nombre: 'asc' }, { id: 'asc' }],
++      select: { id: true, nombre: true, descripcion: true },
++    })
++    res.json({ data })
++  } catch (error) { next(error) }
++})
++
++cropsRouter.get('/', requirePermission('PANTALLA_CULTIVOS'), async (_req, res, next) => {
++  try {
++    const records = await getPrismaClient().cultivo.findMany({
++      orderBy: [{ nombre: 'asc' }, { id: 'asc' }], select: cropSelect,
++    })
++    res.json({ data: records.map(serialize) })
++  } catch (error) { next(error) }
++})
++
++cropsRouter.post('/', requirePermission('CULTIVOS_WRITE'), async (req, res, next) => {
++  const checked = validateCropInput(req.body)
++  if (!checked.data) {
++    res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Revisa los datos del cultivo.', details: checked.details } })
++    return
++  }
++  try {
++    const input: CropInput = checked.data
++    const data = await getPrismaClient().$transaction(async (tx) => {
++      await ensureUniqueName(tx, input.nombre)
++      const created = await tx.cultivo.create({ data: input, select: cropSelect })
++      const result = serialize(created)
++      await tx.bitacora.create({ data: {
++        usuarioId: req.session.userId!, entidad: 'cultivo', registroId: String(created.id),
++        accion: 'CREATE', fecha: new Date(), datosNuevos: JSON.stringify(result),
++        descripcion: 'Registro de cultivo en el catálogo agrícola.',
++      } })
++      return result
++    })
++    res.status(201).json({ data })
++  } catch (error) { handleError(error, res, next) }
++})
++
++cropsRouter.patch('/:id', requirePermission('CULTIVOS_WRITE'), async (req, res, next) => {
++  const id = parseCropId(req.params.id)
++  if (id === null) {
++    res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'El identificador del cultivo no es válido.' } })
++    return
++  }
++  const checked = validateCropInput(req.body)
++  if (!checked.data) {
++    res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Revisa los datos del cultivo.', details: checked.details } })
++    return
++  }
++  try {
++    const input: CropInput = checked.data
++    const data = await getPrismaClient().$transaction(async (tx) => {
++      const locked = await tx.$queryRaw<Array<{ id: number }>>`SELECT id FROM cultivo WHERE id = ${id} FOR UPDATE`
++      if (!locked.length) throw new CropError(404, 'CROP_NOT_FOUND', 'El cultivo solicitado no existe.')
++      const previous = await tx.cultivo.findUniqueOrThrow({ where: { id }, select: cropSelect })
++      const before = serialize(previous)
++      if (previous.nombre !== input.nombre) await ensureUniqueName(tx, input.nombre, id)
++      if (previous.nombre === input.nombre && previous.descripcion === input.descripcion && previous.activo === input.activo) return before
++      const updated = await tx.cultivo.update({ where: { id }, data: input, select: cropSelect })
++      const result = serialize(updated)
++      await tx.bitacora.create({ data: {
++        usuarioId: req.session.userId!, entidad: 'cultivo', registroId: String(id),
++        accion: 'UPDATE', fecha: new Date(), datosAnteriores: JSON.stringify(before),
++        datosNuevos: JSON.stringify(result), descripcion: 'Actualización del catálogo de cultivos.',
++      } })
++      return result
++    })
++    res.json({ data })
++  } catch (error) { handleError(error, res, next) }
++})
+diff --git a/apps/api/prisma/migrations/20261022090000_agr02_cultivos_permissions/migration.sql b/apps/api/prisma/migrations/20261022090000_agr02_cultivos_permissions/migration.sql
+new file mode 100644
+--- /dev/null
++++ b/apps/api/prisma/migrations/20261022090000_agr02_cultivos_permissions/migration.sql
+@@ -0,0 +1,11 @@
++-- AGR-02: el modelo cultivo/ciclo_cultivo ya existe; únicamente se añaden permisos.
++INSERT INTO "permiso" ("codigo", "nombre", "descripcion") VALUES
++  ('PANTALLA_CULTIVOS', 'Cultivos', 'Consultar el catálogo de cultivos agrícolas.'),
++  ('CULTIVOS_WRITE', 'Administrar cultivos', 'Registrar, editar y desactivar cultivos agrícolas.')
++ON CONFLICT ("codigo") DO NOTHING;
++
++INSERT INTO "rol_permiso" ("rol_id", "permiso_id")
++SELECT r."id", p."id" FROM "rol" r CROSS JOIN "permiso" p
++WHERE r."nombre" IN ('Coordinadora del programa agroforestal', 'Técnico agropecuario')
++  AND p."codigo" IN ('PANTALLA_CULTIVOS', 'CULTIVOS_WRITE')
++ON CONFLICT ("rol_id", "permiso_id") DO NOTHING;
+diff --git a/apps/web/src/features/agriculture/services/cropsService.ts b/apps/web/src/features/agriculture/services/cropsService.ts
+new file mode 100644
+--- /dev/null
++++ b/apps/web/src/features/agriculture/services/cropsService.ts
+@@ -0,0 +1,37 @@
++const API = (import.meta.env.VITE_API_URL?.trim() || '/api').replace(/\/$/, '')
++
++export type Crop = {
++  id: number
++  nombre: string
++  descripcion: string | null
++  activo: boolean
++  ciclosCount: number
++}
++export type CropInput = Pick<Crop, 'nombre' | 'descripcion' | 'activo'>
++export type CropOption = Pick<Crop, 'id' | 'nombre' | 'descripcion'>
++
++export class CropsApiError extends Error {
++  constructor(message: string, public readonly status: number,
++    public readonly details: Array<{ field: string; message: string }> = []) {
++    super(message)
++    this.name = 'CropsApiError'
++  }
++}
++
++async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
++  const response = await fetch(`${API}/v1/cultivos${path}`, {
++    credentials: 'same-origin', cache: 'no-store', ...init,
++    headers: { Accept: 'application/json', ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...init.headers },
++  })
++  const json = await response.json().catch(() => null)
++  if (!response.ok) throw new CropsApiError(json?.error?.message ?? 'No fue posible completar la solicitud.',
++    response.status, json?.error?.details ?? [])
++  if (!json || !('data' in json)) throw new Error('La respuesta del servidor está incompleta.')
++  return json.data as T
++}
++
++export const listCrops = (signal?: AbortSignal) => request<Crop[]>('', { signal })
++// Usar como selector para nuevos ciclos agrícolas (AGR-03).
++export const listAvailableCrops = (signal?: AbortSignal) => request<CropOption[]>('/disponibles', { signal })
++export const createCrop = (input: CropInput) => request<Crop>('', { method: 'POST', body: JSON.stringify(input) })
++export const updateCrop = (id: number, input: CropInput) => request<Crop>(`/${id}`, { method: 'PATCH', body: JSON.stringify(input) })
+diff --git a/apps/web/src/features/agriculture/pages/CultivosPage.tsx b/apps/web/src/features/agriculture/pages/CultivosPage.tsx
+new file mode 100644
+--- /dev/null
++++ b/apps/web/src/features/agriculture/pages/CultivosPage.tsx
+@@ -0,0 +1,186 @@
++import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
++import { Leaf, Pencil, Plus, RefreshCcw, Search } from 'lucide-react'
++import PageMeta from '@/components/common/PageMeta'
++import PageHeader from '@/components/common/PageHeader'
++import Card, { CardBody } from '@/components/ui/Card'
++import DataTable from '@/components/ui/DataTable'
++import Badge from '@/components/ui/Badge'
++import Button from '@/components/ui/Button'
++import Dialog from '@/components/ui/Dialog'
++import FormField, { formControlClassName } from '@/components/ui/FormField'
++import Alert from '@/components/ui/Alert'
++import LoadingState from '@/components/ui/LoadingState'
++import { useAuth } from '@/features/auth/AuthProvider'
++import { canViewPath, canWriteCrops } from '@/features/auth/screenPermissions'
++import { useOnlineStatus } from '@/hooks/useOnlineStatus'
++import { createCrop, listCrops, updateCrop, CropsApiError, type Crop, type CropInput } from '../services/cropsService'
++
++type DialogProps = { open: boolean; crop: Crop | null; onClose: () => void; onSaved: (record: Crop) => void }
++
++function CropFormDialog({ open, crop, onClose, onSaved }: DialogProps) {
++  const [nombre, setNombre] = useState('')
++  const [descripcion, setDescripcion] = useState('')
++  const [activo, setActivo] = useState(true)
++  const [saving, setSaving] = useState(false)
++  const [error, setError] = useState('')
++  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
++
++  useEffect(() => {
++    if (!open) return
++    setNombre(crop?.nombre ?? '')
++    setDescripcion(crop?.descripcion ?? '')
++    setActivo(crop?.activo ?? true)
++    setError('')
++    setFieldErrors({})
++  }, [open, crop])
++
++  function close() { if (!saving) onClose() }
++  async function submit(event: FormEvent<HTMLFormElement>) {
++    event.preventDefault()
++    if (saving) return
++    const normalized = nombre.normalize('NFC').trim().replace(/\s+/g, ' ')
++    const errors: Record<string, string> = {}
++    if (!normalized || normalized.length > 120 || /[\u0000-\u001f\u007f]/.test(nombre)) {
++      errors.nombre = 'Ingresa un nombre válido de hasta 120 caracteres.'
++    }
++    if (descripcion.trim().length > 2000 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(descripcion)) {
++      errors.descripcion = 'La descripción no puede superar 2000 caracteres ni contener caracteres de control.'
++    }
++    if (Object.keys(errors).length) { setFieldErrors(errors); return }
++    const input: CropInput = { nombre: normalized, descripcion: descripcion.trim() || null, activo }
++    setSaving(true); setError(''); setFieldErrors({})
++    try {
++      onSaved(crop ? await updateCrop(crop.id, input) : await createCrop(input))
++    } catch (cause) {
++      if (cause instanceof CropsApiError) {
++        setError(cause.message)
++        setFieldErrors(Object.fromEntries(cause.details.map(({ field, message }) => [field, message])))
++      } else setError('No se pudo confirmar el guardado. Consulta el catálogo antes de reintentar.')
++    } finally { setSaving(false) }
++  }
++
++  return <Dialog open={open} onClose={close} title={crop ? 'Editar cultivo' : 'Nuevo cultivo'}
++    description="Los cultivos activos estarán disponibles para registrar nuevos ciclos agrícolas.">
++    <form onSubmit={(e) => void submit(e)} className="space-y-5">
++      {error && <Alert variant="error" title="No se pudo guardar">{error}</Alert>}
++      <FormField id="crop-name" label="Nombre del cultivo" required error={fieldErrors.nombre}>
++        <input id="crop-name" className={formControlClassName} value={nombre} required maxLength={120} autoFocus
++          onChange={(e) => { setNombre(e.target.value); setFieldErrors((old) => ({ ...old, nombre: '' })) }} placeholder="Ej. Tomate" />
++      </FormField>
++      <FormField id="crop-description" label="Descripción" error={fieldErrors.descripcion}>
++        <textarea id="crop-description" className={formControlClassName} rows={3} maxLength={2000} value={descripcion}
++          onChange={(e) => { setDescripcion(e.target.value); setFieldErrors((old) => ({ ...old, descripcion: '' })) }} placeholder="Descripción opcional del cultivo" />
++      </FormField>
++      <FormField id="crop-active" label="Estado" required error={fieldErrors.activo}>
++        <select id="crop-active" className={formControlClassName} value={activo ? 'activo' : 'inactivo'}
++          onChange={(e) => setActivo(e.target.value === 'activo')}>
++          <option value="activo">Activo — disponible para nuevos ciclos</option>
++          <option value="inactivo">Inactivo — conservar únicamente el historial</option>
++        </select>
++      </FormField>
++      {crop && crop.ciclosCount > 0 && <Alert variant="info" title="Ciclos vinculados">
++        Este cultivo aparece en {crop.ciclosCount} ciclo(s). Editarlo o desactivarlo no elimina esos registros.
++      </Alert>}
++      <div className="flex justify-end gap-3 border-t border-gray-100 pt-5 dark:border-gray-800">
++        <Button type="button" variant="secondary" disabled={saving} onClick={close}>Cancelar</Button>
++        <Button type="submit" disabled={saving}>{saving ? 'Guardando...' : crop ? 'Guardar cambios' : 'Registrar cultivo'}</Button>
++      </div>
++    </form>
++  </Dialog>
++}
++
++export default function CultivosPage() {
++  const { usuario } = useAuth()
++  const online = useOnlineStatus()
++  const canRead = Boolean(usuario && canViewPath(usuario, '/gestion-agricola/cultivos'))
++  const canWrite = Boolean(usuario && canWriteCrops(usuario))
++  const [crops, setCrops] = useState<Crop[]>([])
++  const [loading, setLoading] = useState(true)
++  const [error, setError] = useState('')
++  const [success, setSuccess] = useState('')
++  const [search, setSearch] = useState('')
++  const [filter, setFilter] = useState<'todos' | 'activos' | 'inactivos'>('todos')
++  const [editing, setEditing] = useState<Crop | null>(null)
++  const [dialogOpen, setDialogOpen] = useState(false)
++
++  const refresh = useCallback(async (signal?: AbortSignal) => {
++    const data = await listCrops(signal)
++    if (!signal?.aborted) setCrops(data)
++  }, [])
++  useEffect(() => {
++    if (!canRead) { setLoading(false); return }
++    const controller = new AbortController()
++    setLoading(true)
++    void refresh(controller.signal).catch((cause: unknown) => {
++      if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'No se pudo consultar el catálogo.')
++    }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
++    return () => controller.abort()
++  }, [canRead, refresh])
++
++  const filtered = useMemo(() => {
++    const needle = search.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
++    return crops.filter((crop) => {
++      if (filter === 'activos' && !crop.activo) return false
++      if (filter === 'inactivos' && crop.activo) return false
++      const haystack = `${crop.nombre} ${crop.descripcion ?? ''}`.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
++      return !needle || haystack.includes(needle)
++    })
++  }, [crops, filter, search])
++
++  function saved(record: Crop) {
++    setCrops((old) => [...old.filter((c) => c.id !== record.id), record].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')))
++    setDialogOpen(false)
++    setError('')
++    setSuccess(editing ? 'Cultivo actualizado correctamente.' : 'Cultivo registrado correctamente.')
++  }
++  if (!canRead) return <Alert variant="error" title="Acceso restringido">No tienes permiso para consultar cultivos.</Alert>
++
++  return <>
++    <PageMeta title="Cultivos | Viviendas León Guatemala" description="Catálogo institucional de cultivos agrícolas." />
++    <PageHeader title="Cultivos" description="Consulta, registra y actualiza los cultivos utilizados en los huertos."
++      actions={<>
++        <Button variant="secondary" disabled={loading || !online} onClick={() => {
++          setLoading(true); setError(''); setSuccess('')
++          void refresh().catch((cause: unknown) => setError(cause instanceof Error ? cause.message : 'Error al actualizar.')).finally(() => setLoading(false))
++        }}><RefreshCcw size={16} /> Actualizar</Button>
++        {canWrite && <Button disabled={!online} onClick={() => { setEditing(null); setDialogOpen(true); setError(''); setSuccess('') }}>
++          <Plus size={18} /> Nuevo cultivo
++        </Button>}
++      </>} />
++    {!online && <div className="mb-4"><Alert variant="warning" title="Sin conexión">La administración de cultivos requiere conexión.</Alert></div>}
++    {error && <div className="mb-4"><Alert variant="error" title="Error al consultar o guardar">{error}</Alert></div>}
++    {success && <div className="mb-4"><Alert variant="success" title="Operación realizada">{success}</Alert></div>}
++    <div className="mb-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
++      <Card><CardBody><p className="text-sm text-gray-500">Cultivos registrados</p><p className="mt-2 text-2xl font-semibold">{crops.length}</p></CardBody></Card>
++      <Card><CardBody><p className="text-sm text-gray-500">Cultivos activos</p><p className="mt-2 text-2xl font-semibold">{crops.filter((crop) => crop.activo).length}</p></CardBody></Card>
++    </div>
++    <Card><CardBody>
++      <div className="mb-5 flex flex-col gap-3 sm:flex-row">
++        <label className="relative flex-1"><span className="sr-only">Buscar cultivo</span>
++          <Search className="absolute left-3 top-3 text-gray-400" size={18} />
++          <input className="h-11 w-full rounded-lg border border-gray-300 bg-white pl-10 pr-3 text-sm dark:border-gray-700 dark:bg-gray-900"
++            value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar cultivo" />
++        </label>
++        <label><span className="sr-only">Filtrar por estado</span>
++          <select className="h-11 rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900"
++            value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
++            <option value="todos">Todos</option><option value="activos">Activos</option><option value="inactivos">Inactivos</option>
++          </select>
++        </label>
++      </div>
++      {loading ? <LoadingState label="Cargando cultivos..." /> : !filtered.length ?
++        <p className="py-10 text-center text-sm text-gray-500">{crops.length ? 'No hay coincidencias con los filtros.' : 'Todavía no hay cultivos registrados.'}</p> :
++        <DataTable caption="Catálogo de cultivos" columns={['Cultivo', 'Ciclos asociados', 'Estado', 'Acciones']} rows={filtered.map((crop) => [
++          <div key="nombre"><span className="flex items-center gap-2 font-medium"><Leaf size={17} aria-hidden="true" />{crop.nombre}</span>
++            {crop.descripcion && <p className="mt-1 max-w-sm text-xs text-gray-500">{crop.descripcion}</p>}</div>,
++          String(crop.ciclosCount),
++          <Badge key="estado" variant={crop.activo ? 'success' : 'neutral'}>{crop.activo ? 'Activo' : 'Inactivo'}</Badge>,
++          canWrite ? <Button key="accion" size="sm" variant="secondary" disabled={!online} onClick={() => {
++            setEditing(crop); setDialogOpen(true); setError(''); setSuccess('')
++          }}><Pencil size={14} /> Editar</Button> : <span key="accion">Solo lectura</span>,
++        ])} />}
++      <p className="mt-4 text-xs text-gray-500">Desactivar un cultivo evita seleccionarlo en nuevos ciclos, pero conserva los ciclos históricos.</p>
++    </CardBody></Card>
++    {canWrite && <CropFormDialog open={dialogOpen} crop={editing} onClose={() => setDialogOpen(false)} onSaved={saved} />}
++  </>
++}
+diff --git a/apps/api/tests/crops.validation.test.mjs b/apps/api/tests/crops.validation.test.mjs
+new file mode 100644
+--- /dev/null
++++ b/apps/api/tests/crops.validation.test.mjs
+@@ -0,0 +1,25 @@
++import test from 'node:test'
++import assert from 'node:assert/strict'
++import { parseCropId, validateCropInput } from '../dist/modules/agriculture/crops.validation.js'
++
++test('AGR-02: valida un cultivo activo e higieniza el nombre', () => {
++  const result = validateCropInput({ nombre: '  Tomate   cherry  ', descripcion: ' Hortaliza ', activo: true })
++  assert.deepEqual(result.data, { nombre: 'Tomate cherry', descripcion: 'Hortaliza', activo: true })
++  assert.deepEqual(result.details, [])
++})
++
++test('AGR-02: exige nombre y permite desactivar', () => {
++  assert.ok(validateCropInput({ nombre: '   ', activo: true }).details.some((d) => d.field === 'nombre'))
++  assert.equal(validateCropInput({ nombre: 'Tomate', activo: false }).data?.activo, false)
++})
++
++test('AGR-02: rechaza datos adicionales y tipos erróneos', () => {
++  const result = validateCropInput({ nombre: 'Tomate', activo: 'false', id: 99 })
++  assert.deepEqual(result.details.map((d) => d.field).sort(), ['activo', 'id'])
++  assert.equal(result.data, undefined)
++})
++
++test('AGR-02: rechaza IDs fuera de rango', () => {
++  assert.equal(parseCropId('1'), 1)
++  for (const id of ['0', '-1', '1.0', '2147483648', 'abc', null]) assert.equal(parseCropId(id), null)
++})
+diff --git a/apps/api/src/app.ts b/apps/api/src/app.ts
+--- a/apps/api/src/app.ts
++++ b/apps/api/src/app.ts
+@@ -13,3 +13,4 @@
+ import { visitsRouter } from './modules/visits/visits.routes.js';
+ import { gardensRouter } from './modules/agriculture/gardens.routes.js';
++import { cropsRouter } from './modules/agriculture/crops.routes.js';
+ import { calendarRouter } from './modules/calendar/calendar.routes.js';
+@@ -90,3 +91,4 @@
+ app.use('/api/v1/visitas', visitsRouter);
+ app.use('/api/v1/huertos', gardensRouter);
++app.use('/api/v1/cultivos', cropsRouter);
+ app.use('/api/v1/calendario', calendarRouter);
+diff --git a/apps/web/src/app/routes.tsx b/apps/web/src/app/routes.tsx
+--- a/apps/web/src/app/routes.tsx
++++ b/apps/web/src/app/routes.tsx
+@@ -10,3 +10,4 @@
+ import FamilyEditPage from '@/features/families/pages/FamilyEditPage'
+ import HuertosPage, { CreateGardenPage } from '@/features/agriculture/pages/HuertosPage'
++import CultivosPage from '@/features/agriculture/pages/CultivosPage'
+ 
+@@ -210,8 +211,1 @@
+-          <Route
+-            path="gestion-agricola/cultivos"
+-            element={module(
+-              'Cultivos',
+-              'Estructura base para cultivos y ciclos productivos.',
+-              ['Cultivo', 'Ciclo', 'Estado'],
+-            )}
+-          />
++          <Route path="gestion-agricola/cultivos" element={<CultivosPage />} />
+diff --git a/apps/web/src/features/families/pages/FamilyDetailPage.tsx b/apps/web/src/features/families/pages/FamilyDetailPage.tsx
+--- a/apps/web/src/features/families/pages/FamilyDetailPage.tsx
++++ b/apps/web/src/features/families/pages/FamilyDetailPage.tsx
+@@ -61,3 +61,3 @@
+     <PageMeta title="Expediente integral de familia | Viviendas León Guatemala" description="Consulta de información general, integrantes y programas de una familia." />
+-    <PageHeader title="Expediente familiar" description={canEdit ? 'Consulta el expediente y administra la información autorizada.' : 'Información general, integrantes y programas. Consulta de solo lectura.'} actions={<div className="flex flex-wrap gap-2">{canEdit && <Link to={`/familias/${id}/editar`} className="layout-focus inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white shadow-theme-xs hover:bg-brand-600">Editar información</Link>}<Link to="/familias" className="layout-focus inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-theme-xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">Volver al listado</Link></div>} />
++    <PageHeader title="Expediente familiar" description={canEdit ? 'Consulta el expediente y administra la información autorizada.' : 'Información general, integrantes y programas. Consulta de solo lectura.'} actions={<div className="flex flex-wrap gap-2"><Link to="/familias" className="layout-focus inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-theme-xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">Volver al listado</Link></div>} />
+     <div className="min-w-0 space-y-5">
+diff --git a/apps/web/src/features/auth/screenPermissions.ts b/apps/web/src/features/auth/screenPermissions.ts
+--- a/apps/web/src/features/auth/screenPermissions.ts
++++ b/apps/web/src/features/auth/screenPermissions.ts
+@@ -67,5 +67,9 @@
+ export function canWriteGardens(usuario: PermissionUser): boolean {
+   return isDireccionGeneral(usuario) || usuario.permisos.includes('HUERTOS_WRITE')
+ }
+ 
++export function canWriteCrops(usuario: PermissionUser): boolean {
++  return isDireccionGeneral(usuario) || usuario.permisos.includes('CULTIVOS_WRITE')
++}
++
+ export function canWriteCommunities(usuario: PermissionUser): boolean {
+diff --git a/apps/web/src/features/admin/pages/RolesPermisosPage.tsx b/apps/web/src/features/admin/pages/RolesPermisosPage.tsx
+--- a/apps/web/src/features/admin/pages/RolesPermisosPage.tsx
++++ b/apps/web/src/features/admin/pages/RolesPermisosPage.tsx
+@@ -27,3 +27,4 @@
+     { codigo: 'HUERTOS_WRITE', nombre: 'Registro e imágenes de huertos', ruta: 'Operaciones API', especial: true },
+     { codigo: 'PANTALLA_CULTIVOS', nombre: 'Cultivos', ruta: '/gestion-agricola/cultivos' },
++    { codigo: 'CULTIVOS_WRITE', nombre: 'Registrar y modificar cultivos', ruta: 'Operaciones API', especial: true },
+     { codigo: 'PANTALLA_PRODUCCION', nombre: 'Producción', ruta: '/gestion-agricola/produccion' },
