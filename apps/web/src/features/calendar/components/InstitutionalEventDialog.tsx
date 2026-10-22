@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Search } from 'lucide-react'
 import Dialog from '@/components/ui/Dialog'
+import ReminderPicker from '@/features/notifications/components/ReminderPicker'
 import Button from '@/components/ui/Button'
 import {
   eventTypes, eventDisplayTitle,
@@ -12,7 +13,7 @@ const inputClass = 'min-h-11 w-full rounded-lg border border-gray-300 bg-white p
 const labelClass = 'mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-200'
 const initial = (date: string): CalendarEventInput => ({
   categoria: 'SOPORTE', titulo: 'Visita de soporte técnico',
-  fechaInicio: date, descripcion: '', participantesIds: [],
+  fechaInicio: date, descripcion: '', participantesIds: [], recordatorios: null,
 })
 const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 const isSelectableType = (category: string) => eventTypes.some(item => item.id === category)
@@ -46,6 +47,7 @@ export default function InstitutionalEventDialog({
       fechaInicio: selected.fechaInicio,
       descripcion: selected.descripcion,
       participantesIds: selected.participantes.map(person => person.id),
+      recordatorios: selected.recordatorios,
     } : initial(date))
     setSearch('')
     setBusy(false)
@@ -226,6 +228,8 @@ export default function InstitutionalEventDialog({
             {matches.length === 0 && <p className="p-2 text-sm text-gray-500">Sin coincidencias.</p>}
           </div>
         </fieldset>
+
+        <ReminderPicker disabled={!editable || busy} value={data.recordatorios} date={data.fechaInicio} onChange={recordatorios => setData(current => ({ ...current, recordatorios }))} />
 
         {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">{error}</p>}
         <div className="flex flex-wrap justify-between gap-3 border-t border-gray-100 pt-4 dark:border-gray-800">

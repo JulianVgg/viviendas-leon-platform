@@ -13,6 +13,7 @@ import { offlineDemoRouter } from './modules/offline/offline.routes.js';
 import { visitsRouter } from './modules/visits/visits.routes.js';
 import { calendarRouter } from './modules/calendar/calendar.routes.js';
 import { notificationsRouter } from './modules/notifications/notifications.routes.js';
+import { remindersRouter } from './modules/notifications/reminders.routes.js';
 
 // AUTH-04: Administración de usuarios
 import { usersRouter } from './modules/users/users.routes.js';
@@ -85,6 +86,7 @@ app.use('/api/v1/offline', offlineDemoRouter);
 app.use('/api/v1/visitas', visitsRouter);
 app.use('/api/v1/calendario', calendarRouter);
 app.use('/api/v1/notificaciones', notificationsRouter);
+app.use('/api/v1/recordatorios', remindersRouter);
 
 // Manejo global de errores
 const handleRequestError: ErrorRequestHandler = (

@@ -5,6 +5,7 @@ import PageMeta from '@/components/common/PageMeta'
 import PageHeader from '@/components/common/PageHeader'
 import { useAuth } from '@/features/auth/AuthProvider'
 import NotificacionItem from '../components/NotificacionItem'
+import ReminderPreferences from '../components/ReminderPreferences'
 import {
   emitirCambioNotificaciones, marcarNotificacionLeida, marcarTodasNotificacionesLeidas,
   obtenerNotificaciones, type EstadoNotificacion, type ListadoNotificaciones, type Notificacion,
@@ -107,5 +108,6 @@ export default function NotificacionesPage() {
         </div>
       </div>}
     </div>
+    <ReminderPreferences usuarioId={usuario?.id} />
   </div>
 }

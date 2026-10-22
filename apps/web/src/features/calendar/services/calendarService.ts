@@ -17,15 +17,16 @@ export type CalendarTechnicalVisit = {
 }
 
 export type CalendarPerson = { id: number; nombre: string; cargos: string[] }
+import type { ConfigRecordatorios } from '@/features/notifications/services/remindersService'
 export type CalendarEvent = {
   id: number; titulo: string; categoria: InstitutionalCategory; descripcion: string; lugar: string
   fechaInicio: string; fechaFin: string; horaInicio: string | null; horaFin: string | null
-  responsable: CalendarPerson; creadoPor: string; participantes: CalendarPerson[]
+  responsable: CalendarPerson; creadoPor: string; participantes: CalendarPerson[]; recordatorios: ConfigRecordatorios
 }
 // La API asigna responsableId automáticamente al creador y conserva el original al editar.
 export type CalendarEventInput = {
   titulo: string; categoria: InstitutionalCategory; descripcion: string
-  fechaInicio: string; participantesIds: number[]
+  fechaInicio: string; participantesIds: number[]; recordatorios: ConfigRecordatorios
 }
 
 export const eventTypes: { id: InstitutionalCategory; text: string; className: string }[] = [

@@ -9,6 +9,7 @@ import { getAuthenticatedUser } from '../auth/auth.service.js'
 import { esDireccionGeneral } from '../auth/require-permission.middleware.js'
 import { crearNotificacionesDeActividad, type AvisoActividad } from '../notifications/notifications.service.js'
 import { descripcionAvisoVisita, type TipoAvisoVisita } from '../notifications/notifications.activity.js'
+import { actualizarRecordatorios, cancelarRecordatorios, configGuardada, configParaPrisma, parseReglas, reglasTrasCambioFecha, type ReglaRecordatorio } from '../notifications/reminders.service.js'
 
 // Dirección y Coordinación supervisan y pueden reprogramar citas institucionales.
 // Los demás técnicos conservan exclusivamente los registros propios.
@@ -56,7 +57,7 @@ const statusOptions = ['PENDIENTE','CUMPLIDO','NO_CUMPLIDO'] as const
 const validDate = (v: string) => dateRe.test(v) && !Number.isNaN(Date.parse(`${v}T12:00:00Z`)) && new Date(`${v}T12:00:00Z`).toISOString().slice(0,10) === v
 const clean = (v: unknown, max: number) => typeof v === 'string' ? v.trim().slice(0, max) : ''
 const positive = (v: unknown) => v === '' || v === null || v === undefined || (typeof v === 'number' && Number.isFinite(v) && v >= 0)
-function validate(input: unknown, operationId: unknown): { familyId: number; date: string; status: 'PROGRAMADA' | 'REALIZADA'; timeSlot?: 'MANANA' | 'TARDE'; scheduledVisitId?: number; weather: string; checkIn: string; recommendation: string; observations: string; treatment: string; crops: Record<string, unknown>[]; commitments: Record<string, unknown>[]; reviews: { id: string; status: string }[] } | null {
+function validate(input: unknown, operationId: unknown): { recordatorios?: ReglaRecordatorio[] | null; familyId: number; date: string; status: 'PROGRAMADA' | 'REALIZADA'; timeSlot?: 'MANANA' | 'TARDE'; scheduledVisitId?: number; weather: string; checkIn: string; recommendation: string; observations: string; treatment: string; crops: Record<string, unknown>[]; commitments: Record<string, unknown>[]; reviews: { id: string; status: string }[] } | null {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return null
   const v = input as Record<string, unknown>
   const opId = typeof operationId === 'string' && uuid.test(operationId) ? operationId.toLowerCase() : ''
@@ -65,6 +66,8 @@ function validate(input: unknown, operationId: unknown): { familyId: number; dat
       Number.isNaN(Date.parse(`${date}T12:00:00Z`)) ||
       new Date(`${date}T12:00:00Z`).toISOString().slice(0, 10) !== date ||
       (v.status !== 'PROGRAMADA' && v.status !== 'REALIZADA')) return null
+  const recordatorios = parseReglas(v.recordatorios, date)
+  if (recordatorios === undefined || (v.status === 'REALIZADA' && v.recordatorios !== undefined)) return null
   if (v.timeSlot !== undefined && !['MANANA', 'TARDE'].includes(String(v.timeSlot))) return null
   if (v.scheduledVisitId !== undefined && (v.status !== 'REALIZADA' || !Number.isSafeInteger(v.scheduledVisitId) || Number(v.scheduledVisitId) <= 0)) return null
   if (!Array.isArray(v.crops) || v.crops.length > 30 || !Array.isArray(v.commitments) || v.commitments.length > 30) return null
@@ -113,6 +116,7 @@ function validate(input: unknown, operationId: unknown): { familyId: number; dat
   if (new Set([...commitments.map(c => c.id), ...reviews.map(r => r.id)]).size !== commitments.length + reviews.length) return null
   return {
     familyId: Number(v.familyId), date, status: v.status,
+    ...(v.recordatorios !== undefined ? { recordatorios } : {}),
     ...(v.timeSlot ? { timeSlot: v.timeSlot as 'MANANA' | 'TARDE' } : {}),
     ...(v.scheduledVisitId ? { scheduledVisitId: Number(v.scheduledVisitId) } : {}),
     weather: clean(v.weather, 80), checkIn: clean(v.checkIn, 4000),
@@ -252,6 +256,7 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
           })
           if (changed.count !== 1) throw new Error('SCHEDULE_CONFLICT')
           visitaId = planned.id
+          await cancelarRecordatorios(tx, 'VISITA', visitaId)
           const plannedData = previous?.datos && typeof previous.datos === 'object' && !Array.isArray(previous.datos)
             ? previous.datos as Record<string, unknown> : {}
           storedCapture = { ...payload, programacion: {
@@ -265,6 +270,7 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
             familiaId: payload.familyId, usuarioResponsableId: userId, fecha: new Date(`${payload.date}T12:00:00Z`),
             condicionClimaticaId: climate?.id ?? null, tipo: 'TECNICA', estado: payload.status,
             observaciones: payload.observations || null,
+            recordatoriosConfig: configParaPrisma(payload.recordatorios ?? null),
           } })
           visitaId = visita.id
         }
@@ -301,6 +307,7 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
         // Solo la programación nueva produce este aviso. Reintentar el mismo
         // operationId se resuelve antes de la transacción y no lo vuelve a crear.
         if (payload.status === 'PROGRAMADA' && !payload.scheduledVisitId) {
+          await actualizarRecordatorios(tx, 'VISITA', visitaId, payload.date, [userId], payload.recordatorios ?? null)
           await crearNotificacionesDeActividad([
             avisoVisita(visitaId, 'CREACION', userId, 'VISITA_PROGRAMADA', familia.nombreReferencia, payload.date),
           ], tx)
@@ -349,15 +356,18 @@ visitsRouter.patch('/agenda/:visitId', async (req: Request, res: Response) => {
           ...(!isSupervisor(user.roles) ? { usuarioResponsableId: req.session.userId! } : {}),
           estado: 'PROGRAMADA',
         },
-        select: { id: true, fecha: true, usuarioResponsableId: true,
+        select: { id: true, fecha: true, usuarioResponsableId: true, recordatoriosConfig: true,
           familia: { select: { nombreReferencia: true } } },
       })
       if (!visita) return false
       if (visita.fecha.toISOString().slice(0, 10) === date) return true
+      const config = reglasTrasCambioFecha(configGuardada(visita.recordatoriosConfig, visita.fecha.toISOString().slice(0, 10)), date)
       const cambiado = await tx.visita.update({ where: { id: visita.id },
-        data: { fecha: new Date(`${date}T12:00:00Z`), versionNotificacion: { increment: 1 } },
+        data: { fecha: new Date(`${date}T12:00:00Z`), versionNotificacion: { increment: 1 },
+          recordatoriosConfig: configParaPrisma(config) },
         select: { versionNotificacion: true },
       })
+      await actualizarRecordatorios(tx, 'VISITA', visita.id, date, [visita.usuarioResponsableId], config)
       await crearNotificacionesDeActividad([avisoVisita(visita.id,
         `V${cambiado.versionNotificacion}`, visita.usuarioResponsableId, 'VISITA_REPROGRAMADA',
         visita.familia.nombreReferencia, date)], tx)
@@ -393,6 +403,7 @@ visitsRouter.delete('/agenda/:visitId', async (req: Request, res: Response) => {
       if (!visita) return false
       const borrado = await tx.visita.deleteMany({ where })
       if (borrado.count !== 1) return false
+      await cancelarRecordatorios(tx, 'VISITA', visitId)
       await crearNotificacionesDeActividad([avisoVisita(visitId, 'CANCELACION',
         visita.usuarioResponsableId, 'VISITA_CANCELADA', visita.familia.nombreReferencia,
         visita.fecha.toISOString().slice(0, 10))], tx)
