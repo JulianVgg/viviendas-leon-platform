@@ -16,6 +16,15 @@ export type CalendarTechnicalVisit = {
   responsable: string
 }
 
+export type CalendarTraining = {
+  id: number
+  tema: string
+  fecha: string
+  estado: string
+  comunidad: string
+  facilitador: string
+}
+
 export type CalendarPerson = { id: number; nombre: string; cargos: string[] }
 import type { ConfigRecordatorios } from '@/features/notifications/services/remindersService'
 export type CalendarEvent = {
@@ -61,9 +70,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   return response.json() as Promise<T>
 }
-export async function loadCalendarView(from: string, to: string): Promise<{events:CalendarEvent[]; visits:CalendarTechnicalVisit[]}> {
-  const answer = await request<{data:CalendarEvent[]; visitasTecnicas:CalendarTechnicalVisit[]}>(`?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
-  return {events: answer.data, visits: answer.visitasTecnicas ?? []}
+export async function loadCalendarView(from: string, to: string): Promise<{events:CalendarEvent[]; visits:CalendarTechnicalVisit[]; trainings:CalendarTraining[]}> {
+  const answer = await request<{data:CalendarEvent[]; visitasTecnicas:CalendarTechnicalVisit[]; capacitaciones?:CalendarTraining[]}>(`?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`)
+  return { events: answer.data, visits: answer.visitasTecnicas ?? [], trainings: answer.capacitaciones ?? [] }
 }
 export async function loadEvents(from: string, to: string): Promise<CalendarEvent[]> {
   return (await loadCalendarView(from, to)).events

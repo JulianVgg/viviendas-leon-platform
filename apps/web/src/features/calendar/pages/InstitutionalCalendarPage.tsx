@@ -10,7 +10,7 @@ import { canViewPath, isDireccionGeneral } from '@/features/auth/screenPermissio
 import InstitutionalEventDialog from '../components/InstitutionalEventDialog'
 import {
   eventColor, eventDisplayTitle, loadCalendarView, loadParticipants, removeEvent, saveEvent,
-  type CalendarEvent, type CalendarEventInput, type CalendarPerson, type CalendarTechnicalVisit,
+  type CalendarEvent, type CalendarEventInput, type CalendarPerson, type CalendarTechnicalVisit, type CalendarTraining,
 } from '../services/calendarService'
 
 const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
@@ -30,13 +30,17 @@ function roleNormal(role: string) {
 type CalendarItem =
   | { key: string; kind: 'institutional'; event: CalendarEvent }
   | { key: string; kind: 'technical'; visit: CalendarTechnicalVisit }
+  | { key: string; kind: 'training'; training: CalendarTraining }
 
 const technicalTitle = (visit: CalendarTechnicalVisit) => `Visita técnica · ${visit.familia}`
 function itemTitle(item: CalendarItem): string {
-  return item.kind === 'institutional' ? eventDisplayTitle(item.event) : technicalTitle(item.visit)
+  if (item.kind === 'institutional') return eventDisplayTitle(item.event)
+  if (item.kind === 'technical') return technicalTitle(item.visit)
+  return `Capacitación · ${item.training.tema}`
 }
 function itemColor(item: CalendarItem): string {
   if (item.kind === 'institutional') return eventColor(item.event.categoria)
+  if (item.kind === 'training') return 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900 dark:bg-violet-500/15 dark:text-violet-200'
   return item.visit.estado === 'REALIZADA'
     ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-200'
     : 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-500/15 dark:text-blue-200'
@@ -54,11 +58,13 @@ export default function InstitutionalCalendarPage() {
   })
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [technicalVisits, setTechnicalVisits] = useState<CalendarTechnicalVisit[]>([])
+  const [trainings, setTrainings] = useState<CalendarTraining[]>([])
   const [users, setUsers] = useState<CalendarPerson[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<CalendarEvent | null>(null)
   const [selectedVisit, setSelectedVisit] = useState<CalendarTechnicalVisit | null>(null)
+  const [selectedTraining, setSelectedTraining] = useState<CalendarTraining | null>(null)
   const [selectedDate, setSelectedDate] = useState(todayKey())
   const [eventDialogOpen, setEventDialogOpen] = useState(false)
   const [dayList, setDayList] = useState<string | null>(null)
@@ -85,6 +91,7 @@ export default function InstitutionalCalendarPage() {
       ])
       setEvents(result.events)
       setTechnicalVisits(result.visits)
+      setTrainings(result.trainings)
       setUsers(people)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No se pudo consultar el calendario.')
@@ -108,8 +115,11 @@ export default function InstitutionalCalendarPage() {
     for (const visit of technicalVisits) {
       result.get(visit.fecha)?.push({ key: `technical-${visit.id}`, kind: 'technical', visit })
     }
+    for (const training of trainings) {
+      result.get(training.fecha)?.push({ key: `training-${training.id}`, kind: 'training', training })
+    }
     return result
-  }, [events, technicalVisits, monthCells])
+  }, [events, technicalVisits, trainings, monthCells])
 
   const createEvent = (date = todayKey()) => {
     if (!editable) return
@@ -129,7 +139,12 @@ export default function InstitutionalCalendarPage() {
       viewEvent(item.event)
       return
     }
-    setSelectedVisit(item.visit)
+    if (item.kind === 'technical') {
+      setSelectedVisit(item.visit)
+      setDayList(null)
+      return
+    }
+    setSelectedTraining(item.training)
     setDayList(null)
   }
   const save = async (payload: CalendarEventInput, id?: number) => {
@@ -288,6 +303,38 @@ export default function InstitutionalCalendarPage() {
                   Gestionar en agenda de visitas
                 </Link>
               )}
+            </div>
+          </div>
+        )}
+      </Dialog>
+      <Dialog
+        open={selectedTraining !== null}
+        title="Capacitación"
+        description={selectedTraining ? readableDate(selectedTraining.fecha) : undefined}
+        onClose={() => setSelectedTraining(null)}
+      >
+        {selectedTraining && (
+          <div className="space-y-4 text-sm">
+            <dl className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">Tema</dt>
+                <dd className="mt-1 break-words font-medium text-gray-900 dark:text-gray-100">{selectedTraining.tema}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">Estado</dt>
+                <dd className="mt-1 text-gray-900 dark:text-gray-100">{selectedTraining.estado}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">Comunidad</dt>
+                <dd className="mt-1 text-gray-900 dark:text-gray-100">{selectedTraining.comunidad || 'Sin comunidad'}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">Facilitador</dt>
+                <dd className="mt-1 text-gray-900 dark:text-gray-100">{selectedTraining.facilitador || 'Sin asignar'}</dd>
+              </div>
+            </dl>
+            <div className="flex justify-end border-t border-gray-100 pt-4 dark:border-gray-800">
+              <Button type="button" variant="secondary" onClick={() => setSelectedTraining(null)}>Cerrar</Button>
             </div>
           </div>
         )}
