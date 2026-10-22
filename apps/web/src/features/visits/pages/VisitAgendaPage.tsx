@@ -1,7 +1,7 @@
 import '../visits.css'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarDays, CheckCheck, ChevronLeft, ChevronRight, ClipboardList, Clock3, Edit3, RefreshCw, Trash2 } from 'lucide-react'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import PageHeader from '@/components/common/PageHeader'
 import Dialog from '@/components/ui/Dialog'
 import ScheduleVisitDialog from '@/features/visits/components/ScheduleVisitDialog'
@@ -24,6 +24,9 @@ type CalendarEvent = { key: string; label: string; kind: 'visit' | 'followup'; v
 
 export default function VisitAgendaPage() {
   const { usuario } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const targetVisitId = searchParams.get('visitId')
+  const targetSeguimientoId = searchParams.get('seguimiento')
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1))
   const [items, setItems] = useState<VisitListItem[]>([])
   const [followups, setFollowups] = useState<VisitFollowUp[]>([])
@@ -43,7 +46,12 @@ export default function VisitAgendaPage() {
   const today = dateKey(new Date())
   // VIS-05: Dirección puede consultar todos los eventos. Las modificaciones
   // de una visita o compromiso ajeno permanecen reservadas a su responsable.
-  const canManageVisit = (visit: VisitListItem) => visit.responsibleUserId === usuario?.id
+  const institutionManager = Boolean(usuario?.roles.some(role => {
+    const normalized = role.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
+    return normalized === 'direccion general' || normalized === 'coordinadora del programa agroforestal'
+  }))
+  const visitOwner = (visit: VisitListItem) => visit.responsibleUserId === usuario?.id
+  const canManageVisit = (visit: VisitListItem) => visitOwner(visit) || (institutionManager && visit.status === 'PROGRAMADA' && visit.id !== null)
   const canManageFollowUp = (followup: VisitFollowUp) => followup.responsibleUserId === usuario?.id
 
   const refresh = useCallback(async () => {
@@ -58,6 +66,40 @@ export default function VisitAgendaPage() {
   }, [usuario])
 
   useEffect(() => { void refresh() }, [refresh])
+  // Enlace del calendario institucional: abre la visita original, sin copiarla.
+  useEffect(() => {
+    if (!targetVisitId || loading) return
+    const target = items.find(item => item.id !== null && String(item.id) === targetVisitId)
+    if (target) {
+      setMonth(new Date(`${target.date}T12:00:00`))
+      setSelected(target)
+    } else {
+      setError('La visita no está disponible en tu agenda o no tienes permiso para consultarla.')
+    }
+    setSearchParams(previous => {
+      const next = new URLSearchParams(previous)
+      next.delete('visitId')
+      next.delete('fecha')
+      return next
+    }, {replace: true})
+  }, [targetVisitId, loading, items, setSearchParams])
+  // NTF-07: abrir directamente el compromiso mencionado en el aviso.
+  useEffect(() => {
+    if (!targetSeguimientoId || loading) return
+    const found = followups.find(item => item.id === targetSeguimientoId)
+    if (found) {
+      setSelected(null)
+      setEditing(found)
+      if (found.due) setMonth(new Date(`${found.due}T12:00:00`))
+    } else {
+      setError('El seguimiento no está disponible o no tienes permiso para consultarlo.')
+    }
+    setSearchParams(previous => {
+      const next = new URLSearchParams(previous)
+      next.delete('seguimiento')
+      return next
+    }, { replace: true })
+  }, [targetSeguimientoId, loading, followups, setSearchParams])
   useEffect(() => {
     const onFocus = () => { void refresh() }
     window.addEventListener('focus', onFocus)
@@ -235,7 +277,7 @@ export default function VisitAgendaPage() {
       <div className="mt-3 flex flex-wrap gap-4">
         {canManageVisit(selected) && selected.status === 'PROGRAMADA' && <button type="button" disabled={!selected.id} onClick={()=>openReschedule(selected)} className="text-xs font-semibold text-brand-600 hover:underline disabled:opacity-40 dark:text-brand-400">Cambiar fecha programada</button>}
         {canManageVisit(selected) && selected.status === 'PROGRAMADA' && <button type="button" disabled={!selected.id || Boolean(selected.syncStatus && selected.syncStatus !== 'synced')} onClick={()=>requestDelete(selected)} className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:underline disabled:cursor-not-allowed disabled:opacity-40 dark:text-red-400"><Trash2 size={14}/> Eliminar visita</button>}
-        {canManageVisit(selected) && <Link className="text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400" to={`/visitas/nueva?familia=${selected.familyId}${selected.id && selected.status === 'PROGRAMADA' ? `&programada=${selected.id}` : ''}`}>Registrar siguiente visita ↗</Link>}
+        {visitOwner(selected) && <Link className="text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400" to={`/visitas/nueva?familia=${selected.familyId}${selected.id && selected.status === 'PROGRAMADA' ? `&programada=${selected.id}` : ''}`}>Registrar siguiente visita ↗</Link>}
       </div>
     </section> : undefined}/>
     <Dialog open={Boolean(deleteTarget)} onClose={() => { if (!deleteBusy) setDeleteTarget(null) }}

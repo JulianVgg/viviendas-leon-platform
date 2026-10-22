@@ -245,8 +245,7 @@ trainingRouter.get('/:id/evidencias/:evidenceId', async (req, res, next) => {
   }
   try {
     const link = await getPrismaClient().capacitacionEvidencia.findUnique({
-      where: { capacitacionId_evidenciaId: { capacitacionId: trainingId, evidenciaId } },
-      include: { evidencia: { select: { rutaArchivo: true, tipoArchivo: true } } },
+    where: { capacitacionId_evidenciaId: { capacitacionId: trainingId, evidenciaId: evidenceId } },      include: { evidencia: { select: { rutaArchivo: true, tipoArchivo: true } } },
     })
     const match = /^training\/(\d+)\/([0-9a-f-]{36})\.(jpg|png|webp)$/.exec(link?.evidencia.rutaArchivo ?? '')
     if (!match || Number(match[1]) !== trainingId ||

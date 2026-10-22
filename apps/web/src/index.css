@@ -274,3 +274,28 @@
   .layout-menu-accordion, .layout-dropdown-panel { transition: none; }
   .page-route-enter, .wizard-card-entry, .dialog-enter[open] { animation: none; }
 }
+
+/* Transición de tema localizada al botón, como el acabado de una UI nativa.
+   No altera las variables de marca y respeta las preferencias de movimiento. */
+:root { color-scheme: light; }
+:root.dark { color-scheme: dark; }
+:root.theme-view-transition::view-transition-old(root),
+:root.theme-view-transition::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+:root.theme-view-transition::view-transition-old(root) { z-index: 1; }
+:root.theme-view-transition::view-transition-new(root) { z-index: 2; }
+
+@media (prefers-reduced-motion: no-preference) {
+  :root.theme-soft-transition body,
+  :root.theme-soft-transition #root,
+  :root.theme-soft-transition header,
+  :root.theme-soft-transition aside,
+  :root.theme-soft-transition main,
+  :root.theme-soft-transition section,
+  :root.theme-soft-transition nav,
+  :root.theme-soft-transition article {
+    transition: background-color 220ms ease, border-color 220ms ease, color 220ms ease;
+  }
+}

@@ -11,6 +11,10 @@ import { municipalitiesRouter } from './modules/catalogs/municipalities.routes.j
 import { programsRouter } from './modules/catalogs/programs.routes.js';
 import { offlineDemoRouter } from './modules/offline/offline.routes.js';
 import { visitsRouter } from './modules/visits/visits.routes.js';
+import { calendarRouter } from './modules/calendar/calendar.routes.js';
+import { notificationsRouter } from './modules/notifications/notifications.routes.js';
+import { remindersRouter } from './modules/notifications/reminders.routes.js';
+import { miAgendaRouter } from './modules/dashboard/my-agenda.routes.js';
 import { trainingRouter } from './modules/training/training.routes.js';
 
 // AUTH-04: Administración de usuarios
@@ -18,6 +22,8 @@ import { usersRouter } from './modules/users/users.routes.js';
 
 // AUTH-04: Perfil personal
 import { profileRouter } from './modules/profile/profile.routes.js';
+// Perfil: edición de dirección y fotografía
+import { profileExtrasRouter } from './modules/profile/profile-extras.routes.js';
 
 // AUTH-04: Roles y permisos
 import { rolesRouter } from './modules/admin/roles.routes.js';
@@ -64,6 +70,9 @@ app.use('/api/v1', requirePasswordChangeCompleted);
 // AUTH-04: Perfil del usuario autenticado
 app.use('/api/v1/perfil', profileRouter);
 
+// AUTH-06: Dirección y fotografía de perfil
+app.use('/api/v1/perfil', profileExtrasRouter);
+
 // AUTH-04: Administración de roles y permisos
 app.use('/api/v1/roles', rolesRouter);
 
@@ -72,12 +81,15 @@ app.use('/api/v1/usuarios', usersRouter);
 
 // Rutas existentes de Viviendas León
 app.use('/api/v1/familias', familiesRouter);
-app.use('/api/v1/comunidades', adminCommunitiesRouter);
 app.use('/api/v1/comunidades', communitiesRouter);
 app.use('/api/v1/municipios', municipalitiesRouter);
 app.use('/api/v1/programas', programsRouter);
 app.use('/api/v1/offline', offlineDemoRouter);
 app.use('/api/v1/visitas', visitsRouter);
+app.use('/api/v1/calendario', calendarRouter);
+app.use('/api/v1/notificaciones', notificationsRouter);
+app.use('/api/v1/recordatorios', remindersRouter);
+app.use('/api/v1/mi-agenda', miAgendaRouter);
 app.use('/api/v1/capacitaciones', trainingRouter);
 
 // Manejo global de errores

@@ -7,6 +7,18 @@ import { getPrismaClient } from '../../config/prisma.js'
 import { requireAuth } from '../auth/auth.middleware.js'
 import { getAuthenticatedUser } from '../auth/auth.service.js'
 import { esDireccionGeneral } from '../auth/require-permission.middleware.js'
+import { crearNotificacionesDeActividad, type AvisoActividad } from '../notifications/notifications.service.js'
+import { descripcionAvisoVisita, type TipoAvisoVisita } from '../notifications/notifications.activity.js'
+import { sincronizarAvisosSeguimiento } from '../notifications/followup-alerts.service.js'
+import { resolverAvisosVisitaVencida } from '../notifications/overdue-visits.worker.js'
+import { actualizarRecordatorios, cancelarRecordatorios, configGuardada, configParaPrisma, parseReglas, reglasTrasCambioFecha, type ReglaRecordatorio } from '../notifications/reminders.service.js'
+
+// Dirección y Coordinación supervisan y pueden reprogramar citas institucionales.
+// Los demás técnicos conservan exclusivamente los registros propios.
+const isCoordinator = (roles: string[]) => roles.some(role =>
+  role.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() === 'coordinadora del programa agroforestal',
+)
+const isSupervisor = (roles: string[]) => esDireccionGeneral(roles) || isCoordinator(roles)
 
 export const visitsRouter = Router()
 visitsRouter.use(requireAuth)
@@ -15,6 +27,12 @@ visitsRouter.use(async (req, res, next) => {
     const user = await getAuthenticatedUser(req.session.userId!)
     const allowed =
       esDireccionGeneral(user?.roles ?? []) ||
+      // Coordinación: lectura de agenda y gestión de citas; no puede registrar
+      // capturas técnicas ni cargar fotografías de otros usuarios.
+      (Boolean(user) && isCoordinator(user!.roles) && (
+        req.method === 'GET' ||
+        (['PATCH', 'DELETE'].includes(req.method) && /^\/agenda\/\d+$/.test(req.path))
+      )) ||
       (req.method === 'GET'
         ? ['SYN-VISITAS-WRITE', 'VISITAS_READ', 'VISITAS_WRITE'].some(p => user?.permisos.includes(p))
         : ['SYN-VISITAS-WRITE', 'VISITAS_WRITE'].some(p => user?.permisos.includes(p)))
@@ -22,6 +40,15 @@ visitsRouter.use(async (req, res, next) => {
     next()
   } catch (error) { next(error) }
 })
+
+function avisoVisita(visitaId: number, version: string, usuarioId: number,
+  tipo: TipoAvisoVisita, familia: string, fecha: string): AvisoActividad {
+  return {
+    usuarioId, tipo, ...descripcionAvisoVisita(tipo, familia, fecha),
+    referencia: '/visitas/agenda', permisoDestino: 'PANTALLA_VISITAS_AGENDA',
+    claveEvento: `VIS:${visitaId}:${version}:${usuarioId}`,
+  }
+}
 
 const evidenceRoot = resolve(process.env.VISIT_EVIDENCE_DIR || fileURLToPath(new URL('../../../storage/visits/', import.meta.url)))
 const maxPhotoBytes = 2 * 1024 * 1024
@@ -32,7 +59,7 @@ const statusOptions = ['PENDIENTE','CUMPLIDO','NO_CUMPLIDO'] as const
 const validDate = (v: string) => dateRe.test(v) && !Number.isNaN(Date.parse(`${v}T12:00:00Z`)) && new Date(`${v}T12:00:00Z`).toISOString().slice(0,10) === v
 const clean = (v: unknown, max: number) => typeof v === 'string' ? v.trim().slice(0, max) : ''
 const positive = (v: unknown) => v === '' || v === null || v === undefined || (typeof v === 'number' && Number.isFinite(v) && v >= 0)
-function validate(input: unknown, operationId: unknown): { familyId: number; date: string; status: 'PROGRAMADA' | 'REALIZADA'; timeSlot?: 'MANANA' | 'TARDE'; scheduledVisitId?: number; weather: string; checkIn: string; recommendation: string; observations: string; treatment: string; crops: Record<string, unknown>[]; commitments: Record<string, unknown>[]; reviews: { id: string; status: string }[] } | null {
+function validate(input: unknown, operationId: unknown): { recordatorios?: ReglaRecordatorio[] | null; familyId: number; date: string; status: 'PROGRAMADA' | 'REALIZADA'; timeSlot?: 'MANANA' | 'TARDE'; scheduledVisitId?: number; weather: string; checkIn: string; recommendation: string; observations: string; treatment: string; crops: Record<string, unknown>[]; commitments: Record<string, unknown>[]; reviews: { id: string; status: string }[] } | null {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return null
   const v = input as Record<string, unknown>
   const opId = typeof operationId === 'string' && uuid.test(operationId) ? operationId.toLowerCase() : ''
@@ -41,6 +68,8 @@ function validate(input: unknown, operationId: unknown): { familyId: number; dat
       Number.isNaN(Date.parse(`${date}T12:00:00Z`)) ||
       new Date(`${date}T12:00:00Z`).toISOString().slice(0, 10) !== date ||
       (v.status !== 'PROGRAMADA' && v.status !== 'REALIZADA')) return null
+  const recordatorios = parseReglas(v.recordatorios, date)
+  if (recordatorios === undefined || (v.status === 'REALIZADA' && v.recordatorios !== undefined)) return null
   if (v.timeSlot !== undefined && !['MANANA', 'TARDE'].includes(String(v.timeSlot))) return null
   if (v.scheduledVisitId !== undefined && (v.status !== 'REALIZADA' || !Number.isSafeInteger(v.scheduledVisitId) || Number(v.scheduledVisitId) <= 0)) return null
   if (!Array.isArray(v.crops) || v.crops.length > 30 || !Array.isArray(v.commitments) || v.commitments.length > 30) return null
@@ -89,6 +118,7 @@ function validate(input: unknown, operationId: unknown): { familyId: number; dat
   if (new Set([...commitments.map(c => c.id), ...reviews.map(r => r.id)]).size !== commitments.length + reviews.length) return null
   return {
     familyId: Number(v.familyId), date, status: v.status,
+    ...(v.recordatorios !== undefined ? { recordatorios } : {}),
     ...(v.timeSlot ? { timeSlot: v.timeSlot as 'MANANA' | 'TARDE' } : {}),
     ...(v.scheduledVisitId ? { scheduledVisitId: Number(v.scheduledVisitId) } : {}),
     weather: clean(v.weather, 80), checkIn: clean(v.checkIn, 4000),
@@ -122,7 +152,7 @@ visitsRouter.get('/', async (req: Request, res: Response) => {
     if (!user) { res.status(401).json({ error: 'Sesión no válida.' }); return }
     // VIS-05: Dirección general supervisa todas las visitas; cada técnico
     // mantiene exclusivamente sus registros. La comprobación se hace en la API.
-    const canViewAll = esDireccionGeneral(user.roles)
+    const canViewAll = isSupervisor(user.roles)
     const rows = await prisma.visita.findMany({
       where: canViewAll ? {} : { usuarioResponsableId: userId },
       include: { usuarioResponsable: { select: { nombre: true, apellido: true } }, familia: { select: { id: true, nombreReferencia: true, comunidad: { select: { nombre: true } } } } },
@@ -198,7 +228,10 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
         }
         return { conflict: false, visitId: existing[0].visita_id, duplicate: true }
       }
-      if (!await prisma.familia.findUnique({ where: { id: payload.familyId }, select: { id:true } })) return null
+      const familia = await prisma.familia.findUnique({
+        where: { id: payload.familyId }, select: { id: true, nombreReferencia: true },
+      })
+      if (!familia) return null
       const climate = payload.weather ? await prisma.condicionClimatica.findFirst({ where: { nombre: { equals: payload.weather, mode: 'insensitive' }, activo: true }, select: { id:true } }) : null
       const created = await prisma.$transaction(async tx => {
         let visitaId: number
@@ -225,6 +258,8 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
           })
           if (changed.count !== 1) throw new Error('SCHEDULE_CONFLICT')
           visitaId = planned.id
+          await resolverAvisosVisitaVencida(tx, visitaId)
+          await cancelarRecordatorios(tx, 'VISITA', visitaId)
           const plannedData = previous?.datos && typeof previous.datos === 'object' && !Array.isArray(previous.datos)
             ? previous.datos as Record<string, unknown> : {}
           storedCapture = { ...payload, programacion: {
@@ -238,6 +273,7 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
             familiaId: payload.familyId, usuarioResponsableId: userId, fecha: new Date(`${payload.date}T12:00:00Z`),
             condicionClimaticaId: climate?.id ?? null, tipo: 'TECNICA', estado: payload.status,
             observaciones: payload.observations || null,
+            recordatoriosConfig: configParaPrisma(payload.recordatorios ?? null),
           } })
           visitaId = visita.id
         }
@@ -255,6 +291,10 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
           })
           if (updated.count !== 1) throw new Error('El compromiso anterior no está sincronizado o no corresponde a esta familia.')
         }
+        // NTF-07: nuevas tareas y revisiones offline se programan de forma atómica.
+        await sincronizarAvisosSeguimiento(tx, [
+          ...payload.commitments.map(c => String(c.id)), ...payload.reviews.map(r => r.id),
+        ])
         if (payload.scheduledVisitId) {
           // Conservar el ID de la visita y actualizar su captura; fotografía y
           // reintentos de realización se vinculan al nuevo operationId.
@@ -270,6 +310,14 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
             INSERT INTO "visita_captura" ("visita_id", "usuario_id", "operation_id", "payload_hash", "datos")
             VALUES (${visitaId}, ${userId}, CAST(${normalizedId} AS UUID), ${hash}, CAST(${JSON.stringify(payload)} AS JSONB))
           `
+        }
+        // Solo la programación nueva produce este aviso. Reintentar el mismo
+        // operationId se resuelve antes de la transacción y no lo vuelve a crear.
+        if (payload.status === 'PROGRAMADA' && !payload.scheduledVisitId) {
+          await actualizarRecordatorios(tx, 'VISITA', visitaId, payload.date, [userId], payload.recordatorios ?? null)
+          await crearNotificacionesDeActividad([
+            avisoVisita(visitaId, 'CREACION', userId, 'VISITA_PROGRAMADA', familia.nombreReferencia, payload.date),
+          ], tx)
         }
         return visitaId
       })
@@ -305,11 +353,35 @@ visitsRouter.patch('/agenda/:visitId', async (req: Request, res: Response) => {
     res.status(400).json({ error: 'Fecha o visita inválida.' }); return
   }
   try {
-    const result = await getPrismaClient().visita.updateMany({
-      where: { id: visitId, usuarioResponsableId: req.session.userId!, estado: 'PROGRAMADA' },
-      data: { fecha: new Date(`${date}T12:00:00Z`) },
+    const user = await getAuthenticatedUser(req.session.userId!)
+    if (!user) { res.status(401).json({ error: 'Sesión inválida.' }); return }
+    const actualizado = await getPrismaClient().$transaction(async tx => {
+      await tx.$queryRaw`SELECT "id" FROM "visita" WHERE "id" = ${visitId} FOR UPDATE`
+      const visita = await tx.visita.findFirst({
+        where: {
+          id: visitId,
+          ...(!isSupervisor(user.roles) ? { usuarioResponsableId: req.session.userId! } : {}),
+          estado: 'PROGRAMADA',
+        },
+        select: { id: true, fecha: true, usuarioResponsableId: true, recordatoriosConfig: true,
+          familia: { select: { nombreReferencia: true } } },
+      })
+      if (!visita) return false
+      if (visita.fecha.toISOString().slice(0, 10) === date) return true
+      const config = reglasTrasCambioFecha(configGuardada(visita.recordatoriosConfig, visita.fecha.toISOString().slice(0, 10)), date)
+      const cambiado = await tx.visita.update({ where: { id: visita.id },
+        data: { fecha: new Date(`${date}T12:00:00Z`), versionNotificacion: { increment: 1 },
+          recordatoriosConfig: configParaPrisma(config) },
+        select: { versionNotificacion: true },
+      })
+      await resolverAvisosVisitaVencida(tx, visita.id)
+      await actualizarRecordatorios(tx, 'VISITA', visita.id, date, [visita.usuarioResponsableId], config)
+      await crearNotificacionesDeActividad([avisoVisita(visita.id,
+        `V${cambiado.versionNotificacion}`, visita.usuarioResponsableId, 'VISITA_REPROGRAMADA',
+        visita.familia.nombreReferencia, date)], tx)
+      return true
     })
-    if (result.count !== 1) { res.status(404).json({ error: 'Visita programada no encontrada o ya realizada.' }); return }
+    if (!actualizado) { res.status(404).json({ error: 'Visita programada no encontrada o ya realizada.' }); return }
     res.json({ accepted: true })
   } catch (error) { console.error('Error reprogramando visita:', error); res.status(503).json({ error: 'No se pudo reprogramar la visita.' }) }
 })
@@ -321,18 +393,32 @@ visitsRouter.delete('/agenda/:visitId', async (req: Request, res: Response) => {
   const visitId = Number(req.params.visitId)
   if (!Number.isSafeInteger(visitId) || visitId <= 0) { res.status(400).json({ error: 'Visita inválida.' }); return }
   try {
-    const result = await getPrismaClient().visita.deleteMany({
-      where: {
+    const user = await getAuthenticatedUser(req.session.userId!)
+    if (!user) { res.status(401).json({ error: 'Sesión inválida.' }); return }
+    const eliminado = await getPrismaClient().$transaction(async tx => {
+      await tx.$queryRaw`SELECT "id" FROM "visita" WHERE "id" = ${visitId} FOR UPDATE`
+      const where = {
         id: visitId,
-        usuarioResponsableId: req.session.userId!,
+        ...(!isSupervisor(user.roles) ? { usuarioResponsableId: req.session.userId! } : {}),
         estado: 'PROGRAMADA',
-        compromisosVisita: { none: {} },
-        evaluaciones: { none: {} },
-        evidencias: { none: {} },
-        alertas: { none: {} },
-      },
+        compromisosVisita: { none: {} }, evaluaciones: { none: {} },
+        evidencias: { none: {} }, alertas: { none: {} },
+      }
+      const visita = await tx.visita.findFirst({ where,
+        select: { fecha: true, usuarioResponsableId: true,
+          familia: { select: { nombreReferencia: true } } },
+      })
+      if (!visita) return false
+      const borrado = await tx.visita.deleteMany({ where })
+      if (borrado.count !== 1) return false
+      await resolverAvisosVisitaVencida(tx, visitId)
+      await cancelarRecordatorios(tx, 'VISITA', visitId)
+      await crearNotificacionesDeActividad([avisoVisita(visitId, 'CANCELACION',
+        visita.usuarioResponsableId, 'VISITA_CANCELADA', visita.familia.nombreReferencia,
+        visita.fecha.toISOString().slice(0, 10))], tx)
+      return true
     })
-    if (result.count !== 1) {
+    if (!eliminado) {
       res.status(404).json({ error: 'La visita programada no existe, ya fue realizada o no puedes eliminarla.' }); return
     }
     res.setHeader('Cache-Control', 'no-store')
@@ -383,12 +469,17 @@ visitsRouter.patch('/seguimientos/:id', async (req: Request, res: Response) => {
     const prisma = getPrismaClient()
     // La lectura de compromisos es compartida, pero su edición corresponde
     // exclusivamente al técnico dueño de la visita de origen.
-    const result = await prisma.seguimientoVisita.updateMany({
-      where: { id, visitaOrigen: { usuarioResponsableId: req.session.userId! } },
-      data: { estado: status, fechaLimite: due ? new Date(`${due}T12:00:00Z`) : null,
-        texto: text.trim(), observacionCierre: observation?.trim() || null },
+    const updated = await prisma.$transaction(async tx => {
+      const result = await tx.seguimientoVisita.updateMany({
+        where: { id, visitaOrigen: { usuarioResponsableId: req.session.userId! } },
+        data: { estado: status, fechaLimite: due ? new Date(`${due}T12:00:00Z`) : null,
+          texto: text.trim(), observacionCierre: observation?.trim() || null },
+      })
+      if (result.count !== 1) return false
+      await sincronizarAvisosSeguimiento(tx, [id])
+      return true
     })
-    if (result.count !== 1) { res.status(404).json({ error: 'Compromiso no encontrado.' }); return }
+    if (!updated) { res.status(404).json({ error: 'Compromiso no encontrado.' }); return }
     res.json({ accepted: true })
   } catch (error) { console.error('Error actualizando seguimiento:', error); res.status(503).json({ error: 'No se pudo actualizar el compromiso.' }) }
 })
@@ -404,7 +495,7 @@ visitsRouter.get('/:visitId/evidencias/:evidenceId', async (req: Request, res: R
     const prisma = getPrismaClient()
     const user = await getAuthenticatedUser(req.session.userId!)
     if (!user) { res.status(401).end(); return }
-    const canViewAll = esDireccionGeneral(user.roles)
+    const canViewAll = isSupervisor(user.roles)
     const relation = await prisma.visitaEvidencia.findFirst({
       where: {
         visitaId: visitId, evidenciaId: evidenceId,

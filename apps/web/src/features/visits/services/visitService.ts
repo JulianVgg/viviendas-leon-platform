@@ -1,3 +1,4 @@
+import type { ConfigRecordatorios } from '@/features/notifications/services/remindersService'
 import { getOfflineData, saveOfflineData } from '@/db/offlineDb'
 import { getConnectivitySnapshot } from '@/services/connectivity'
 import { listQueueOperations, processQueueOperation, queueOfflineOperation, recoverInterruptedOperations, type PendingOperation, type SyncAcknowledgment } from '@/services/pendingOperations'
@@ -20,6 +21,7 @@ export type CropCapture = {
 }
 export type VisitCapture = {
   familyId: number; date: string; status: 'PROGRAMADA' | 'REALIZADA'; timeSlot?: VisitTimeSlot
+  recordatorios?: ConfigRecordatorios // Configuración viaja con la operación offline.
   scheduledVisitId?: number // Si se completa una cita, conserva el mismo ID de la visita.
   weather: string; checkIn: string; crops: CropCapture[]
   recommendation: string; treatment: string; observations: string

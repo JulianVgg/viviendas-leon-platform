@@ -18,6 +18,8 @@ import OfflineSyncTestPage from '@/features/offline/pages/OfflineSyncTestPage'
 import VisitAgendaPage from '@/features/visits/pages/VisitAgendaPage'
 import VisitRegisterPage from '@/features/visits/pages/VisitRegisterPage'
 import VisitHistoryPage from '@/features/visits/pages/VisitHistoryPage'
+import InstitutionalCalendarPage from '@/features/calendar/pages/InstitutionalCalendarPage'
+import NotificacionesPage from '@/features/notifications/pages/NotificacionesPage'
 import TrainingAgendaPage from '@/features/training/pages/TrainingAgendaPage'
 import TrainingRegisterPage from '@/features/training/pages/TrainingRegisterPage'
 import TrainingHistoryPage from '@/features/training/pages/TrainingHistoryPage'
@@ -74,6 +76,9 @@ export default function AppRoutes() {
         {/* Diseño principal de Viviendas León */}
         <Route element={<AppLayout />}>
 
+          {/* NTF-02: Centro de notificaciones personales */}
+          <Route path="notificaciones" element={<NotificacionesPage />} />
+
           {/* Dashboard */}
           <Route
             index
@@ -127,6 +132,9 @@ export default function AppRoutes() {
               element={<OfflineSyncTestPage />}
             />
           )}
+
+          {/* Calendario institucional (distinto de la agenda técnica) */}
+          <Route path="calendario" element={<InstitutionalCalendarPage />} />
 
           {/* Visitas técnicas */}
           <Route
