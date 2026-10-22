@@ -230,15 +230,15 @@ export default function VisitRegisterPage() {
             {scheduleLoading ? <p className="mt-3 text-sm text-gray-500">Buscando citas programadas…</p>
             : scheduleError ? <p role="alert" className="mt-3 text-sm text-red-600">{scheduleError}. No es posible confirmar las citas hasta recuperar la conexión.</p>
             : familyScheduled.length ? <div className="mt-3 space-y-2" role="radiogroup" aria-label="Vincular visita programada">
-              {familyScheduled.map(visit => <label key={visit.operationId ?? visit.id} className={`flex cursor-pointer items-start gap-3 rounded-lg border bg-white p-3 text-sm dark:bg-gray-900 ${scheduledVisitId === visit.id && visit.id !== null ? 'border-blue-500 ring-1 ring-blue-300' : 'border-gray-200 dark:border-gray-700'}`}>
-                <input type="radio" name="scheduled-visit" className="mt-1 accent-blue-600" checked={scheduledVisitId === visit.id && visit.id !== null} disabled={!visit.id || Boolean(visit.syncStatus && visit.syncStatus !== 'synced')} onChange={() => setScheduledVisitId(visit.id)} />
+              {familyScheduled.map(visit => <label key={visit.operationId ?? visit.id} className={`flex cursor-pointer items-start gap-3 rounded-lg border bg-white p-3 text-sm dark:bg-gray-900 ${scheduledVisitId === visit.id && visit.id !== null ? 'border-brand-500 ring-1 ring-brand-300' : 'border-gray-200 dark:border-gray-700'}`}>
+                <input type="radio" name="scheduled-visit" className="mt-1 accent-brand-500" checked={scheduledVisitId === visit.id && visit.id !== null} disabled={!visit.id || Boolean(visit.syncStatus && visit.syncStatus !== 'synced')} onChange={() => setScheduledVisitId(visit.id)} />
                 <span><strong className="block text-gray-900 dark:text-white">{new Date(`${visit.date}T12:00:00`).toLocaleDateString('es-GT', {day:'numeric', month:'long', year:'numeric'})}</strong>
                   <span className="mt-1 block text-xs text-gray-600 dark:text-gray-300">{visit.capture?.timeSlot === 'TARDE' ? 'Tarde' : visit.capture?.timeSlot === 'MANANA' ? 'Mañana' : 'Sin turno'} · Responsable: {visit.responsibleName || 'Sin dato'}</span>
                   {!visit.id && <span className="mt-1 block text-xs text-amber-700">Pendiente de sincronizar. Primero sincroniza esta cita para vincularla.</span>}
                 </span>
               </label>)}
               <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-gray-200 bg-white p-3 text-sm dark:border-gray-700 dark:bg-gray-900">
-                <input type="radio" name="scheduled-visit" className="accent-blue-600" checked={scheduledVisitId === null} onChange={() => setScheduledVisitId(null)}/>
+                <input type="radio" name="scheduled-visit" className="accent-brand-500" checked={scheduledVisitId === null} onChange={() => setScheduledVisitId(null)}/>
                 Registrar sin vincular a una cita (visita no programada)
               </label>
             </div> : <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">No se encontraron visitas programadas para esta familia. Puedes registrar una visita no programada.</p>}

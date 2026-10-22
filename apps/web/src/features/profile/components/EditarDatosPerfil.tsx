@@ -11,8 +11,8 @@ type Props = {
 
 const campo =
   'w-full rounded-lg border border-gray-300 bg-white px-4 py-3 ' +
-  'text-sm text-gray-900 outline-none focus:border-blue-500 ' +
-  'focus:ring-2 focus:ring-blue-500/20 ' +
+  'text-sm text-gray-900 outline-none focus:border-brand-500 ' +
+  'focus:ring-2 focus:ring-brand-500/20 ' +
   'dark:border-gray-700 dark:bg-gray-900 dark:text-white'
 
 export default function EditarDatosPerfil({
@@ -146,7 +146,7 @@ export default function EditarDatosPerfil({
           </button>
         </div>
 
-        <div className="mb-6 flex items-center gap-2 text-blue-600">
+        <div className="mb-6 flex items-center gap-2 text-brand-600">
           <Pencil size={19} />
           <h3 className="font-semibold">Información personal</h3>
         </div>
@@ -229,7 +229,7 @@ export default function EditarDatosPerfil({
             <button
               type="submit"
               disabled={guardando}
-              className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+              className="rounded-lg bg-brand-500 px-5 py-3 text-sm font-semibold text-white hover:bg-brand-600 disabled:opacity-60"
             >
               {guardando ? 'Guardando...' : 'Guardar cambios'}
             </button>

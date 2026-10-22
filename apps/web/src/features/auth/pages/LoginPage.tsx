@@ -2,6 +2,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { useAuth } from '../AuthProvider'
+import BrandMark from '@/components/common/BrandMark'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -68,9 +69,14 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-dvh bg-white dark:bg-slate-950">
-      {/* Sección izquierda: Inicio de sesión */}
+      {/* Logotipo visible también en móviles; acceso y sesión intactos. */}
       <main className="flex w-full items-center justify-center px-6 py-12 lg:w-1/2">
         <div className="w-full max-w-md">
+          <div className="mb-10 flex items-center gap-3 lg:hidden">
+            <BrandMark decorative className="size-12 shadow-theme-sm" />
+            <div><p className="text-lg font-bold text-slate-900 dark:text-white">ViviendasLeón</p><p className="text-xs text-slate-500 dark:text-slate-400">Sustaining Rural Communities</p></div>
+          </div>
+          <div className="mb-6 hidden h-1 w-16 rounded-full bg-brand-500 lg:block" />
           <h1 className="mb-3 text-3xl font-bold text-slate-900 dark:text-white">
             Iniciar sesión
           </h1>
@@ -97,7 +103,7 @@ export default function LoginPage() {
                 value={correo}
                 onChange={(event) => setCorreo(event.target.value)}
                 placeholder="correo@ejemplo.com"
-                className="w-full rounded-lg border border-slate-300 bg-transparent px-4 py-3 text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:text-white"
+                className="w-full rounded-lg border border-slate-300 bg-transparent px-4 py-3 text-slate-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:text-white"
               />
             </div>
 
@@ -119,13 +125,13 @@ export default function LoginPage() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder="Ingresa tu contraseña"
-                  className="w-full rounded-lg border border-slate-300 bg-transparent px-4 py-3 pr-24 text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:text-white"
+                  className="w-full rounded-lg border border-slate-300 bg-transparent px-4 py-3 pr-24 text-slate-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:text-white"
                 />
 
                 <button
                   type="button"
                   onClick={() => setMostrarPassword(!mostrarPassword)}
-                  className="absolute inset-y-0 right-3 text-sm text-blue-600"
+                  className="absolute inset-y-0 right-3 text-sm text-brand-600"
                   aria-label={
                     mostrarPassword
                       ? 'Ocultar contraseña'
@@ -142,7 +148,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => setMostrarAviso(true)}
-                className="text-sm font-medium text-blue-600 hover:underline"
+                className="text-sm font-medium text-brand-600 hover:underline"
               >
                 ¿Olvidaste tu contraseña?
               </button>
@@ -172,7 +178,7 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={cargando}
-              className="w-full rounded-lg bg-blue-600 px-4 py-3 font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-lg bg-brand-500 px-4 py-3 font-semibold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {cargando ? 'Iniciando sesión...' : 'Iniciar sesión'}
             </button>
@@ -180,16 +186,18 @@ export default function LoginPage() {
         </div>
       </main>
 
-      {/* Panel derecho estilo TailAdmin */}
-      <aside className="hidden min-h-dvh w-1/2 items-center justify-center bg-[#142f45] px-8 lg:flex">
-        <div className="flex flex-col items-center text-center">
-          <h1 className="text-3xl font-bold text-white">
-            Viviendas León
-          </h1>
-
-          <p className="mt-3 text-sm text-slate-300">
-            Sustaining Rural Communities
-          </p>
+      {/* Panel institucional, sin imágenes externas: funciona en modo PWA. */}
+      <aside className="relative hidden min-h-dvh w-1/2 items-center justify-center overflow-hidden bg-brand-900 px-8 lg:flex">
+        <div aria-hidden="true" className="pointer-events-none absolute -right-36 -top-36 size-[420px] rounded-full border border-white/10 bg-white/5" />
+        <div aria-hidden="true" className="pointer-events-none absolute -bottom-40 -left-40 size-[520px] rounded-full border border-white/10 bg-white/5" />
+        <div className="relative flex max-w-md flex-col items-center text-center">
+          <div className="rounded-3xl border border-white/20 bg-white/10 p-5 shadow-theme-lg backdrop-blur-sm">
+            <BrandMark decorative className="size-28 rounded-xl shadow-theme-lg" />
+          </div>
+          <h2 className="mt-8 text-4xl font-bold tracking-tight text-white">Viviendas León</h2>
+          <p className="mt-3 text-base text-brand-200">Sustaining Rural Communities</p>
+          <div className="mt-8 h-px w-24 bg-brand-300/60" />
+          <p className="mt-6 text-sm leading-6 text-brand-100">Gestión de programas y acompañamiento a comunidades rurales.</p>
         </div>
       </aside>
     </div>

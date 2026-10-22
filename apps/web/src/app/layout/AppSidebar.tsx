@@ -5,6 +5,7 @@ import { useSidebar } from '@/app/providers/SidebarContext'
 import { navigationForAccount, type NavigationItem } from '@/app/navigation/navigation'
 import { canViewPath } from '@/features/auth/screenPermissions'
 import { cn } from '@/app/lib/cn'
+import BrandMark from '@/components/common/BrandMark'
 
 function activePath(pathname: string, path?: string, exact = false) {
   if (!path) return false
@@ -109,7 +110,7 @@ export default function AppSidebar() {
     onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget) && !event.currentTarget.matches(':hover')) setIsHovered(false) }}>
     <div className="mb-8 flex min-h-11 items-center justify-between gap-2">
       <Link to="/" aria-label="ViviendasLeón Guatemala — Inicio" onClick={closeMobileSidebar} className={cn('layout-focus flex min-w-0 items-center gap-3 rounded-lg text-gray-900 dark:text-white', !showLabels && 'xl:mx-auto')}>
-        <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-500 text-sm font-bold text-white shadow-theme-xs">VL</span><span className={cn(!showLabels && 'xl:hidden')}><span className="block text-base font-semibold tracking-tight">ViviendasLeón</span><span className="block text-xs text-gray-500 dark:text-gray-400">Guatemala</span></span>
+        <BrandMark decorative className="size-10 shadow-theme-xs" /><span className={cn('min-w-0', !showLabels && 'xl:hidden')}><span className="block truncate text-base font-bold tracking-tight">ViviendasLeón</span><span className="block text-[10px] tracking-wide text-gray-500 dark:text-gray-400">Sustaining Rural Communities</span></span>
       </Link>
       <button type="button" onClick={closeMobileSidebar} aria-label="Cerrar navegación" className="layout-icon-button layout-focus size-9 xl:hidden"><span aria-hidden="true">×</span></button>
     </div>

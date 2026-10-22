@@ -2,6 +2,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { useAuth } from '../AuthProvider'
+import BrandMark from '@/components/common/BrandMark'
 
 export default function EstablecerPasswordPage() {
   const navigate = useNavigate()
@@ -85,12 +86,16 @@ export default function EstablecerPasswordPage() {
 
   const inputClass =
     'w-full rounded-lg border border-gray-300 bg-transparent px-4 py-3 ' +
-    'text-gray-900 outline-none focus:border-blue-500 ' +
+    'text-gray-900 outline-none focus:border-brand-500 ' +
     'dark:border-gray-700 dark:text-white'
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-gray-50 px-4 dark:bg-gray-950">
       <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-8 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <div className="mb-6 flex items-center gap-3">
+          <BrandMark decorative className="size-10 shadow-theme-xs" />
+          <div><p className="text-sm font-bold text-gray-900 dark:text-white">ViviendasLeón</p><p className="text-xs text-gray-500 dark:text-gray-400">Sustaining Rural Communities</p></div>
+        </div>
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
           Establecer mi contraseña
         </h1>
@@ -157,7 +162,7 @@ export default function EstablecerPasswordPage() {
           <button
             type="submit"
             disabled={guardando}
-            className="w-full rounded-lg bg-blue-600 px-4 py-3 font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+            className="w-full rounded-lg bg-brand-500 px-4 py-3 font-medium text-white hover:bg-brand-600 disabled:opacity-60"
           >
             {guardando ? 'Guardando...' : 'Guardar contraseña'}
           </button>

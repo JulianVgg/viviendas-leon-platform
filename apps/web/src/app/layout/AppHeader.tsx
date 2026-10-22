@@ -23,6 +23,7 @@ export default function AppHeader() {
   const connectivity = useConnectivityStatus()
   const toggleMenu = () => window.innerWidth >= 1280 ? toggleSidebar() : toggleMobileSidebar()
   const canViewSettings = Boolean(usuario && canViewPath(usuario, '/administracion/configuracion'))
+  const inicialesUsuario = usuario?.nombre.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((parte) => parte.charAt(0)).join('').toUpperCase() || 'U'
 
   async function handleLogout() {
     if (cerrandoSesion) return
@@ -65,7 +66,6 @@ export default function AppHeader() {
           <span className="sr-only xl:hidden">{isMobileOpen ? 'Cerrar navegación' : 'Abrir navegación'}</span><span className="sr-only hidden xl:inline">{isExpanded ? 'Colapsar navegación' : 'Expandir navegación'}</span>
           <svg aria-hidden="true" className="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M4 6h16M4 12h10M4 18h16" /></svg>
         </button>
-        <Link to="/" className="layout-focus hidden min-w-0 rounded-lg sm:block"><span className="block truncate text-sm font-semibold text-slate-900 dark:text-white">ViviendasLeón Guatemala</span><span className="block text-xs text-slate-500 dark:text-slate-400">Plataforma de gestión</span></Link>
       </div>
       <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         <button type="button" className="layout-icon-button layout-focus" onClick={(event) => toggleTheme(event.currentTarget)} aria-label={theme === 'dark' ? 'Activar tema claro' : 'Activar tema oscuro'}>
@@ -74,7 +74,7 @@ export default function AppHeader() {
         <NotificationDropdown />
         <div ref={userRef} className="relative" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setUserOpen(false) }}>
           <button ref={roleButtonRef} type="button" className="layout-focus flex min-h-11 max-w-56 items-center gap-2 rounded-lg px-1 text-start hover:bg-slate-100 dark:hover:bg-white/5" onClick={() => setUserOpen((value) => !value)} aria-label="Abrir menú de usuario" aria-controls="user-account-panel" aria-expanded={userOpen}>
-            <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">VL</span>
+            <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">{inicialesUsuario}</span>
             <span className="hidden min-w-0 md:block"><span className="block truncate text-sm font-medium text-slate-800 dark:text-white">{usuario?.nombre ?? 'Usuario'}</span><span className="block truncate text-xs text-slate-500 dark:text-slate-400">{usuario?.roles.join(', ') || 'Sin rol asignado'}</span></span>
             <span aria-hidden="true" className="hidden text-slate-500 sm:block">{userOpen ? '⌃' : '⌄'}</span>
           </button>
