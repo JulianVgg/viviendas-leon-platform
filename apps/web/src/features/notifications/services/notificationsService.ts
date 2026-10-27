@@ -5,11 +5,12 @@ export type Notificacion = {
   titulo: string
   mensaje: string
   referencia: string | null
+  claveEvento?: string | null
   fechaCreacion: string
   fechaLectura: string | null
 }
 
-export type EstadoNotificacion = 'todas' | 'no_leidas' | 'leidas'
+export type EstadoNotificacion = 'todas' | 'no_leidas' | 'leidas' | 'invitaciones'
 
 export type ListadoNotificaciones = {
   notificaciones: Notificacion[]

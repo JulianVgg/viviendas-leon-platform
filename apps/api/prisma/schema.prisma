@@ -907,6 +907,10 @@ model EventoInstitucional {
 model EventoInstitucionalParticipante {
   eventoId Int @map("evento_id")
   usuarioId Int @map("usuario_id")
+
+  estadoInvitacion String @default("ASIGNADO") @map("estado_invitacion") @db.VarChar(12)
+  respondidaEn DateTime? @map("respondida_en") @db.Timestamptz(6)
+
   evento EventoInstitucional @relation(fields: [eventoId], references: [id], onDelete: Cascade)
   usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
 

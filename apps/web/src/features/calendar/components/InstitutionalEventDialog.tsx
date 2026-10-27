@@ -3,6 +3,8 @@ import { Search } from 'lucide-react'
 import Dialog from '@/components/ui/Dialog'
 import ReminderPicker from '@/features/notifications/components/ReminderPicker'
 import Button from '@/components/ui/Button'
+import { eventoHaPasado } from '../services/eventHistory'
+import RespuestasParticipantesEvento from './RespuestasParticipantesEvento'
 import {
   eventTypes, eventDisplayTitle,
   type CalendarEvent, type CalendarEventInput, type CalendarPerson,
@@ -24,13 +26,14 @@ type Props = {
   date: string
   users: CalendarPerson[]
   editable: boolean
+  puedeConsultarRespuestas?: boolean
   onClose: () => void
   onSave: (input: CalendarEventInput, id?: number) => Promise<void>
   onDelete: (id: number) => Promise<void>
 }
 
 export default function InstitutionalEventDialog({
-  open, selected, date, users, editable, onClose, onSave, onDelete,
+  open, selected, date, users, editable, puedeConsultarRespuestas = false, onClose, onSave, onDelete,
 }: Props) {
   const [data, setData] = useState<CalendarEventInput>(() => initial(date))
   const [search, setSearch] = useState('')
@@ -84,6 +87,7 @@ export default function InstitutionalEventDialog({
 
   async function submit(event: FormEvent) {
     event.preventDefault()
+    if (!editable || (selected && eventoHaPasado(selected.fechaFin))) return
     const title = data.categoria === 'OTRO'
       ? data.titulo.trim()
       : (eventTypes.find(item => item.id === data.categoria)?.text ?? '')
@@ -107,7 +111,7 @@ export default function InstitutionalEventDialog({
   }
 
   async function erase() {
-    if (!selected) return
+    if (!selected || !editable || eventoHaPasado(selected.fechaFin)) return
     setBusy(true)
     setError('')
     try {
@@ -127,6 +131,7 @@ export default function InstitutionalEventDialog({
       className="max-w-2xl"
     >
       <form onSubmit={event => void submit(event)} className="space-y-5">
+        {selected && eventoHaPasado(selected.fechaFin) && <p role="status" className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">Esta actividad ya finalizó.</p>}
         <div>
           <label htmlFor="institutional-event-type" className={labelClass}>Tipo de evento *</label>
           <select
@@ -228,6 +233,8 @@ export default function InstitutionalEventDialog({
             {matches.length === 0 && <p className="p-2 text-sm text-gray-500">Sin coincidencias.</p>}
           </div>
         </fieldset>
+
+        {selected && puedeConsultarRespuestas && <RespuestasParticipantesEvento eventoId={selected.id} />}
 
         <ReminderPicker disabled={!editable || busy} value={data.recordatorios} date={data.fechaInicio} onChange={recordatorios => setData(current => ({ ...current, recordatorios }))} />
 

@@ -9,6 +9,7 @@ import {
   type Notificacion,
 } from '@/features/notifications/services/notificationsService'
 import { obtenerDestinoSeguro } from '@/features/notifications/utils/notificationUtils'
+import { eventoDeNotificacion } from '@/features/notifications/services/invitationsService'
 
 const CONSULTA_CADA_MS = 60_000
 
@@ -106,6 +107,8 @@ export default function NotificationDropdown() {
         setProcesandoId(null)
       }
     }
+    const eventoId = eventoDeNotificacion(notificacion)
+    if (eventoId !== null) { setOpen(false); navigate(`/notificaciones?invitacion=${eventoId}`); return }
     if (destino) { setOpen(false); navigate(destino) }
   }
 

@@ -45,7 +45,8 @@ export async function listarNotificaciones(
   const where = {
     usuarioId,
     ...(estado === 'no_leidas' ? { fechaLectura: null }
-      : estado === 'leidas' ? { fechaLectura: { not: null } } : {}),
+      : estado === 'leidas' ? { fechaLectura: { not: null } }
+        : estado === 'invitaciones' ? { tipo: 'INVITACION_EVENTO' } : {}),
   }
 
   const [notificaciones, total, noLeidas] = await prisma.$transaction([
@@ -53,7 +54,7 @@ export async function listarNotificaciones(
       where,
       select: {
         id: true, tipo: true, titulo: true, mensaje: true, referencia: true,
-        fechaCreacion: true, fechaLectura: true,
+        fechaCreacion: true, fechaLectura: true, claveEvento: true,
       },
       orderBy: [{ fechaCreacion: 'desc' }, { id: 'desc' }],
       skip: (pagina - 1) * limite,
@@ -141,7 +142,14 @@ export async function crearNotificacionesDeActividad(
       .replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() === 'direccion general')
       ? ['PANTALLA_CALENDARIO', 'PANTALLA_VISITAS_AGENDA'] : []),
   ])]))
-  const aprobados = avisos.filter(aviso => permitidos.get(aviso.usuarioId)?.has(aviso.permisoDestino))
+  // Las invitaciones llegan a cualquier usuario activo, aunque no tenga permiso
+  // para abrir el calendario; el centro de notificaciones es su destino seguro.
+  const avisosInstitucionales = new Set([
+    'INVITACION_EVENTO', 'CALENDARIO_CAMBIO', 'CALENDARIO_DESASIGNACION', 'CALENDARIO_CANCELACION',
+  ])
+  const aprobados = avisos.filter(aviso =>
+    (avisosInstitucionales.has(aviso.tipo) && permitidos.has(aviso.usuarioId)) ||
+    permitidos.get(aviso.usuarioId)?.has(aviso.permisoDestino))
   if (!aprobados.length) return 0
   const resultado = await tx.notificacion.createMany({
     data: aprobados.map(({ usuarioId, tipo, titulo, mensaje, referencia, claveEvento }) => ({

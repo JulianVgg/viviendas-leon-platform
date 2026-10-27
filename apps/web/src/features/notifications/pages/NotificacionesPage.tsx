@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Bell, CheckCheck, ChevronLeft, ChevronRight, LoaderCircle, RefreshCw } from 'lucide-react'
-import { useNavigate } from 'react-router'
+import { useNavigate, useSearchParams } from 'react-router'
 import PageMeta from '@/components/common/PageMeta'
 import PageHeader from '@/components/common/PageHeader'
 import { useAuth } from '@/features/auth/AuthProvider'
 import NotificacionItem from '../components/NotificacionItem'
 import ReminderPreferences from '../components/ReminderPreferences'
+import CrearInvitacionButton, { puedeGestionarInvitaciones } from '../components/CrearInvitacionButton'
+import InvitacionDetalleDialog from '../components/InvitacionDetalleDialog'
+import SeguimientoInvitaciones from '../components/SeguimientoInvitaciones'
+import { eventoDeNotificacion } from '../services/invitationsService'
 import {
   emitirCambioNotificaciones, marcarNotificacionLeida, marcarTodasNotificacionesLeidas,
   obtenerNotificaciones, type EstadoNotificacion, type ListadoNotificaciones, type Notificacion,
@@ -15,12 +19,15 @@ import { obtenerDestinoSeguro } from '../utils/notificationUtils'
 const TABS: { etiqueta: string; estado: EstadoNotificacion }[] = [
   { etiqueta: 'Todas', estado: 'todas' },
   { etiqueta: 'No leídas', estado: 'no_leidas' },
+  { etiqueta: 'Invitaciones', estado: 'invitaciones' },
   { etiqueta: 'Leídas', estado: 'leidas' },
 ]
 
 export default function NotificacionesPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { usuario } = useAuth()
+  const gestionar = Boolean(usuario && puedeGestionarInvitaciones(usuario.roles))
   const [estado, setEstado] = useState<EstadoNotificacion>('todas')
   const [pagina, setPagina] = useState(1)
   const [data, setData] = useState<ListadoNotificaciones | null>(null)
@@ -29,8 +36,21 @@ export default function NotificacionesPage() {
   const [procesandoId, setProcesandoId] = useState<number | null>(null)
   const [marcandoTodas, setMarcandoTodas] = useState(false)
   const [revision, setRevision] = useState(0)
+  const [invitacionId, setInvitacionId] = useState<number | null>(null)
+  const param = searchParams.get('invitacion')
+  const idParam = Number(param)
+  const idDesdeUrl = param && /^[1-9]\d*$/.test(param) && Number.isSafeInteger(idParam) && idParam <= 2_147_483_647 ? idParam : null
+  const invitacionAbierta = invitacionId ?? idDesdeUrl
 
   const recargar = useCallback(() => setRevision(actual => actual + 1), [])
+  const cerrarInvitacion = () => {
+    setInvitacionId(null)
+    if (param !== null) {
+      const siguiente = new URLSearchParams(searchParams)
+      siguiente.delete('invitacion')
+      setSearchParams(siguiente, { replace: true })
+    }
+  }
 
   useEffect(() => {
     const controller = new AbortController()
@@ -67,6 +87,8 @@ export default function NotificacionesPage() {
         setProcesandoId(null)
       }
     }
+    const eventoId = eventoDeNotificacion(item)
+    if (eventoId !== null) { setInvitacionId(eventoId); return }
     if (destino) navigate(destino)
   }
 
@@ -88,6 +110,8 @@ export default function NotificacionesPage() {
   return <div>
     <PageMeta title="Notificaciones | Viviendas León" description="Centro de notificaciones personales" />
     <PageHeader title="Notificaciones" description="Consulta tus avisos, recordatorios y actividades asignadas." />
+    <CrearInvitacionButton />
+    <div className={gestionar ? 'grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]' : ''}>
     <div className="rounded-2xl border border-gray-200 bg-white shadow-theme-xs dark:border-gray-800 dark:bg-gray-900">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 p-4 sm:p-5 dark:border-gray-800">
         <div className="flex flex-wrap items-center gap-2">
@@ -108,6 +132,10 @@ export default function NotificacionesPage() {
         </div>
       </div>}
     </div>
-    <ReminderPreferences usuarioId={usuario?.id} />
+    {gestionar && <SeguimientoInvitaciones />}
+    </div>
+    <div className="mt-5"><ReminderPreferences usuarioId={usuario?.id} /></div>
+    <InvitacionDetalleDialog eventoId={invitacionAbierta} onClose={cerrarInvitacion}
+      onResponded={() => { emitirCambioNotificaciones(); recargar() }} />
   </div>
 }
