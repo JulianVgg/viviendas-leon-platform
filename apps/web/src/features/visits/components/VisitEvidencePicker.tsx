@@ -66,7 +66,7 @@ export default function VisitEvidencePicker({ photos, onChange, disabled }: { ph
   return <section aria-label="Evidencia fotográfica" className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-700 dark:bg-slate-800/40 sm:p-5">
     <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
       <div><h3 className="font-semibold text-slate-900 dark:text-white">Evidencia fotográfica <span className="text-xs font-normal text-slate-500">(opcional)</span></h3>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Fotografía el cultivo o selecciona imágenes del teléfono. Quedarán asociadas a esta visita.</p></div>
+</div>
       <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600 dark:bg-slate-900 dark:text-slate-300">{photos.length}/{MAX_VISIT_PHOTOS} fotos</span>
     </div>
     <input ref={cameraRef} className="sr-only" tabIndex={-1} aria-label="Capturar foto con cámara" type="file" accept="image/*" capture="environment" onChange={e => void addPhotos(e)} />
@@ -83,6 +83,6 @@ export default function VisitEvidencePicker({ photos, onChange, disabled }: { ph
         <div className="flex items-center justify-between gap-1 p-2"><span className="truncate text-xs text-slate-600 dark:text-slate-300" title={photo.name}>{photo.name}</span><button type="button" disabled={disabled || busy} className="shrink-0 rounded-lg p-1 text-red-600 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-brand-500 disabled:opacity-40 dark:text-red-400" aria-label={`Quitar foto ${i + 1}`} onClick={()=>onChange(photos.filter(p=>p.id!==photo.id))}><Trash2 size={16}/></button></div>
       </li>)}
     </ul>}
-    <p className="mt-3 text-xs leading-5 text-slate-500 dark:text-slate-400">Máximo 4 fotos. Se comprimen a JPG (hasta 2 MB por foto). Sin conexión se conservan en este dispositivo hasta poder sincronizarse. Evita fotografiar rostros o información privada sin consentimiento.</p>
+    <p className="mt-3 text-xs leading-5 text-slate-500 dark:text-slate-400">Máximo 4 fotos · 2 MB cada una. Consentimiento requerido.</p>
   </section>
 }
