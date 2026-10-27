@@ -1,5 +1,5 @@
 // Validación de parámetros provenientes de las URL, sin conversiones permisivas.
-export type EstadoNotificacion = 'todas' | 'leidas' | 'no_leidas'
+export type EstadoNotificacion = 'todas' | 'leidas' | 'no_leidas' | 'invitaciones'
 
 export type ListarNotificacionesQuery = {
   pagina: number
@@ -28,6 +28,6 @@ export function parseListarNotificacionesQuery(
   const limite = parseEnteroPositivo(query.limite, 20, 100)
   const estado = query.estado ?? 'todas'
   if (pagina === null || limite === null ||
-      (estado !== 'todas' && estado !== 'leidas' && estado !== 'no_leidas')) return null
+      (estado !== 'todas' && estado !== 'leidas' && estado !== 'no_leidas' && estado !== 'invitaciones')) return null
   return { pagina, limite, estado }
 }

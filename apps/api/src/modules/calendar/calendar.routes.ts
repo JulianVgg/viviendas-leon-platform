@@ -6,6 +6,7 @@ import { esDireccionGeneral, requirePermission } from '../auth/require-permissio
 import { crearNotificacionesDeActividad, type AvisoActividad } from '../notifications/notifications.service.js'
 import { actualizarRecordatorios, cancelarRecordatorios, configGuardada, configParaPrisma, parseReglas } from '../notifications/reminders.service.js'
 import { descripcionAvisoCalendario, eventoTieneCambios, planificarCambioCalendario, type EventoResumen, type TipoAvisoCalendario } from '../notifications/notifications.activity.js'
+import { eventoYaFinalizo } from './event-history.js'
 
 export const calendarRouter = Router()
 calendarRouter.use(requireAuth, requirePermission('PANTALLA_CALENDARIO'))
@@ -66,9 +67,15 @@ function parseEvent(input: unknown) {
 // El destinatario se determina en el servidor a partir de participantes reales.
 function avisoCalendario(eventoId: number, version: string, usuarioId: number,
   tipo: TipoAvisoCalendario, evento: EventoResumen): AvisoActividad {
+  const nuevaInvitacion = tipo === 'CALENDARIO_ASIGNACION'
   return {
-    usuarioId, tipo, ...descripcionAvisoCalendario(tipo, evento),
-    referencia: '/calendario', permisoDestino: 'PANTALLA_CALENDARIO',
+    usuarioId,
+    tipo: nuevaInvitacion ? 'INVITACION_EVENTO' : tipo,
+    ...(nuevaInvitacion
+      ? { titulo: 'Nueva invitación institucional', mensaje: `Te invitaron a ${evento.titulo} (${evento.fecha}).` }
+      : descripcionAvisoCalendario(tipo, evento)),
+    referencia: nuevaInvitacion ? '/notificaciones' : '/calendario',
+    permisoDestino: 'PANTALLA_CALENDARIO',
     claveEvento: `CAL:${eventoId}:${version}:${usuarioId}`,
   }
 }
@@ -214,7 +221,7 @@ calendarRouter.post('/', async (req: Request, res: Response) => {
         fechaInicio: new Date(`${data.date}T12:00:00Z`), fechaFin: new Date(`${data.date}T12:00:00Z`),
         horaInicio: null, horaFin: null, responsableId: autorId,
         creadoPorId: autorId, operacionCreacionId: operationId, recordatoriosConfig: configParaPrisma(data.recordatorios),
-        participantes: { create: data.participantesIds.map(usuarioId => ({ usuarioId })) },
+        participantes: { create: data.participantesIds.map(usuarioId => ({ usuarioId, estadoInvitacion: 'PENDIENTE' })) },
       } })
       const resumen: EventoResumen = { titulo: data.titulo, categoria: data.categoria,
         descripcion: data.descripcion || null, fecha: data.date, participantesIds: data.participantesIds }
@@ -268,6 +275,8 @@ calendarRouter.put('/:id', async (req: Request, res: Response) => {
         where: { id }, include: { participantes: { select: { usuarioId: true } } },
       })
       if (!found) return false
+      // Los eventos finalizados son historial inmutable, incluso para Dirección.
+      if (eventoYaFinalizo(found.fechaFin)) return 'FINALIZADO' as const
       const antes: EventoResumen = {
         titulo: found.titulo, categoria: found.categoria,
         descripcion: found.descripcion, fecha: found.fechaInicio.toISOString().slice(0, 10),
@@ -285,8 +294,13 @@ calendarRouter.put('/:id', async (req: Request, res: Response) => {
         fechaInicio: new Date(`${data.date}T12:00:00Z`), fechaFin: new Date(`${data.date}T12:00:00Z`),
         horaInicio: null, horaFin: null, versionNotificacion: { increment: 1 },
         recordatoriosConfig: configParaPrisma(data.recordatorios),
-        // Mantiene al responsable original; no se altera la autoría.
-        participantes: { deleteMany: {}, create: data.participantesIds.map(usuarioId => ({ usuarioId })) },
+        // Mantiene al responsable original y las respuestas de quienes siguen invitados.
+        participantes: {
+          deleteMany: data.participantesIds.length ? { usuarioId: { notIn: data.participantesIds } } : {},
+          create: data.participantesIds
+            .filter(usuarioId => !antes.participantesIds.includes(usuarioId))
+            .map(usuarioId => ({ usuarioId, estadoInvitacion: 'PENDIENTE' })),
+        },
       } })
       await actualizarRecordatorios(tx, 'CALENDARIO', id, data.date, data.participantesIds, data.recordatorios)
       await crearNotificacionesDeActividad(cambios.map(cambio =>
@@ -294,6 +308,7 @@ calendarRouter.put('/:id', async (req: Request, res: Response) => {
           cambio.tipo === 'CALENDARIO_DESASIGNACION' ? antes : despues)), tx)
       return true
     })
+    if (result === 'FINALIZADO') { res.status(409).json({ error: 'Este evento ya finalizó y solo puede consultarse.' }); return }
     if (!result) { res.status(404).json({ error: 'Evento no encontrado.' }); return }
     res.json({ accepted: true })
   } catch (error) { console.error('Error editando evento:', error); res.status(503).json({ error: 'No se pudo actualizar el evento.' }) }
@@ -311,6 +326,7 @@ calendarRouter.delete('/:id', async (req: Request, res: Response) => {
         where: { id }, include: { participantes: { select: { usuarioId: true } } },
       })
       if (!evento) return false
+      if (eventoYaFinalizo(evento.fechaFin)) return 'FINALIZADO' as const
       const resumen: EventoResumen = {
         titulo: evento.titulo, categoria: evento.categoria, descripcion: evento.descripcion,
         fecha: evento.fechaInicio.toISOString().slice(0, 10),
@@ -322,6 +338,7 @@ calendarRouter.delete('/:id', async (req: Request, res: Response) => {
         avisoCalendario(id, 'CANCELACION', usuarioId, 'CALENDARIO_CANCELACION', resumen)), tx)
       return true
     })
+    if (eliminado === 'FINALIZADO') { res.status(409).json({ error: 'Este evento ya finalizó y no puede eliminarse.' }); return }
     if (!eliminado) { res.status(404).json({ error: 'Evento no encontrado.' }); return }
     res.json({ accepted: true })
   } catch (error) { console.error('Error eliminando evento:', error); res.status(503).json({ error: 'No se pudo eliminar el evento.' }) }

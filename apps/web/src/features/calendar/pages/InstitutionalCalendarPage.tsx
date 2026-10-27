@@ -8,6 +8,7 @@ import Dialog from '@/components/ui/Dialog'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { canViewPath, isDireccionGeneral } from '@/features/auth/screenPermissions'
 import InstitutionalEventDialog from '../components/InstitutionalEventDialog'
+import { eventoHaPasado } from '../services/eventHistory'
 import {
   eventColor, eventDisplayTitle, loadCalendarView, loadParticipants, removeEvent, saveEvent,
   type CalendarEvent, type CalendarEventInput, type CalendarPerson, type CalendarTechnicalVisit, type CalendarTraining,
@@ -255,7 +256,8 @@ export default function InstitutionalCalendarPage() {
         selected={selected}
         date={selectedDate}
         users={users}
-        editable={editable}
+        editable={editable && (!selected || !eventoHaPasado(selected.fechaFin))}
+        puedeConsultarRespuestas={editable}
         onSave={save}
         onDelete={erase}
       />
