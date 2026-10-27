@@ -9,6 +9,7 @@ import FormField, { formControlClassName } from '@/components/ui/FormField'
 import { FamilyApiError, fetchFamilies } from '@/features/families/services/familyService'
 import { getOfflineData, saveOfflineData } from '@/db/offlineDb'
 import { useAuth } from '@/features/auth/AuthProvider'
+import { listCycles, type Cycle } from '@/features/agriculture/services/cyclesService'
 import { addCivilDays, DIAS_CICLO_VISITA } from '@/features/visits/services/visitPlanning'
 import { saveVisitCapture, todayInGuatemala, type VisitCapture, type CropCapture, type VisitPhotoFile } from '@/features/visits/services/visitService'
 import SearchableSelect, { catalogOptions } from '@/features/visits/components/SearchableSelect'
@@ -19,7 +20,7 @@ import { crops, stages, qualities, weatherOptions, diseases, pests, damage, orga
 
 type Finding = { id: string; type: 'plaga' | 'enfermedad'; name: string; damage: string }
 type CropEntry = {
-  id: string; name: string; stage: string; plants: string; quality: string
+  id: string; cicloCultivoId: number | null; name: string; stage: string; plants: string; quality: string
   findings: Finding[]; production: boolean; perPlantUnits: string; perPlantKg: string
   units: string; kg: string; priceQ: string; priceBasis: 'unidad' | 'kg'
 }
@@ -29,7 +30,7 @@ const input = `${formControlClassName} w-full`
 const area = `${formControlClassName} h-auto min-h-24 resize-y`
 const card = 'rounded-2xl border border-slate-200 bg-white p-4 shadow-theme-xs dark:border-slate-800 dark:bg-slate-900 md:p-6'
 const todayLocal = todayInGuatemala
-const newCrop = (): CropEntry => ({ id: crypto.randomUUID(), name: '', stage: '', plants: '', quality: '', findings: [], production: false, perPlantUnits: '', perPlantKg: '', units: '', kg: '', priceQ: '', priceBasis: 'unidad' })
+const newCrop = (): CropEntry => ({ id: crypto.randomUUID(), cicloCultivoId: null, name: '', stage: '', plants: '', quality: '', findings: [], production: false, perPlantUnits: '', perPlantKg: '', units: '', kg: '', priceQ: '', priceBasis: 'unidad' })
 const newCommitment = (): Commitment => ({ id: crypto.randomUUID(), text: '', due: '', nextVisit: true, category: 'Familia' })
 const currencyTotal = (entry: CropEntry, currency: 'priceQ') => {
   const quantity = Number(entry.priceBasis === 'kg' ? entry.kg : entry.units)
@@ -63,6 +64,8 @@ export default function VisitRegisterPage() {
   const [followUpRefresh, setFollowUpRefresh] = useState(0)
   const [reviewStates, setReviewStates] = useState<Record<string, FollowUpStatus>>({})
   const [cropsState, setCrops] = useState<CropEntry[]>([])
+  const [availableCycles, setAvailableCycles] = useState<Cycle[]>([])
+  const [cyclesWarning, setCyclesWarning] = useState('')
   const [commitments, setCommitments] = useState<Commitment[]>([])
   const [treatment, setTreatment] = useState('')
   const [treatmentGroup, setTreatmentGroup] = useState('orgánico')
@@ -80,6 +83,29 @@ export default function VisitRegisterPage() {
   const [saved, setSaved] = useState<{ status: 'synced' | 'pending' | 'failed'; id: string; type: 'PROGRAMADA' | 'REALIZADA' } | null>(null)
   const [error, setError] = useState('')
   const cacheKey = usuario ? `visits:family-options:v1:user:${usuario.id}` : null
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setCrops([])
+    setAvailableCycles([])
+    setCyclesWarning('')
+    if (!usuario || !familyId) return () => controller.abort()
+    const key = `visits:cycles:v1:user:${usuario.id}:family:${familyId}`
+    listCycles({ familiaId: Number(familyId) }, controller.signal).then(records => {
+      if (controller.signal.aborted) return
+      setAvailableCycles(records.filter(record => record.estado === 'ACTIVO'))
+      void saveOfflineData(key, records).catch(() => {})
+    }).catch(async () => {
+      try {
+        const cached = await getOfflineData<Cycle[]>(key)
+        if (!controller.signal.aborted) {
+          setAvailableCycles((cached?.data ?? []).filter(record => record.estado === 'ACTIVO'))
+          setCyclesWarning('No se pudieron actualizar los ciclos: comprueba que las siembras estén sincronizadas antes de evaluar.')
+        }
+      } catch { if (!controller.signal.aborted) setCyclesWarning('No se pudieron consultar ciclos agrícolas.') }
+    })
+    return () => controller.abort()
+  }, [familyId, usuario?.id])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -194,6 +220,7 @@ export default function VisitRegisterPage() {
       setError('Revisa las cantidades y precios; deben ser números positivos.'); setStep(1); return
     }
     const cropsCapture: CropCapture[] = cropsState.map(c => ({
+      ...(c.cicloCultivoId ? { cicloCultivoId: c.cicloCultivoId } : {}),
       name: c.name, stage: c.stage, quality: c.quality, plants: numberOrNull(c.plants),
       findings: c.findings.map(f => ({ type: f.type, name: f.name, damage: f.damage })),
       production: c.production, perPlantUnits: c.production ? numberOrNull(c.perPlantUnits) : null,
@@ -287,13 +314,22 @@ export default function VisitRegisterPage() {
 
       {step === 1 && <section className="space-y-4" aria-label="Evaluación de cultivos">
         <div className={card}>
-          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold text-slate-900 dark:text-white">Evaluación de cultivos</h2></div><Button type="button" onClick={() => setCrops(list => [...list,newCrop()])}>+ Agregar cultivo</Button></div>
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold text-slate-900 dark:text-white">Evaluación de cultivos</h2></div><Button type="button" onClick={() => setCrops(list => [...list,newCrop()])}>+ Evaluar cultivo</Button></div>
+          {cyclesWarning && <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">{cyclesWarning}</p>}
+          {!cyclesWarning && !availableCycles.length && familyId && <p className="mt-3 text-sm text-slate-500">No hay ciclos activos consultables para esta familia. Los registros manuales se conservarán sin vinculación y requerirán conciliación posterior.</p>}
         </div>
         {cropsState.length === 0 && <div className={`${card} text-center text-sm text-slate-500`}>Sin cultivos registrados</div>}
         {cropsState.map((crop, i) => <article key={crop.id} className={card}>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold text-slate-900 dark:text-white">Cultivo {i + 1} {crop.name && <Badge>{crop.name}</Badge>}</h3><Button type="button" size="sm" variant="secondary" onClick={() => setCrops(list => list.filter(c => c.id !== crop.id))}>Quitar</Button></div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <SearchableSelect label="Planta" id={`crop-name-${crop.id}`} value={crop.name} onChange={name => updateCrop(crop.id,{name})} options={catalogOptions(crops)} />
+            {availableCycles.length > 0 ? <FormField label="Siembra del huerto" id={`crop-cycle-${crop.id}`}>
+              <select id={`crop-cycle-${crop.id}`} className={input} value={crop.cicloCultivoId ?? ''} onChange={e => {
+                const found = availableCycles.find(item => item.id === Number(e.target.value))
+                updateCrop(crop.id, { cicloCultivoId: found?.id ?? null, name: found?.cultivo.nombre ?? '' })
+              }}><option value="">Seleccionar siembra</option>
+                {availableCycles.map(item => <option key={item.id} value={item.id}>{item.cultivo.nombre} · {item.huerto.nombre || `Huerto #${item.huertoId}`} · {item.fechaSiembra || item.fechaTrasplante || 'Sin fecha'} (#{item.id})</option>)}
+              </select>
+            </FormField> : <SearchableSelect label="Planta (sin vincular)" id={`crop-name-${crop.id}`} value={crop.name} onChange={name => updateCrop(crop.id,{name, cicloCultivoId: null})} options={catalogOptions(crops)} />}
             <FormField label="Etapa" id={`crop-stage-${crop.id}`}><select id={`crop-stage-${crop.id}`} className={input} value={crop.stage} onChange={e => updateCrop(crop.id,{stage:e.target.value})}><Options items={stages}/></select></FormField>
             <FormField label="Cantidad de plantas" id={`crop-plants-${crop.id}`}><input id={`crop-plants-${crop.id}`} className={input} type="number" min="0" step="1" value={crop.plants} onChange={e=>updateCrop(crop.id,{plants:e.target.value})}/></FormField>
             <FormField label="Calidad" id={`crop-quality-${crop.id}`}><select id={`crop-quality-${crop.id}`} className={input} value={crop.quality} onChange={e=>updateCrop(crop.id,{quality:e.target.value})}><Options items={qualities}/></select></FormField>

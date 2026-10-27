@@ -88,7 +88,7 @@ export const navigationGroups: { id: string; name: string; items: NavigationItem
       ] },
       { id: 'agriculture', name: 'Gestión agrícola', path: '/gestion-agricola', icon: icons.agriculture, roles: ['fieldWorker', 'coordination'], children: [
         { id: 'gardens', name: 'Huertos', path: '/gestion-agricola/huertos', icon: icons.gardens },
-        { id: 'crops', name: 'Cultivos', path: '/gestion-agricola/cultivos', icon: icons.crops },
+        { id: 'cycles', name: 'Ciclos agrícolas', path: '/gestion-agricola/ciclos', icon: icons.crops },
         { id: 'production', name: 'Producción', path: '/gestion-agricola/produccion', icon: icons.production },
         { id: 'phytosanitary', name: 'Control fitosanitario', path: '/gestion-agricola/control-fitosanitario', icon: icons.phytosanitary },
         { id: 'supplies', name: 'Insumos', path: '/gestion-agricola/insumos', icon: icons.supplies },
@@ -118,6 +118,7 @@ export const navigationGroups: { id: string; name: string; items: NavigationItem
         { id: 'communities', name: 'Comunidades', path: '/administracion/comunidades', icon: icons.communities },
         { id: 'municipalities', name: 'Municipios', path: '/administracion/municipios', icon: icons.communities },
         { id: 'programs', name: 'Programas', path: '/administracion/programas', icon: icons.programs },
+        { id: 'catalog-crops', name: 'Catálogo de cultivos', path: '/administracion/cultivos', icon: icons.crops },
         { id: 'users', name: 'Usuarios', path: '/administracion/usuarios', icon: icons.users },
         { id: 'roles', name: 'Roles y permisos', path: '/administracion/roles-permisos', icon: icons.permissions },
       ] },

@@ -19,6 +19,8 @@ export type FollowUpReview = { id: string; status: FollowUpStatus }
 export type VisitPhotoFile = { id: string; name: string; blob: Blob }
 export type VisitEvidence = { id: number; name: string; url: string }
 export type CropCapture = {
+  // Optional for backwards compatibility with unsynchronised VIS-03/VIS-04 captures.
+  cicloCultivoId?: number
   name: string; stage: string; quality: string; plants: number | null
   findings: { type: 'plaga' | 'enfermedad'; name: string; damage: string }[]
   production: boolean; perPlantUnits: number | null; perPlantKg: number | null
