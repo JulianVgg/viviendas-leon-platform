@@ -86,7 +86,8 @@ export function CreateGardenPage() {
   const canCreate = Boolean(usuario && canWriteGardens(usuario))
   const [families, setFamilies] = useState<FamilyOption[]>([])
   const [loading, setLoading] = useState(true)
-  const [familyId, setFamilyId] = useState(params.get('familiaId') || '')
+  const lockedFamilyId = params.get('familiaId')
+  const [familyId, setFamilyId] = useState(lockedFamilyId || '')
   const [nombre, setNombre] = useState('')
   const [tipo, setTipo] = useState('FAMILIAR')
   const [fechaInicio, setFechaInicio] = useState('')
@@ -124,23 +125,23 @@ export function CreateGardenPage() {
       const garden = await createGarden({ familiaId: Number(familyId), nombre: nombre.trim() || null, tipo: tipo || null, fechaInicio: fechaInicio || null, estado, observaciones: observaciones.trim() || null })
       if (file) {
         try { await uploadGardenImage(garden.id, file) }
-        catch { navigate(`/gestion-agricola/huertos?imagenError=${garden.id}`); return }
+        catch { navigate(params.has('familiaId') ? `/familias/${garden.familiaId}?tab=gardens&creado=1&imagenError=${garden.id}` : `/gestion-agricola/huertos?imagenError=${garden.id}`); return }
       }
-      navigate('/gestion-agricola/huertos?creado=1')
+      navigate(params.has('familiaId') ? `/familias/${garden.familiaId}?tab=gardens&creado=1` : '/gestion-agricola/huertos?creado=1')
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'No fue posible guardar el huerto.') }
     finally { setSaving(false) }
   }
 
   return <>
     <PageMeta title="Registrar huerto | ViviendasLeón" description="Asociar un huerto con una familia." />
-    <PageHeader title="Agregar huerto" description="Registra los datos principales del huerto y, opcionalmente, adjunta una imagen satelital." actions={<Link to="/gestion-agricola/huertos" className="text-sm text-brand-600 underline">Volver a huertos</Link>} />
+    <PageHeader title="Agregar huerto" description="Registra los datos principales del huerto y, opcionalmente, adjunta una imagen satelital." actions={<Link to={lockedFamilyId ? `/familias/${lockedFamilyId}?tab=gardens` : '/gestion-agricola/huertos'} className="text-sm text-brand-600 underline">Volver</Link>} />
     {!online && <Alert variant="warning" title="Conexión requerida" className="mb-5">El alta y la carga de imágenes se guardan en el servidor y requieren conexión.</Alert>}
     {!canCreate && <Alert variant="warning" title="Acceso de solo lectura" className="mb-5">Tu perfil no tiene permiso para registrar huertos.</Alert>}
     {error && <Alert variant="error" title="No se pudo completar el registro" className="mb-5">{error}</Alert>}
     <form onSubmit={(event) => void submit(event)} className="space-y-6">
       <ComponentCard title="Datos del huerto" description="Información vinculada al expediente de la familia beneficiaria.">
         <FormGrid>
-          <FormField label="Familia beneficiaria" required hint="El huerto quedará asociado a esta familia."><select className={formControlClassName} required disabled={loading || saving || !canCreate} value={familyId} onChange={(event) => setFamilyId(event.target.value)}><option value="">Seleccionar familia...</option>{families.map((f) => <option key={f.id} value={f.id}>{f.nombreReferencia} · {f.comunidad.nombre} ({f.estado})</option>)}</select></FormField>
+          <FormField label="Familia beneficiaria" required hint="El huerto quedará asociado a esta familia."><select className={formControlClassName} required disabled={loading || saving || !canCreate || Boolean(lockedFamilyId)} value={familyId} onChange={(event) => setFamilyId(event.target.value)}><option value="">Seleccionar familia...</option>{families.map((f) => <option key={f.id} value={f.id}>{f.nombreReferencia} · {f.comunidad.nombre} ({f.estado})</option>)}</select></FormField>
           <FormField label="Nombre del huerto" hint="Opcional según la base de datos."><input className={formControlClassName} maxLength={120} value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej. Huerto principal" /></FormField>
           <FormField label="Tipo de huerto"><select className={formControlClassName} value={tipo} onChange={(e) => setTipo(e.target.value)}><option value="">No especificado</option><option value="FAMILIAR">Familiar</option><option value="COMUNITARIO">Comunitario</option></select></FormField>
           <FormField label="Fecha de inicio"><input className={formControlClassName} type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} /></FormField>
@@ -152,7 +153,7 @@ export function CreateGardenPage() {
         <label className="block cursor-pointer rounded-xl border-2 border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 hover:border-brand-500 dark:border-slate-700 dark:hover:border-brand-500"><ImagePlus size={32} className="mx-auto mb-3" /><span className="block font-semibold text-slate-700 dark:text-slate-200">Seleccionar imagen del huerto</span><span>Haz clic para elegir un archivo</span><input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setFile(event.target.files?.[0] || null)} /></label>
         {file && <div className="mt-4 space-y-2"><p className="break-all text-sm text-slate-600 dark:text-slate-300">{file.name} · {(file.size / 1024 / 1024).toFixed(2)} MB</p>{preview && <img src={preview} alt="Vista previa de imagen elegida" className="max-h-72 w-full rounded-lg object-contain" />}<Button type="button" variant="secondary" size="sm" onClick={() => setFile(null)}>Quitar imagen</Button></div>}
       </ComponentCard>
-      <div className="flex flex-wrap justify-end gap-3"><Link to="/gestion-agricola/huertos" className="inline-flex min-h-11 items-center rounded-lg border border-slate-300 px-5 text-sm font-medium dark:border-slate-700">Cancelar</Link><Button type="submit" disabled={!canCreate || !online || saving || loading}>{saving ? 'Guardando...' : 'Guardar huerto'}</Button></div>
+      <div className="flex flex-wrap justify-end gap-3"><Link to={lockedFamilyId ? `/familias/${lockedFamilyId}?tab=gardens` : '/gestion-agricola/huertos'} className="inline-flex min-h-11 items-center rounded-lg border border-slate-300 px-5 text-sm font-medium dark:border-slate-700">Cancelar</Link><Button type="submit" disabled={!canCreate || !online || saving || loading}>{saving ? 'Guardando...' : 'Guardar huerto'}</Button></div>
     </form>
   </>
 }

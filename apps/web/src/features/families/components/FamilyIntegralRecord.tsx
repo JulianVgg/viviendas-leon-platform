@@ -1,5 +1,5 @@
 import { useId, useRef, useState, type KeyboardEvent } from 'react'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import { Pencil, Plus, Power } from 'lucide-react'
 import Card, { CardBody, CardHeader } from '@/components/ui/Card'
 import Badge from '@/components/ui/Badge'
@@ -22,7 +22,7 @@ const tabs = [
   { id: 'general', label: 'Información general' },
   { id: 'members', label: 'Integrantes' },
   { id: 'programs', label: 'Programas' },
-  { id: 'gardens', label: 'Huertos' },
+  { id: 'gardens', label: 'Huertos y cultivos' },
 ] as const
 type RecordTab = typeof tabs[number]['id']
 const textClass = 'block min-w-0 max-w-80 whitespace-pre-wrap break-words [overflow-wrap:anywhere]'
@@ -32,7 +32,8 @@ export default function FamilyIntegralRecord({ family, onRefresh }: { family: In
   const canManage = Boolean(usuario && canWriteFamilies(usuario))
   const isOnline = useOnlineStatus()
   const instanceId = useId()
-  const [selected, setSelected] = useState<RecordTab>('general')
+  const [params] = useSearchParams()
+  const [selected, setSelected] = useState<RecordTab>(params.get('tab') === 'gardens' ? 'gardens' : 'general')
   const [memberDialog, setMemberDialog] = useState<{ member?: FamilyMemberRecord }>()
   const [stateMember, setStateMember] = useState<FamilyMemberRecord>()
   const [stateSaving, setStateSaving] = useState(false)

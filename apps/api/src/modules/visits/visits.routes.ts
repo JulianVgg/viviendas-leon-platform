@@ -81,12 +81,14 @@ function validate(input: unknown, operationId: unknown): { capturedAt?: string; 
     if (!item || typeof item !== 'object' || Array.isArray(item)) return null
     const c = item as Record<string, unknown>
     if (!clean(c.name, 80) || !Array.isArray(c.findings) || c.findings.length > 20) return null
+    if (c.cicloCultivoId !== undefined && (!Number.isSafeInteger(c.cicloCultivoId) || Number(c.cicloCultivoId) <= 0 || Number(c.cicloCultivoId) > 2147483647)) return null
     if (c.findings.some(f => !f || typeof f !== 'object' || !['plaga','enfermedad'].includes((f as Record<string,unknown>).type as string) || !clean((f as Record<string,unknown>).name,100) || !['1','3','5','10','20'].includes(String((f as Record<string,unknown>).damage)))) return null
     for (const name of ['plants','perPlantUnits','perPlantKg','units','kg','priceQ','priceUSD']) {
       if (!positive(c[name])) return null
     }
     if (c.plants !== null && c.plants !== undefined && c.plants !== '' && !Number.isSafeInteger(c.plants)) return null
     crops.push({
+      ...(c.cicloCultivoId !== undefined ? { cicloCultivoId: c.cicloCultivoId } : {}),
       name: clean(c.name,80), stage: clean(c.stage,60), quality: clean(c.quality,60),
       plants: c.plants ?? null, production: Boolean(c.production),
       perPlantUnits: c.perPlantUnits ?? null, perPlantKg: c.perPlantKg ?? null,
@@ -372,6 +374,33 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
         await sincronizarAvisosSeguimiento(tx, [
           ...payload.commitments.map(c => String(c.id)), ...payload.reviews.map(r => r.id),
         ])
+        // AGR-04: los registros nuevos con ID de ciclo se normalizan de forma atómica.
+        // Las capturas históricas por nombre continúan válidas y conservadas en JSONB.
+        if (payload.status === 'REALIZADA') {
+          const seen = new Set<number>()
+          for (const crop of payload.crops) {
+            if (crop.cicloCultivoId === undefined) continue
+            const cycleId = Number(crop.cicloCultivoId)
+            if (seen.has(cycleId)) throw new Error('DUPLICATE_VISIT_CYCLE')
+            seen.add(cycleId)
+            const cycle = await tx.cicloCultivo.findFirst({
+              where: { id: cycleId, huerto: { familiaId: payload.familyId } },
+              select: { id: true, cultivo: { select: { nombre: true } } },
+            })
+            if (!cycle || cycle.cultivo.nombre !== crop.name) throw new Error('INVALID_VISIT_CYCLE')
+            const stage = typeof crop.stage === 'string' && crop.stage ? await tx.etapaCultivo.findFirst({
+              where: { nombre: { equals: crop.stage, mode: 'insensitive' } }, select: { id: true },
+            }) : null
+            const quality = typeof crop.quality === 'string' && crop.quality ? await tx.calidad.findFirst({
+              where: { nombre: { equals: crop.quality, mode: 'insensitive' } }, select: { id: true },
+            }) : null
+            await tx.evaluacionCultivo.create({ data: {
+              visitaId, cicloCultivoId: cycleId, etapaCultivoId: stage?.id ?? null,
+              calidadId: quality?.id ?? null,
+              observaciones: typeof crop.plants === 'number' ? `Plantas observadas: ${crop.plants}.` : null,
+            } })
+          }
+        }
         if (payload.scheduledVisitId) {
           // Conservar el ID de la visita y actualizar su captura; fotografía y
           // reintentos de realización se vinculan al nuevo operationId.
@@ -410,6 +439,8 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
     if (!result || result.conflict) { res.status(409).json({ error: 'Identificador utilizado por otra operación.' }); return }
     res.status(result.duplicate ? 200 : 201).json({ operationId: normalizedId, accepted: true, duplicate: result.duplicate, visitId: result.visitId })
   } catch (error) {
+    if (error instanceof Error && error.message === 'INVALID_VISIT_CYCLE') { res.status(409).json({ error: 'La siembra seleccionada no corresponde a la familia o al cultivo.' }); return }
+    if (error instanceof Error && error.message === 'DUPLICATE_VISIT_CYCLE') { res.status(409).json({ error: 'Una misma siembra no puede evaluarse dos veces en una visita.' }); return }
     if (error instanceof Error && error.message === 'SCHEDULE_PAST_DATE') { res.status(422).json({ error: 'No puedes agendar visitas en fechas anteriores a hoy.' }); return }
     if (error instanceof Error && error.message === 'SCHEDULE_ALREADY_ASSIGNED') { res.status(409).json({ error: 'Ya existe una visita para este período o una visita vencida. Revisa la agenda.' }); return }
     if (error instanceof Error && error.message === 'SCHEDULE_OVERDUE') { res.status(409).json({ error: 'Esta familia ya tiene una cita programada. Reprográmala antes de registrar.' }); return }
