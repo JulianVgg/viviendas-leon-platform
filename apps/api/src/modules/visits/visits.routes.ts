@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Router, raw, type Request, type Response } from 'express'
 import { getPrismaClient } from '../../config/prisma.js'
+import { capturaValida, fechaHoyGuatemala, fechaProgramacionValida, requiereReprogramar, sumarDiasCiviles } from './visit-schedule.rules.js'
 import { requireAuth } from '../auth/auth.middleware.js'
 import { getAuthenticatedUser } from '../auth/auth.service.js'
 import { esDireccionGeneral } from '../auth/require-permission.middleware.js'
@@ -59,11 +60,13 @@ const statusOptions = ['PENDIENTE','CUMPLIDO','NO_CUMPLIDO'] as const
 const validDate = (v: string) => dateRe.test(v) && !Number.isNaN(Date.parse(`${v}T12:00:00Z`)) && new Date(`${v}T12:00:00Z`).toISOString().slice(0,10) === v
 const clean = (v: unknown, max: number) => typeof v === 'string' ? v.trim().slice(0, max) : ''
 const positive = (v: unknown) => v === '' || v === null || v === undefined || (typeof v === 'number' && Number.isFinite(v) && v >= 0)
-function validate(input: unknown, operationId: unknown): { recordatorios?: ReglaRecordatorio[] | null; familyId: number; date: string; status: 'PROGRAMADA' | 'REALIZADA'; timeSlot?: 'MANANA' | 'TARDE'; scheduledVisitId?: number; weather: string; checkIn: string; recommendation: string; observations: string; treatment: string; crops: Record<string, unknown>[]; commitments: Record<string, unknown>[]; reviews: { id: string; status: string }[] } | null {
+function validate(input: unknown, operationId: unknown): { capturedAt?: string; recordatorios?: ReglaRecordatorio[] | null; familyId: number; date: string; status: 'PROGRAMADA' | 'REALIZADA'; timeSlot?: 'MANANA' | 'TARDE'; scheduledVisitId?: number; weather: string; checkIn: string; recommendation: string; observations: string; treatment: string; crops: Record<string, unknown>[]; commitments: Record<string, unknown>[]; reviews: { id: string; status: string }[] } | null {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return null
   const v = input as Record<string, unknown>
   const opId = typeof operationId === 'string' && uuid.test(operationId) ? operationId.toLowerCase() : ''
   const date = clean(v.date, 10)
+  const capturedAt = typeof v.capturedAt === 'string' ? v.capturedAt : undefined
+  if (capturedAt !== undefined && (v.status !== 'REALIZADA' || !capturaValida(date, capturedAt))) return null
   if (!Number.isSafeInteger(v.familyId) || Number(v.familyId) <= 0 || !dateRe.test(date) ||
       Number.isNaN(Date.parse(`${date}T12:00:00Z`)) ||
       new Date(`${date}T12:00:00Z`).toISOString().slice(0, 10) !== date ||
@@ -103,8 +106,9 @@ function validate(input: unknown, operationId: unknown): { recordatorios?: Regla
     const h = createHash('md5').update(`${opId}:${position}`).digest('hex')
     const legacyId = `${h.slice(0,8)}-${h.slice(8,12)}-4${h.slice(13,16)}-8${h.slice(17,20)}-${h.slice(20,32)}`
     const commitmentId = typeof c.id === 'string' ? c.id.toLowerCase() : legacyId
-    if (!uuid.test(commitmentId) || !clean(c.text, 500) || !['Familia','ONG'].includes(String(c.category)) || (c.due && !validDate(String(c.due)))) return null
-    commitments.push({ id: commitmentId, text: clean(c.text,500), category: c.category, due: c.due || null })
+    if (!uuid.test(commitmentId) || !clean(c.text, 500) || !['Familia','ONG'].includes(String(c.category)) || (c.due && !validDate(String(c.due))) || (c.nextVisit !== undefined && typeof c.nextVisit !== 'boolean') || (c.nextVisit === true && Boolean(c.due))) return null
+    commitments.push({ id: commitmentId, text: clean(c.text,500), category: c.category, due: c.nextVisit ? null : c.due || null,
+      ...(c.nextVisit !== undefined ? { nextVisit: c.nextVisit === true } : {}) })
   }
   const inputReviews = v.reviews ?? []
   if (!Array.isArray(inputReviews) || inputReviews.length > 100 || (v.status === 'PROGRAMADA' && inputReviews.length > 0)) return null
@@ -118,6 +122,7 @@ function validate(input: unknown, operationId: unknown): { recordatorios?: Regla
   if (new Set([...commitments.map(c => c.id), ...reviews.map(r => r.id)]).size !== commitments.length + reviews.length) return null
   return {
     familyId: Number(v.familyId), date, status: v.status,
+    ...(capturedAt ? { capturedAt } : {}),
     ...(v.recordatorios !== undefined ? { recordatorios } : {}),
     ...(v.timeSlot ? { timeSlot: v.timeSlot as 'MANANA' | 'TARDE' } : {}),
     ...(v.scheduledVisitId ? { scheduledVisitId: Number(v.scheduledVisitId) } : {}),
@@ -129,11 +134,13 @@ function validate(input: unknown, operationId: unknown): { recordatorios?: Regla
 
 function serialize(row: {
   id: number; fecha: Date; estado: string; usuarioResponsableId: number;
+  reprogramaciones?: { id: number; fechaAnterior: Date; fechaNueva: Date; usuarioId: number; motivo: string | null; creadoEn: Date }[];
   usuarioResponsable: { nombre: string; apellido: string | null };
   familia: { id: number; nombreReferencia: string; comunidad: { nombre: string } };
 }, captura: { operation_id: string; datos: unknown } | null, evidences: { id: number; name: string }[]) {
   return {
     id: row.id, operationId: captura?.operation_id ?? null,
+    reprogramaciones: (row.reprogramaciones ?? []).map(h => ({ id: h.id, oldDate: h.fechaAnterior.toISOString().slice(0,10), newDate: h.fechaNueva.toISOString().slice(0,10), actorId: h.usuarioId, reason: h.motivo, at: h.creadoEn.toISOString() })),
     date: row.fecha.toISOString().slice(0,10), status: row.estado,
     responsibleUserId: row.usuarioResponsableId,
     responsibleName: [row.usuarioResponsable.nombre, row.usuarioResponsable.apellido].filter(Boolean).join(' '),
@@ -155,7 +162,7 @@ visitsRouter.get('/', async (req: Request, res: Response) => {
     const canViewAll = isSupervisor(user.roles)
     const rows = await prisma.visita.findMany({
       where: canViewAll ? {} : { usuarioResponsableId: userId },
-      include: { usuarioResponsable: { select: { nombre: true, apellido: true } }, familia: { select: { id: true, nombreReferencia: true, comunidad: { select: { nombre: true } } } } },
+      include: { reprogramaciones: { orderBy: { creadoEn: 'asc' }, select: { id: true, fechaAnterior: true, fechaNueva: true, usuarioId: true, motivo: true, creadoEn: true } }, usuarioResponsable: { select: { nombre: true, apellido: true } }, familia: { select: { id: true, nombreReferencia: true, comunidad: { select: { nombre: true } } } } },
       orderBy: [{ fecha: 'desc' }, { id: 'desc' }], take: 300,
     })
     // Buscar capturas por las visitas autorizadas y no por el dueño de la
@@ -176,6 +183,39 @@ visitsRouter.get('/', async (req: Request, res: Response) => {
     res.setHeader('Cache-Control','no-store')
     res.json({ data: rows.map(row => serialize(row, byVisit.get(row.id) ?? null, byEvidence.get(row.id) ?? [])) })
   } catch (error) { console.error('Error consultando visitas:',error); res.status(503).json({ error: 'No se pudieron consultar las visitas.' }) }
+})
+
+// Estado compacto por familia para planificar la cobertura de cada ciclo de 8 días.
+// Incluye citas de otros técnicos sin revelar capturas ni notas privadas.
+visitsRouter.get('/planificacion', async (_req: Request, res: Response) => {
+  try {
+    const db = getPrismaClient()
+    const [completed, pending] = await Promise.all([
+      db.visita.groupBy({ by: ['familiaId'], where: { estado: 'REALIZADA' }, _max: { fecha: true } }),
+      db.visita.findMany({ where: { estado: 'PROGRAMADA' },
+        select: { id: true, familiaId: true, fecha: true, usuarioResponsableId: true,
+          usuarioResponsable: { select: { nombre: true, apellido: true } } },
+        orderBy: [{ fecha: 'asc' }, { id: 'asc' }],
+      }),
+    ])
+    const byFamily = new Map<number, { familyId: number; lastCompleted: string | null; scheduled: { id: number; date: string; responsibleName: string; responsibleUserId: number }[] }>()
+    const get = (id: number) => {
+      let row = byFamily.get(id)
+      if (!row) { row = { familyId: id, lastCompleted: null, scheduled: [] }; byFamily.set(id, row) }
+      return row
+    }
+    for (const item of completed) get(item.familiaId).lastCompleted = item._max.fecha?.toISOString().slice(0, 10) ?? null
+    for (const item of pending) get(item.familiaId).scheduled.push({
+      id: item.id, date: item.fecha.toISOString().slice(0, 10),
+      responsibleUserId: item.usuarioResponsableId,
+      responsibleName: [item.usuarioResponsable.nombre, item.usuarioResponsable.apellido].filter(Boolean).join(' '),
+    })
+    res.setHeader('Cache-Control', 'no-store')
+    res.json({ data: [...byFamily.values()] })
+  } catch (error) {
+    console.error('Error consultando planificación:', error)
+    res.status(503).json({ error: 'No se pudo consultar la planificación.' })
+  }
 })
 
 visitsRouter.post('/sync', async (req: Request, res: Response) => {
@@ -228,6 +268,11 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
         }
         return { conflict: false, visitId: existing[0].visita_id, duplicate: true }
       }
+      // Rechazar programación retroactiva incluso si la solicitud vino de IndexedDB.
+      // La comprobación posterior al UUID deja confirmar reintentos ya sincronizados.
+      if (payload.status === 'PROGRAMADA' && !fechaProgramacionValida(payload.date)) {
+        throw new Error('SCHEDULE_PAST_DATE')
+      }
       const familia = await prisma.familia.findUnique({
         where: { id: payload.familyId }, select: { id: true, nombreReferencia: true },
       })
@@ -237,6 +282,8 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
         let visitaId: number
         let storedCapture: Record<string, unknown> = payload
         if (payload.scheduledVisitId) {
+          // Bloquea la misma fila que utiliza el endpoint de reprogramación.
+          await tx.$queryRaw`SELECT "id" FROM "visita" WHERE "id" = ${payload.scheduledVisitId} FOR UPDATE`
           // Transición atómica PROGRAMADA -> REALIZADA, sin crear otra fila Visita.
           // Solo puede completar una cita el técnico responsable de la misma familia.
           const planned = await tx.visita.findFirst({
@@ -245,6 +292,7 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
             select: { id: true, fecha: true },
           })
           if (!planned) throw new Error('SCHEDULE_CONFLICT')
+          if (payload.capturedAt && requiereReprogramar(planned.fecha.toISOString().slice(0,10), payload.date)) throw new Error('SCHEDULE_DATE_CONFLICT')
           const previous = await tx.visitaCaptura.findUnique({
             where: { visitaId: planned.id },
             select: { operationId: true, payloadHash: true, usuarioId: true, datos: true },
@@ -269,6 +317,34 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
             payloadHash: previous?.payloadHash ?? null,
           } }
         } else {
+          // No crear un segundo registro cuando existe una cita anterior sin atender.
+          // La verificación nueva respeta operaciones offline previas al cambio de política.
+          if (payload.status === 'REALIZADA' && payload.capturedAt) {
+            const agendada = await tx.visita.findFirst({
+              where: { familiaId: payload.familyId, usuarioResponsableId: userId, estado: 'PROGRAMADA',
+                // Capturas offline antiguas conservan su fecha, sin bloquear por una cita futura posterior.
+                ...(payload.date === fechaHoyGuatemala() ? {} : { fecha: { lt: new Date(`${payload.date}T12:00:00Z`) } }) },
+              select: { id: true },
+            })
+            if (agendada) throw new Error('SCHEDULE_OVERDUE')
+          }
+          if (payload.status === 'PROGRAMADA') {
+            // Bloqueo por familia: evita dos reservas concurrentes del mismo ciclo.
+            await tx.$queryRaw`SELECT "id" FROM "familia" WHERE "id" = ${payload.familyId} FOR UPDATE`
+            const assigned = await tx.visita.findFirst({
+              where: { familiaId: payload.familyId, estado: 'PROGRAMADA', OR: [
+                // Una visita vencida debe resolverse antes de crear una nueva.
+                { fecha: { lt: new Date(`${fechaHoyGuatemala()}T12:00:00Z`) } },
+                // Solo una cita por ventana de 8 días. Las citas futuras de ciclos
+                // posteriores sí pueden programarse con anticipación.
+                { fecha: {
+                  gte: new Date(`${sumarDiasCiviles(payload.date, -7)}T12:00:00Z`),
+                  lte: new Date(`${sumarDiasCiviles(payload.date, 7)}T12:00:00Z`),
+                } },
+              ] }, select: { id: true },
+            })
+            if (assigned) throw new Error('SCHEDULE_ALREADY_ASSIGNED')
+          }
           const visita = await tx.visita.create({ data: {
             familiaId: payload.familyId, usuarioResponsableId: userId, fecha: new Date(`${payload.date}T12:00:00Z`),
             condicionClimaticaId: climate?.id ?? null, tipo: 'TECNICA', estado: payload.status,
@@ -281,6 +357,7 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
           await tx.seguimientoVisita.createMany({ data: payload.commitments.map(c => ({
             id: String(c.id), visitaOrigenId: visitaId, texto: String(c.text),
             responsable: String(c.category), fechaLimite: c.due ? new Date(`${c.due}T12:00:00Z`) : null,
+            revisionProximaVisita: c.nextVisit === true,
           })) })
         }
         // La revisión solo puede resolver compromisos propios de la misma familia.
@@ -333,6 +410,10 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
     if (!result || result.conflict) { res.status(409).json({ error: 'Identificador utilizado por otra operación.' }); return }
     res.status(result.duplicate ? 200 : 201).json({ operationId: normalizedId, accepted: true, duplicate: result.duplicate, visitId: result.visitId })
   } catch (error) {
+    if (error instanceof Error && error.message === 'SCHEDULE_PAST_DATE') { res.status(422).json({ error: 'No puedes agendar visitas en fechas anteriores a hoy.' }); return }
+    if (error instanceof Error && error.message === 'SCHEDULE_ALREADY_ASSIGNED') { res.status(409).json({ error: 'Ya existe una visita para este período o una visita vencida. Revisa la agenda.' }); return }
+    if (error instanceof Error && error.message === 'SCHEDULE_OVERDUE') { res.status(409).json({ error: 'Esta familia ya tiene una cita programada. Reprográmala antes de registrar.' }); return }
+    if (error instanceof Error && error.message === 'SCHEDULE_DATE_CONFLICT') { res.status(409).json({ error: 'Reprograma primero esta visita para la fecha del registro.' }); return }
     if (error instanceof Error && error.message === 'SCHEDULE_CONFLICT') {
       res.status(409).json({ error: 'La cita programada ya fue realizada, cambió de familia o corresponde a otro responsable. Actualiza la agenda antes de registrar.' })
       return
@@ -352,6 +433,8 @@ visitsRouter.patch('/agenda/:visitId', async (req: Request, res: Response) => {
   if (!Number.isSafeInteger(visitId) || visitId <= 0 || typeof date !== 'string' || !validDate(date)) {
     res.status(400).json({ error: 'Fecha o visita inválida.' }); return
   }
+  if (date < fechaHoyGuatemala()) { res.status(422).json({ error: 'Reprograma para hoy o una fecha posterior.' }); return }
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 500) : ''
   try {
     const user = await getAuthenticatedUser(req.session.userId!)
     if (!user) { res.status(401).json({ error: 'Sesión inválida.' }); return }
@@ -363,11 +446,20 @@ visitsRouter.patch('/agenda/:visitId', async (req: Request, res: Response) => {
           ...(!isSupervisor(user.roles) ? { usuarioResponsableId: req.session.userId! } : {}),
           estado: 'PROGRAMADA',
         },
-        select: { id: true, fecha: true, usuarioResponsableId: true, recordatoriosConfig: true,
+        select: { id: true, familiaId: true, fecha: true, usuarioResponsableId: true, recordatoriosConfig: true,
           familia: { select: { nombreReferencia: true } } },
       })
       if (!visita) return false
       if (visita.fecha.toISOString().slice(0, 10) === date) return true
+      await tx.$queryRaw`SELECT "id" FROM "familia" WHERE "id" = ${visita.familiaId} FOR UPDATE`
+      const collision = await tx.visita.findFirst({
+        where: { familiaId: visita.familiaId, estado: 'PROGRAMADA', id: { not: visita.id },
+          fecha: { gte: new Date(`${sumarDiasCiviles(date, -7)}T12:00:00Z`),
+            lte: new Date(`${sumarDiasCiviles(date, 7)}T12:00:00Z`) } },
+        select: { id: true },
+      })
+      if (collision) throw new Error('SCHEDULE_CYCLE_CONFLICT')
+      await tx.visitaReprogramacion.create({ data: { visitaId: visita.id, fechaAnterior: visita.fecha, fechaNueva: new Date(`${date}T12:00:00Z`), usuarioId: req.session.userId!, motivo: reason || null } })
       const config = reglasTrasCambioFecha(configGuardada(visita.recordatoriosConfig, visita.fecha.toISOString().slice(0, 10)), date)
       const cambiado = await tx.visita.update({ where: { id: visita.id },
         data: { fecha: new Date(`${date}T12:00:00Z`), versionNotificacion: { increment: 1 },
@@ -383,7 +475,10 @@ visitsRouter.patch('/agenda/:visitId', async (req: Request, res: Response) => {
     })
     if (!actualizado) { res.status(404).json({ error: 'Visita programada no encontrada o ya realizada.' }); return }
     res.json({ accepted: true })
-  } catch (error) { console.error('Error reprogramando visita:', error); res.status(503).json({ error: 'No se pudo reprogramar la visita.' }) }
+  } catch (error) {
+    if (error instanceof Error && error.message === 'SCHEDULE_CYCLE_CONFLICT') { res.status(409).json({ error: 'Ya existe una visita para este período de 8 días.' }); return }
+    console.error('Error reprogramando visita:', error); res.status(503).json({ error: 'No se pudo reprogramar la visita.' })
+  }
 })
 
 // Eliminar una cita PROGRAMADA. Una visita REALIZADA no puede borrarse
@@ -401,7 +496,7 @@ visitsRouter.delete('/agenda/:visitId', async (req: Request, res: Response) => {
         id: visitId,
         ...(!isSupervisor(user.roles) ? { usuarioResponsableId: req.session.userId! } : {}),
         estado: 'PROGRAMADA',
-        compromisosVisita: { none: {} }, evaluaciones: { none: {} },
+        compromisosVisita: { none: {} }, reprogramaciones: { none: {} }, evaluaciones: { none: {} },
         evidencias: { none: {} }, alertas: { none: {} },
       }
       const visita = await tx.visita.findFirst({ where,
@@ -436,7 +531,7 @@ visitsRouter.get('/seguimientos', async (req: Request, res: Response) => {
       // Los compromisos pertenecen a la familia, no exclusivamente al técnico que los creó.
       // Cualquier usuario con VISITAS_READ puede consultarlos (instancia de una ONG).
       where: {},
-      include: { visitaOrigen: { include: { familia: { include: { comunidad: { select: { nombre: true } } } } } } },
+      include: { reprogramaciones: { orderBy: { creadoEn: 'asc' } }, visitaOrigen: { include: { familia: { include: { comunidad: { select: { nombre: true } } } } } } },
       orderBy: [{ fechaLimite: 'asc' }, { creadoEn: 'desc' }], take: 500,
     })
     res.setHeader('Cache-Control', 'no-store')
@@ -448,8 +543,9 @@ visitsRouter.get('/seguimientos', async (req: Request, res: Response) => {
       community: r.visitaOrigen.familia.comunidad.nombre,
       date: r.visitaOrigen.fecha.toISOString().slice(0,10),
       text: r.texto, category: r.responsable,
-      due: r.fechaLimite?.toISOString().slice(0,10) ?? null,
+      due: r.fechaLimite?.toISOString().slice(0,10) ?? null, nextVisit: r.revisionProximaVisita,
       status: r.estado, observation: r.observacionCierre,
+      reprogramaciones: r.reprogramaciones.map(h => ({ id: h.id, oldDate: h.fechaAnterior?.toISOString().slice(0, 10) ?? null, newDate: h.fechaNueva.toISOString().slice(0, 10), actorId: h.usuarioId, reason: h.motivo, at: h.creadoEn.toISOString() })),
     })) })
   } catch (error) { console.error('Error consultando seguimientos:', error); res.status(503).json({ error: 'No se pudieron consultar los compromisos.' }) }
 })
@@ -459,20 +555,38 @@ visitsRouter.patch('/seguimientos/:id', async (req: Request, res: Response) => {
   if (req.get('X-Requested-With') !== 'XMLHttpRequest') { res.status(403).json({ error: 'Solicitud no autorizada.' }); return }
   const id = String(req.params.id ?? '').toLowerCase()
   if (!uuid.test(id)) { res.status(400).json({ error: 'Compromiso inválido.' }); return }
-  const { status, due, text, observation } = req.body ?? {}
+  const { status, due, text, observation, reprogramar, reason } = req.body ?? {}
   if (!statusOptions.includes(status) || (due !== null && due !== undefined && (typeof due !== 'string' || !validDate(due))) ||
     (typeof text !== 'string' || !text.trim() || text.trim().length > 500) ||
     (observation !== undefined && (typeof observation !== 'string' || observation.length > 2000))) {
     res.status(400).json({ error: 'Verifica el estado, la fecha y el texto.' }); return
   }
+  if (reprogramar && (!due || due < fechaHoyGuatemala())) { res.status(422).json({ error: 'La nueva fecha del compromiso debe ser hoy o posterior.' }); return }
   try {
     const prisma = getPrismaClient()
     // La lectura de compromisos es compartida, pero su edición corresponde
     // exclusivamente al técnico dueño de la visita de origen.
     const updated = await prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT "id" FROM "visita_seguimiento" WHERE "id" = CAST(${id} AS UUID) FOR UPDATE`
+      const original = await tx.seguimientoVisita.findFirst({
+        where: { id, visitaOrigen: { usuarioResponsableId: req.session.userId! } },
+        select: { fechaLimite: true, estado: true },
+      })
+      if (!original) return false
+      if (reprogramar && original.estado === 'CUMPLIDO') throw new Error('FOLLOWUP_CLOSED')
+      const oldDate = original.fechaLimite?.toISOString().slice(0,10) ?? null
+      const newDate = due ?? null
+      if (oldDate !== newDate && !reprogramar) throw new Error('FOLLOWUP_DATE_CHANGE')
+      if (reprogramar && newDate && oldDate !== newDate) {
+        await tx.seguimientoReprogramacion.create({ data: {
+          seguimientoId: id, fechaAnterior: original.fechaLimite, fechaNueva: new Date(`${newDate}T12:00:00Z`),
+          usuarioId: req.session.userId!, motivo: typeof reason === 'string' ? reason.trim().slice(0, 500) || null : null,
+        } })
+      }
       const result = await tx.seguimientoVisita.updateMany({
         where: { id, visitaOrigen: { usuarioResponsableId: req.session.userId! } },
-        data: { estado: status, fechaLimite: due ? new Date(`${due}T12:00:00Z`) : null,
+        data: { estado: reprogramar ? 'PENDIENTE' : status, fechaLimite: newDate ? new Date(`${newDate}T12:00:00Z`) : null,
+          ...(reprogramar ? { revisionProximaVisita: false } : {}),
           texto: text.trim(), observacionCierre: observation?.trim() || null },
       })
       if (result.count !== 1) return false
@@ -481,7 +595,11 @@ visitsRouter.patch('/seguimientos/:id', async (req: Request, res: Response) => {
     })
     if (!updated) { res.status(404).json({ error: 'Compromiso no encontrado.' }); return }
     res.json({ accepted: true })
-  } catch (error) { console.error('Error actualizando seguimiento:', error); res.status(503).json({ error: 'No se pudo actualizar el compromiso.' }) }
+  } catch (error) {
+    if (error instanceof Error && error.message === 'FOLLOWUP_CLOSED') { res.status(409).json({ error: 'Un compromiso cumplido no se puede reprogramar.' }); return }
+    if (error instanceof Error && error.message === 'FOLLOWUP_DATE_CHANGE') { res.status(422).json({ error: 'Para cambiar la fecha, utiliza la opción Reprogramar y conserva el historial.' }); return }
+    console.error('Error actualizando seguimiento:', error); res.status(503).json({ error: 'No se pudo actualizar el compromiso.' })
+  }
 })
 
 // Evidencia privada: ruta autenticada, ligada a la visita del usuario y nunca servida como carpeta pública.
