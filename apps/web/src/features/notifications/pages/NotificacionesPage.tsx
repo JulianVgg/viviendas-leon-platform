@@ -6,6 +6,7 @@ import PageHeader from '@/components/common/PageHeader'
 import { useAuth } from '@/features/auth/AuthProvider'
 import NotificacionItem from '../components/NotificacionItem'
 import ReminderPreferences from '../components/ReminderPreferences'
+import PushPreferences from '../components/PushPreferences'
 import CrearInvitacionButton, { puedeGestionarInvitaciones } from '../components/CrearInvitacionButton'
 import InvitacionDetalleDialog from '../components/InvitacionDetalleDialog'
 import SeguimientoInvitaciones from '../components/SeguimientoInvitaciones'
@@ -135,6 +136,7 @@ export default function NotificacionesPage() {
     {gestionar && <SeguimientoInvitaciones />}
     </div>
     <div className="mt-5"><ReminderPreferences usuarioId={usuario?.id} /></div>
+    <PushPreferences usuarioId={usuario?.id} />
     <InvitacionDetalleDialog eventoId={invitacionAbierta} onClose={cerrarInvitacion}
       onResponded={() => { emitirCambioNotificaciones(); recargar() }} />
   </div>

@@ -64,6 +64,8 @@ export default defineConfig({
           '**/*.{js,css,html,ico,png,svg,webp,woff,woff2}',
         ],
         navigateFallback: '/index.html',
+        // Importar el manejador push sin reemplazar Workbox ni el cache offline.
+        importScripts: ['/push-handler.js'],
       },
     }),
   ],
