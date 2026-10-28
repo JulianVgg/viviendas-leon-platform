@@ -319,6 +319,7 @@ model Visita {
   condicionClimatica CondicionClimatica? @relation(fields: [condicionClimaticaId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
   captura      VisitaCaptura?
+  reprogramaciones VisitaReprogramacion[]
   compromisosVisita SeguimientoVisita[]
   evaluaciones EvaluacionCultivo[]
   evidencias   VisitaEvidencia[]
@@ -355,6 +356,7 @@ model SeguimientoVisita {
   texto                String
   responsable          String
   fechaLimite          DateTime? @map("fecha_limite") @db.Date
+  revisionProximaVisita Boolean   @default(false) @map("revision_proxima_visita")
   estado               String    @default("PENDIENTE")
   observacionCierre    String?   @map("observacion_cierre")
   actualizadoEn        DateTime  @updatedAt @map("actualizado_en")
@@ -362,6 +364,7 @@ model SeguimientoVisita {
 
   visitaOrigen Visita @relation(fields: [visitaOrigenId], references: [id], onDelete: Cascade)
   avisos       AvisoSeguimiento[]
+  reprogramaciones SeguimientoReprogramacion[]
 
   @@index([visitaOrigenId])
   @@index([estado, fechaLimite])
@@ -797,6 +800,8 @@ model Usuario {
   notificaciones Notificacion[]
   suscripcionesPush SuscripcionPush[]
   avisosSeguimiento AvisoSeguimiento[]
+  cambiosFechaVisita VisitaReprogramacion[]
+  cambiosFechaSeguimiento SeguimientoReprogramacion[]
   recordatorios Recordatorio[]
   preferenciaRecordatorio PreferenciaRecordatorio?
   eventosResponsable EventoInstitucional[] @relation("EventoResponsable")
@@ -997,4 +1002,35 @@ model AvisoSeguimiento {
   @@index([estado, proximoIntento, fechaProgramada], map: "aviso_seguimiento_programado_idx")
   @@index([usuarioId, estado], map: "aviso_seguimiento_usuario_idx")
   @@map("aviso_seguimiento")
+}
+
+// Historial inmutable de cambios de fecha. La fecha vigente permanece en la entidad original.
+model VisitaReprogramacion {
+  id            Int      @id @default(autoincrement())
+  visitaId      Int      @map("visita_id")
+  fechaAnterior DateTime @map("fecha_anterior") @db.Date
+  fechaNueva    DateTime @map("fecha_nueva") @db.Date
+  usuarioId     Int      @map("usuario_id")
+  motivo        String?
+  creadoEn      DateTime @default(now()) @map("creado_en")
+  visita        Visita   @relation(fields: [visitaId], references: [id], onDelete: Restrict)
+  usuario       Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@index([visitaId, creadoEn])
+  @@map("visita_reprogramacion")
+}
+
+model SeguimientoReprogramacion {
+  id            Int      @id @default(autoincrement())
+  seguimientoId String   @map("seguimiento_id") @db.Uuid
+  fechaAnterior DateTime? @map("fecha_anterior") @db.Date
+  fechaNueva    DateTime @map("fecha_nueva") @db.Date
+  usuarioId     Int      @map("usuario_id")
+  motivo        String?
+  creadoEn      DateTime @default(now()) @map("creado_en")
+  seguimiento   SeguimientoVisita @relation(fields: [seguimientoId], references: [id], onDelete: Restrict)
+  usuario       Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@index([seguimientoId, creadoEn])
+  @@map("seguimiento_reprogramacion")
 }

@@ -9,17 +9,18 @@ import { useAuth } from '@/features/auth/AuthProvider'
 import VisitDetailDialog from '@/features/visits/components/VisitDetailDialog'
 import {
   getVisitFollowUps, getVisitList, syncPendingVisits,
-  type VisitFollowUp, type VisitListItem,
+  todayInGuatemala, type VisitFollowUp, type VisitListItem,
 } from '@/features/visits/services/visitService'
 
 const card = 'rounded-2xl border border-gray-200 bg-white shadow-theme-xs dark:border-gray-800 dark:bg-gray-900'
 const dateLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('es-GT')
 const statusName = (item: VisitListItem) => item.syncStatus && item.syncStatus !== 'synced'
   ? item.syncStatus === 'failed' ? 'Error de sincronización' : 'Pendiente de sincronización'
-  : item.status === 'PROGRAMADA' ? 'Programada' : 'Realizada'
+  : item.status === 'PROGRAMADA' ? item.date < todayInGuatemala() ? 'Vencida · Reprogramar' : 'Programada' : item.status === 'REALIZADA' ? 'Realizada' : item.status
 const visitStatusColor = (item: VisitListItem) => {
   if (item.syncStatus === 'failed') return 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300'
   if (item.syncStatus && item.syncStatus !== 'synced') return 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
+  if (item.status === 'PROGRAMADA' && item.date < todayInGuatemala()) return 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300'
   if (item.status === 'PROGRAMADA') return 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300'
   return 'bg-green-50 text-green-700 dark:bg-green-500/10 dark:text-green-300'
 }

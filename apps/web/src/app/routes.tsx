@@ -10,6 +10,7 @@ import FamilyDetailPage from '@/features/families/pages/FamilyDetailPage'
 import FamilyEditPage from '@/features/families/pages/FamilyEditPage'
 import HuertosPage, { CreateGardenPage } from '@/features/agriculture/pages/HuertosPage'
 import CultivosPage from '@/features/agriculture/pages/CultivosPage'
+import CiclosAgricolasPage from '@/features/agriculture/pages/CiclosAgricolasPage'
 
 import OfflineTestPage from '@/features/offline/pages/OfflineTestPage'
 import OfflineOperationsTestPage from '@/features/offline/pages/OfflineOperationsTestPage'
@@ -207,9 +208,8 @@ export default function AppRoutes() {
 
           <Route path="gestion-agricola/huertos" element={<HuertosPage />} />
           <Route path="gestion-agricola/huertos/nuevo" element={<CreateGardenPage />} />
-
-          <Route path="gestion-agricola/cultivos" element={<CultivosPage />} />
-
+          <Route path="gestion-agricola/ciclos" element={<CiclosAgricolasPage />} />
+          <Route path="gestion-agricola/cultivos" element={<Navigate to="/administracion/cultivos" replace />} />
           <Route
             path="gestion-agricola/produccion"
             element={module(
@@ -324,6 +324,7 @@ export default function AppRoutes() {
           <Route path="administracion/comunidades" element={<CommunitiesPage />} />
           <Route path="administracion/municipios" element={<MunicipalitiesPage />} />
           <Route path="administracion/programas" element={<ProgramsPage />} />
+          <Route path="administracion/cultivos" element={<CultivosPage />} />
 
           {/* AUTH-04: Acceso exclusivo de Directora */}
           <Route element={<DirectoraRoute />}>

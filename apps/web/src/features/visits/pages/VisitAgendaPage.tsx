@@ -11,7 +11,7 @@ import { useAuth } from '@/features/auth/AuthProvider'
 import RescheduleVisitDialog from '@/features/visits/components/RescheduleVisitDialog'
 import FollowUpEditDialog from '@/features/visits/components/FollowUpEditDialog'
 import VisitDetailDialog from '@/features/visits/components/VisitDetailDialog'
-import { deleteScheduledVisit, getVisitFollowUps, getVisitList, syncPendingVisits, type VisitFollowUp, type VisitListItem } from '@/features/visits/services/visitService'
+import { deleteScheduledVisit, getVisitFollowUps, getVisitList, syncPendingVisits, todayInGuatemala, type VisitFollowUp, type VisitListItem } from '@/features/visits/services/visitService'
 
 const monthLabels = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
 const weekdays = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom']
@@ -20,7 +20,7 @@ const dateLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateStr
 const card = 'rounded-2xl border border-gray-200 bg-white shadow-theme-xs dark:border-gray-800 dark:bg-gray-900'
 const visitKey = (visit: VisitListItem) => visit.operationId ?? `visit-${visit.id}`
 type Reminder = { key: string; date: string | null; sortDate: string; family: string; description: string; type: 'visit' | 'followup'; visit?: VisitListItem; followup?: VisitFollowUp }
-type CalendarEvent = { key: string; label: string; kind: 'visit' | 'followup'; visit?: VisitListItem; followup?: VisitFollowUp }
+type CalendarEvent = { key: string; label: string; kind: 'visit' | 'followup' | 'visit-history' | 'followup-history'; visit?: VisitListItem; followup?: VisitFollowUp; movedTo?: string }
 
 export default function VisitAgendaPage() {
   const { usuario } = useAuth()
@@ -43,7 +43,7 @@ export default function VisitAgendaPage() {
   const [schedulingDate, setSchedulingDate] = useState<string | null>(null)
   const [expandedDay, setExpandedDay] = useState<string | null>(null)
   const carousel = useRef<HTMLDivElement>(null)
-  const today = dateKey(new Date())
+  const today = todayInGuatemala()
   // VIS-05: Dirección puede consultar todos los eventos. Las modificaciones
   // de una visita o compromiso ajeno permanecen reservadas a su responsable.
   const institutionManager = Boolean(usuario?.roles.some(role => {
@@ -117,13 +117,30 @@ export default function VisitAgendaPage() {
       map.set(day, visits.map(visit => ({ key: `visit-${visitKey(visit)}`, label: visit.familyName, kind: 'visit', visit })))
     }
     for (const followup of followups) {
-      if (followup.status === 'CUMPLIDO' || !followup.due) continue
-      const list = map.get(followup.due) ?? []
+      if (followup.status === 'CUMPLIDO') continue
+      const scheduledNext = followup.nextVisit ? items
+        .filter(v => v.familyId === followup.familyId && v.status === 'PROGRAMADA' && v.date >= followup.date)
+        .sort((a, b) => a.date.localeCompare(b.date))[0]?.date : null
+      const displayDate = followup.nextVisit ? scheduledNext : followup.due
+      if (!displayDate) continue
+      const list = map.get(displayDate) ?? []
       list.push({ key: `followup-${followup.id}`, label: followup.text, kind: 'followup', followup })
-      map.set(followup.due, list)
+      map.set(displayDate, list)
+    }
+    // En la fecha antigua dejamos una huella visual, sin crear una segunda visita.
+    for (const visit of items) for (const h of visit.reprogramaciones ?? []) {
+      const prior = map.get(h.oldDate ?? '') ?? []
+      prior.push({ key: `visit-trace-${visit.id}-${h.id}`, label: `Reprogramada · ${visit.familyName}`, kind: 'visit-history', visit, movedTo: h.newDate })
+      if (h.oldDate) map.set(h.oldDate, prior)
+    }
+    for (const followup of followups) for (const h of followup.reprogramaciones ?? []) {
+      if (!h.oldDate) continue
+      const prior = map.get(h.oldDate) ?? []
+      prior.push({ key: `followup-trace-${followup.id}-${h.id}`, label: `Reprogramado · ${followup.text}`, kind: 'followup-history', followup, movedTo: h.newDate })
+      map.set(h.oldDate, prior)
     }
     return map
-  }, [byDate, followups])
+  }, [byDate, followups, items])
   const cells = useMemo(() => {
     const first = new Date(month.getFullYear(), month.getMonth(), 1)
     const offset = (first.getDay() + 6) % 7
@@ -134,11 +151,11 @@ export default function VisitAgendaPage() {
     })
   }, [month])
   const reminders = useMemo<Reminder[]>(() => {
-    const scheduled: Reminder[] = items.filter(v => v.status === 'PROGRAMADA' && v.date >= today).map(v => ({
-      key:visitKey(v),date:v.date,sortDate:v.date,family:v.familyName,description:`Visita programada · ${v.community}${v.capture?.timeSlot ? ` · ${v.capture.timeSlot === 'MANANA' ? 'Mañana' : 'Tarde'}` : ''}`,type:'visit',visit:v,
+    const scheduled: Reminder[] = items.filter(v => v.status === 'PROGRAMADA').map(v => ({
+      key:visitKey(v),date:v.date,sortDate:v.date,family:v.familyName,description:`${v.date < today ? 'Visita vencida · Reprogramar' : 'Visita programada'} · ${v.community}${v.capture?.timeSlot ? ` · ${v.capture.timeSlot === 'MANANA' ? 'Mañana' : 'Tarde'}` : ''}`,type:'visit',visit:v,
     }))
     const followUpReminders: Reminder[] = followups.filter(f => f.status !== 'CUMPLIDO').map(f => ({
-      key:f.id,date:f.due, sortDate:f.due ?? '9999-12-31', family:f.familyName,
+      key:f.id,date:f.nextVisit ? null : f.due, sortDate:f.nextVisit ? '9999-12-31' : f.due ?? '9999-12-31', family:f.familyName,
       description:f.text,type:'followup',followup:f,
     }))
     // Los seguimientos vencidos siguen visibles: no desaparecen al pasar la fecha.
@@ -177,14 +194,15 @@ export default function VisitAgendaPage() {
   return <div className="visits-enter">
     <PageMeta title="Agenda de visitas | Viviendas León" description="Agenda y compromisos de visitas técnicas" />
     <PageHeader title="Agenda de visitas" description="" />
-    <p className="mb-3 text-sm text-gray-500 dark:text-gray-400">Haz doble clic en un día vacío para agendar una visita. En teléfono o con teclado, pulsa el número del día. Cada casilla muestra hasta tres registros.</p>
     {error && <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-500/10 dark:text-red-300">{error}</div>}
     {local && !error && <p className="mb-3 text-xs font-medium text-amber-700 dark:text-amber-300">Mostrando datos guardados en este dispositivo. Editar pendientes requiere conexión.</p>}
     <div className="mb-4 flex flex-wrap items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
       <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-brand-500"/>Programada</span>
+      <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-rose-500"/>Visita vencida</span>
+      <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-slate-400"/>Reprogramación</span>
       <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-emerald-500"/>Realizada</span>
       <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-amber-500"/>Seguimiento pendiente</span>
-      <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-red-500"/>No cumplido ({followups.filter(f => f.status === 'NO_CUMPLIDO').length})</span>
+      <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-red-500"/>No cumplido</span>
     </div>
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
       <section className={card} aria-label="Calendario de visitas">
@@ -198,18 +216,19 @@ export default function VisitAgendaPage() {
           <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50 text-center text-xs font-semibold text-gray-500 dark:border-gray-800 dark:bg-gray-800/40 dark:text-gray-400">{weekdays.map(day=><span key={day} className="py-3">{day}</span>)}</div>
           <div className="grid grid-cols-7">{cells.map((cell,index) => {
             const daily = eventsByDate.get(cell.key) ?? []
-            return <div key={cell.key} onDoubleClick={() => setSchedulingDate(cell.key)}
-              title={`Doble clic para agendar una visita el ${cell.key}`}
+            return <div key={cell.key} onDoubleClick={() => { if (cell.key >= today) setSchedulingDate(cell.key) }}
+              title={cell.key >= today ? `Agendar visita el ${cell.key}` : undefined}
               className={`min-h-28 border-b border-r border-gray-100 p-1.5 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-white/5 md:min-h-36 ${index%7===0 ? 'border-l border-gray-100 dark:border-gray-800' : ''} ${!cell.currentMonth ? 'bg-gray-50/70 dark:bg-gray-950/30' : ''}`}>
-              <button type="button" onClick={() => setSchedulingDate(cell.key)}
-                aria-label={`Agendar visita el ${cell.key}`}
-                className={`mb-2 inline-flex size-7 items-center justify-center rounded-full text-xs font-semibold hover:bg-brand-100 focus-visible:outline-2 focus-visible:outline-brand-500 ${cell.key===today?'bg-brand-500 text-white':cell.currentMonth?'text-gray-800 dark:text-gray-200':'text-gray-400'}`}>{cell.date}</button>
+              <button type="button" onClick={() => { if (cell.key >= today) setSchedulingDate(cell.key) }}
+                disabled={cell.key < today}
+                aria-label={cell.key < today ? `Día ${cell.key}` : `Agendar visita el ${cell.key}`}
+                className={`mb-2 inline-flex size-7 items-center justify-center rounded-full text-xs font-semibold focus-visible:outline-2 focus-visible:outline-brand-500 ${cell.key < today ? 'cursor-default text-gray-400 dark:text-gray-500' : 'hover:bg-brand-100'} ${cell.key===today?'bg-brand-500 text-white':cell.currentMonth?'text-gray-800 dark:text-gray-200':'text-gray-400'}`}>{cell.date}</button>
               <div className="space-y-1">
                 {daily.slice(0,3).map(event => <button key={event.key} type="button"
                   onClick={() => event.visit ? setSelected(event.visit) : event.followup && openFollowUp(event.followup)}
                   onDoubleClick={e => e.stopPropagation()}
-                  title={event.kind === 'visit' ? `Ver visita: ${event.label}` : `Ver seguimiento: ${event.label}`}
-                  className={`block w-full truncate rounded-md border-l-[3px] px-1.5 py-1 text-left text-[11px] font-medium transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-brand-500 ${event.kind==='followup' ? event.followup?.status === 'NO_CUMPLIDO' ? 'border-red-500 bg-red-50 text-red-800 dark:bg-red-500/10 dark:text-red-300' : 'border-amber-500 bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300' :event.visit?.status==='REALIZADA'?'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300':'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-200'}`}>
+                  title={event.movedTo ? `Reprogramado para ${dateLabel(event.movedTo)}` : event.kind === 'visit' ? `Ver visita: ${event.label}` : `Ver seguimiento: ${event.label}`}
+                  className={`block w-full truncate rounded-md border-l-[3px] px-1.5 py-1 text-left text-[11px] font-medium transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-brand-500 ${event.kind.endsWith('history') ? 'border-slate-400 border-dashed bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300' : event.kind==='visit' && event.visit?.status==='PROGRAMADA' && event.visit.date < today ? 'border-rose-500 bg-rose-50 text-rose-800 dark:bg-rose-500/10 dark:text-rose-300' : event.kind==='followup' ? event.followup?.status === 'NO_CUMPLIDO' ? 'border-red-500 bg-red-50 text-red-800 dark:bg-red-500/10 dark:text-red-300' : 'border-amber-500 bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300' :event.visit?.status==='REALIZADA'?'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300':'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-200'}`}>
                   {event.kind === 'followup' && <Clock3 size={10} className="mr-1 inline"/>}{event.label}
                 </button>)}
                 {daily.length > 3 && <button type="button" onClick={() => setExpandedDay(cell.key)}
@@ -234,14 +253,15 @@ export default function VisitAgendaPage() {
           }} className="custom-scrollbar max-h-[450px] min-w-0 flex-1 snap-y snap-mandatory space-y-3 overflow-y-auto overscroll-contain">
             {loading ? <p className="py-8 text-center text-sm text-gray-500">Cargando…</p> : reminders.length === 0 ? <div className="py-9 text-center text-sm text-gray-500"><CheckCheck className="mx-auto mb-2 text-emerald-500" size={27}/>No hay visitas programadas ni seguimientos abiertos.</div>
             : reminders.map(item => <article key={item.key} data-reminder className="snap-start rounded-xl border border-gray-200 bg-gray-50/30 p-3 dark:border-gray-800 dark:bg-white/5">
-              <div className="mb-2 flex items-center gap-2 text-xs font-semibold"><span className={`rounded-full px-2 py-1 ${item.type==='visit' ? 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300' : item.followup?.status === 'NO_CUMPLIDO' ? 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'}`}>{item.type==='visit' ? 'Visita programada' : item.followup?.status === 'NO_CUMPLIDO' ? 'No cumplido' : 'Seguimiento'}</span><span className={item.date && item.date<today?'text-rose-600':'text-gray-500'}>{item.date ? dateLabel(item.date) : 'Sin fecha de revisión'}{item.date && item.date<today?' · Vencido':''}</span></div>
+              <div className="mb-2 flex items-center gap-2 text-xs font-semibold"><span className={`rounded-full px-2 py-1 ${item.type==='visit' ? item.date && item.date < today ? 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300' : 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300' : item.followup?.status === 'NO_CUMPLIDO' ? 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'}`}>{item.type==='visit' ? item.date && item.date < today ? 'Visita vencida' : 'Visita programada' : item.followup?.status === 'NO_CUMPLIDO' ? 'No cumplido' : 'Seguimiento'}</span><span className={item.date && item.date<today?'text-rose-600':'text-gray-500'}>{item.date ? dateLabel(item.date) : item.followup?.nextVisit ? 'Próxima visita' : 'Sin fecha'}{item.date && item.date<today?' · Vencido':''}</span></div>
               <p className="text-sm font-semibold text-gray-900 dark:text-white">{item.family}</p>
               <p className="mt-1 line-clamp-3 text-sm leading-5 text-gray-600 dark:text-gray-300">{item.description}</p>
               <div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold text-brand-600 dark:text-brand-400">
                 {item.visit && <><button type="button" onClick={()=>setSelected(item.visit!)} className="hover:underline">Ver detalle →</button>
                   {canManageVisit(item.visit) && <button type="button" disabled={!item.visit.id || Boolean(item.visit.syncStatus && item.visit.syncStatus !== 'synced')} onClick={()=>openReschedule(item.visit!)} className="hover:underline disabled:cursor-not-allowed disabled:opacity-40">Cambiar fecha</button>}</>}
                 {item.followup && <button type="button" onClick={()=>openFollowUp(item.followup!)} className="inline-flex items-center gap-1 hover:underline"><Edit3 size={13}/> {canManageFollowUp(item.followup) ? 'Editar seguimiento' : 'Ver seguimiento'}</button>}
-                {item.visit ? (canManageVisit(item.visit) && <Link to={`/visitas/nueva?familia=${item.visit.familyId}&fecha=${today}${item.visit.id && item.visit.status === 'PROGRAMADA' ? `&programada=${item.visit.id}` : ''}`} className="hover:underline">Registrar visita ↗</Link>) : (item.followup && canManageFollowUp(item.followup) && <Link to={`/visitas/nueva?familia=${item.followup.familyId}&fecha=${today}`} className="hover:underline">Registrar visita ↗</Link>)}
+                {item.visit && item.visit.date < today && canManageVisit(item.visit) && <button type="button" className="font-semibold text-rose-700 underline" onClick={()=>openReschedule(item.visit!)}>Reprogramar primero ↗</button>}
+                {item.visit ? (canManageVisit(item.visit) && item.visit.date === today && <Link to={`/visitas/nueva?familia=${item.visit.familyId}&fecha=${today}${item.visit.id && item.visit.status === 'PROGRAMADA' ? `&programada=${item.visit.id}` : ''}`} className="hover:underline">Registrar visita ↗</Link>) : (item.followup && canManageFollowUp(item.followup) && <Link to={`/visitas/nueva?familia=${item.followup.familyId}&fecha=${today}`} className="hover:underline">Registrar visita ↗</Link>)}
               </div>
             </article>)}
           </div>
@@ -261,23 +281,25 @@ export default function VisitAgendaPage() {
         {(expandedDay ? eventsByDate.get(expandedDay) ?? [] : []).map(event => <button type="button" key={event.key}
           onClick={() => { setExpandedDay(null); if (event.visit) setSelected(event.visit); else if (event.followup) openFollowUp(event.followup) }}
           className="flex w-full items-start gap-3 rounded-lg border border-gray-200 p-3 text-left transition hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-brand-500 dark:border-gray-700 dark:hover:bg-gray-800">
-          <span className={`mt-1 size-2.5 shrink-0 rounded-full ${event.kind==='followup' ? event.followup?.status === 'NO_CUMPLIDO' ? 'bg-red-500' : 'bg-amber-500' :event.visit?.status==='REALIZADA'?'bg-emerald-500':'bg-brand-500'}`}/>
+          <span className={`mt-1 size-2.5 shrink-0 rounded-full ${event.kind.endsWith('history') ? 'bg-slate-400' : event.kind==='visit' && event.visit?.status==='PROGRAMADA' && event.visit.date < today ? 'bg-rose-500' : event.kind==='followup' ? event.followup?.status === 'NO_CUMPLIDO' ? 'bg-red-500' : 'bg-amber-500' :event.visit?.status==='REALIZADA'?'bg-emerald-500':'bg-brand-500'}`}/>
           <span className="min-w-0"><span className="block break-words text-sm font-semibold text-gray-900 dark:text-white">{event.label}</span>
-          <span className="mt-1 block text-xs text-gray-500">{event.kind==='followup'?'Seguimiento pendiente':event.visit?.status==='REALIZADA'?'Visita realizada':'Visita programada'} · Abrir detalle</span></span>
+          <span className="mt-1 block text-xs text-gray-500">{event.movedTo ? `Se trasladó al ${dateLabel(event.movedTo)}` : event.kind==='followup'?'Seguimiento pendiente':event.visit?.status==='REALIZADA'?'Visita realizada':event.visit?.date && event.visit.date < today ? 'Visita vencida':'Visita programada'} · Abrir detalle</span></span>
         </button>)}
       </div>
     </Dialog>
     <ScheduleVisitDialog date={schedulingDate} onClose={() => setSchedulingDate(null)} onSaved={() => { setSchedulingDate(null); void refresh() }}/>
     <VisitDetailDialog key={selected?.operationId ?? selected?.id ?? 'dialog-visit'} visit={selected} onClose={()=>setSelected(null)} extra={selected ? <section className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+      {Boolean(selected.reprogramaciones?.length) && <section className="mb-4 rounded-lg bg-slate-50 p-3 text-xs dark:bg-slate-800"><h4 className="mb-2 font-semibold">Reprogramaciones</h4>{selected.reprogramaciones?.map(h=><p className="mb-1" key={h.id}>{h.oldDate} → {h.newDate} · {new Date(h.at).toLocaleString('es-GT')}{h.reason ? ` · ${h.reason}` : ''}</p>)}</section>}
+      {selected.status === 'PROGRAMADA' && selected.date < today && <div role="alert" className="mb-3 rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800 dark:bg-rose-500/10 dark:text-rose-300">Esta visita está vencida. Reprográmala antes de registrarla.</div>}
       <h3 className="mb-3 font-semibold text-gray-900 dark:text-white">Seguimientos de esta familia</h3>
       {detailsFollowUps.length===0 ? <p className="text-sm text-gray-500">Sin compromisos pendientes.</p> : <div className="space-y-2">{detailsFollowUps.map(f=><div key={f.id} className="rounded-lg bg-gray-50 p-3 text-sm dark:bg-gray-800">
-        <p className="break-words text-gray-800 dark:text-gray-200">{f.text}</p><p className="mt-1 text-xs text-gray-500">{f.status==='CUMPLIDO'?'Cumplido':f.status==='NO_CUMPLIDO'?'No cumplido':'Pendiente'}{f.due?` · ${dateLabel(f.due)}`:''}</p>
+        <p className="break-words text-gray-800 dark:text-gray-200">{f.text}</p><p className="mt-1 text-xs text-gray-500">{f.status==='CUMPLIDO'?'Cumplido':f.status==='NO_CUMPLIDO'?'No cumplido':'Pendiente'}{f.nextVisit ? ' · Próxima visita' : f.due ? ` · ${dateLabel(f.due)}` : ''}</p>
         <button type="button" onClick={()=>openFollowUp(f)} className="mt-2 text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400">{canManageFollowUp(f) ? 'Editar seguimiento →' : 'Ver seguimiento →'}</button>
       </div>)}</div>}
       <div className="mt-3 flex flex-wrap gap-4">
         {canManageVisit(selected) && selected.status === 'PROGRAMADA' && <button type="button" disabled={!selected.id} onClick={()=>openReschedule(selected)} className="text-xs font-semibold text-brand-600 hover:underline disabled:opacity-40 dark:text-brand-400">Cambiar fecha programada</button>}
         {canManageVisit(selected) && selected.status === 'PROGRAMADA' && <button type="button" disabled={!selected.id || Boolean(selected.syncStatus && selected.syncStatus !== 'synced')} onClick={()=>requestDelete(selected)} className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:underline disabled:cursor-not-allowed disabled:opacity-40 dark:text-red-400"><Trash2 size={14}/> Eliminar visita</button>}
-        {visitOwner(selected) && <Link className="text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400" to={`/visitas/nueva?familia=${selected.familyId}${selected.id && selected.status === 'PROGRAMADA' ? `&programada=${selected.id}` : ''}`}>Registrar siguiente visita ↗</Link>}
+        {visitOwner(selected) && !(selected.status === 'PROGRAMADA' && selected.date < today) && <Link className="text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400" to={`/visitas/nueva?familia=${selected.familyId}${selected.id && selected.status === 'PROGRAMADA' ? `&programada=${selected.id}` : ''}`}>Registrar siguiente visita ↗</Link>}
       </div>
     </section> : undefined}/>
     <Dialog open={Boolean(deleteTarget)} onClose={() => { if (!deleteBusy) setDeleteTarget(null) }}

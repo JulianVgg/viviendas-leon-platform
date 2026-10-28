@@ -61,7 +61,7 @@ test('la agenda contiene solo eventos, visitas y compromisos asignados', async (
   assert.equal(result.proximas[0].id, 'VISITA:11')
   assert.equal(result.pendientes[0].id, 'COMPROMISO:uuid')
   assert.deepEqual(filtros.find(([k]) => k === 'evento')[1].OR, [
-    { responsableId: 7 }, { participantes: { some: { usuarioId: 7 } } },
+    { responsableId: 7 }, { participantes: { some: { usuarioId: 7, estadoInvitacion: { in: ['ACEPTADA', 'ASIGNADO'] } } } },
   ])
   assert.ok(filtros.filter(([k]) => k === 'visita').every(([, q]) => q.usuarioResponsableId === 7))
   assert.ok(filtros.filter(([k]) => k.startsWith('compromiso')).every(([, q]) => q.visitaOrigen.usuarioResponsableId === 7))

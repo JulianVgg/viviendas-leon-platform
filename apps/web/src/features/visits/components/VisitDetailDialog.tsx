@@ -68,6 +68,7 @@ export default function VisitDetailDialog({ visit, onClose, extra }: { visit: Vi
             <DetailLine label="Compromisos" value={visit.capture?.commitments.length ?? 0}/></dl>
         </section>
         {visit.capture?.commitments && visit.capture.commitments.length > 0 && <section className="rounded-xl border border-slate-200 p-4 dark:border-slate-700"><h3 className="mb-2 font-semibold text-slate-900 dark:text-white">Compromisos registrados</h3><ul className="space-y-2">{visit.capture.commitments.map((c,i) => <li key={i} className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-200"><strong>{c.category}:</strong> {c.text}{c.due ? ` · ${dateLabel(c.due)}` : ''}</li>)}</ul></section>}
+        {Boolean(visit.reprogramaciones?.length) && <section className="rounded-lg border border-slate-200 p-3 text-xs dark:border-slate-700"><h3 className="mb-2 font-semibold">Trazabilidad de reprogramaciones</h3>{visit.reprogramaciones?.map(h=><p className="mb-1" key={h.id}>{h.oldDate} → {h.newDate} · {new Date(h.at).toLocaleString('es-GT')}{h.reason ? ` · ${h.reason}` : ''}</p>)}</section>}
         {extra}
         <p className="flex items-center gap-2 text-xs text-slate-500"><CloudSun size={15}/> Referencia: {visit.id ? `Visita #${visit.id}` : 'Registro local'}</p>
       </div>

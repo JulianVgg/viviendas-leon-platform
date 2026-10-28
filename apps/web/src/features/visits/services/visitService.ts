@@ -7,12 +7,20 @@ export const VISIT_SYNC_KIND = 'visits.create.v1'
 export const MAX_VISIT_PHOTOS = 4
 export const MAX_VISIT_PHOTO_BYTES = 2 * 1024 * 1024
 export type FollowUpStatus = 'PENDIENTE' | 'CUMPLIDO' | 'NO_CUMPLIDO'
+export type RescheduleHistory = { id: number; oldDate: string | null; newDate: string; actorId: number; reason: string | null; at: string }
+export function todayInGuatemala(now: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Guatemala', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now)
+  const part = (type: string) => parts.find(p => p.type === type)?.value ?? ''
+  return `${part('year')}-${part('month')}-${part('day')}`
+}
 export type VisitTimeSlot = 'MANANA' | 'TARDE'
-export type VisitFollowUp = { id: string; sourceVisitId: number | null; responsibleUserId?: number; familyId: number; familyName: string; community: string; date: string; text: string; category: 'Familia' | 'ONG'; due: string | null; status: FollowUpStatus; observation?: string | null; local?: boolean }
+export type VisitFollowUp = { id: string; sourceVisitId: number | null; responsibleUserId?: number; familyId: number; familyName: string; community: string; date: string; text: string; category: 'Familia' | 'ONG'; due: string | null; nextVisit?: boolean; status: FollowUpStatus; observation?: string | null; local?: boolean; reprogramaciones?: RescheduleHistory[] }
 export type FollowUpReview = { id: string; status: FollowUpStatus }
 export type VisitPhotoFile = { id: string; name: string; blob: Blob }
 export type VisitEvidence = { id: number; name: string; url: string }
 export type CropCapture = {
+  // Optional for backwards compatibility with unsynchronised VIS-03/VIS-04 captures.
+  cicloCultivoId?: number
   name: string; stage: string; quality: string; plants: number | null
   findings: { type: 'plaga' | 'enfermedad'; name: string; damage: string }[]
   production: boolean; perPlantUnits: number | null; perPlantKg: number | null
@@ -20,12 +28,12 @@ export type CropCapture = {
   priceBasis: 'unidad' | 'kg'
 }
 export type VisitCapture = {
-  familyId: number; date: string; status: 'PROGRAMADA' | 'REALIZADA'; timeSlot?: VisitTimeSlot
+  familyId: number; date: string; status: 'PROGRAMADA' | 'REALIZADA'; capturedAt?: string; timeSlot?: VisitTimeSlot
   recordatorios?: ConfigRecordatorios // Configuración viaja con la operación offline.
   scheduledVisitId?: number // Si se completa una cita, conserva el mismo ID de la visita.
   weather: string; checkIn: string; crops: CropCapture[]
   recommendation: string; treatment: string; observations: string
-  commitments: { id: string; text: string; category: 'Familia' | 'ONG'; due: string | null }[]
+  commitments: { id: string; text: string; category: 'Familia' | 'ONG'; due: string | null; nextVisit?: boolean }[]
   reviews: FollowUpReview[]
   programacion?: { date: string; timeSlot?: VisitTimeSlot; operationId?: string }
 }
@@ -34,6 +42,7 @@ export type VisitListItem = {
   id: number | null; operationId: string | null; date: string; status: string; responsibleName?: string; responsibleUserId?: number
   familyId: number; familyName: string; community: string
   capture: VisitCapture | null; evidences?: VisitEvidence[]; localPhotos?: VisitPhotoFile[]
+  reprogramaciones?: RescheduleHistory[]
   syncStatus?: 'pending' | 'syncing' | 'failed' | 'synced'
 }
 
@@ -131,6 +140,11 @@ export function syncPendingVisits(userId: number): Promise<void> {
 }
 
 export async function saveVisitCapture(userId: number, familyName: string, community: string, capture: VisitCapture, photos: VisitPhotoFile[] = []): Promise<{ status: 'synced' | 'pending' | 'failed'; id: string }> {
+  // No incorporar citas retroactivas a la cola offline. Las visitas REALIZADAS
+  // capturadas anteriormente mantienen su proceso de sincronización original.
+  if (capture.status === 'PROGRAMADA' && capture.date < todayInGuatemala()) {
+    throw new Error('No puedes agendar visitas en fechas anteriores a hoy.')
+  }
   if (photos.length > MAX_VISIT_PHOTOS || photos.some(photo => photo.blob.type !== 'image/jpeg' || photo.blob.size > MAX_VISIT_PHOTO_BYTES)) {
     throw new Error('Las fotos no cumplen los límites admitidos.')
   }
@@ -170,7 +184,7 @@ export async function getVisitFollowUps(userId: number): Promise<{ items: VisitF
           id: commitment.id, responsibleUserId: userId, familyId: payload.capture.familyId,
           familyName: payload.familyName, community: payload.community,
           sourceVisitId: null, date: payload.capture.date, text: commitment.text,
-          category: commitment.category, due: commitment.due, status: 'PENDIENTE', local: true,
+          category: commitment.category, due: commitment.due, nextVisit: commitment.nextVisit ?? false, status: 'PENDIENTE', local: true,
         })
       }
     }
@@ -183,7 +197,7 @@ export async function getVisitFollowUps(userId: number): Promise<{ items: VisitF
   return { items: [...merged.values()], local }
 }
 
-export async function updateVisitFollowUp(id: string, changes: Pick<VisitFollowUp, 'status' | 'text' | 'due' | 'observation'>): Promise<void> {
+export async function updateVisitFollowUp(id: string, changes: Pick<VisitFollowUp, 'status' | 'text' | 'due' | 'observation'> & { reprogramar?: boolean; reason?: string }): Promise<void> {
   const response = await fetch(`/api/v1/visitas/seguimientos/${encodeURIComponent(id)}`, {
     method: 'PATCH', credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
@@ -197,11 +211,11 @@ export async function updateVisitFollowUp(id: string, changes: Pick<VisitFollowU
   // releerán desde el servidor al volver a enfocarse.
 }
 
-export async function rescheduleVisit(visitId: number, date: string): Promise<void> {
+export async function rescheduleVisit(visitId: number, date: string, reason = ''): Promise<void> {
   const response = await fetch(`/api/v1/visitas/agenda/${visitId}`, {
     method: 'PATCH', credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-    body: JSON.stringify({ date }),
+    body: JSON.stringify({ date, reason }),
   })
   if (!response.ok) {
     const payload = await response.json().catch(() => null) as { error?: string } | null
