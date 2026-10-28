@@ -9,7 +9,7 @@ import FormField, { formControlClassName } from '@/components/ui/FormField'
 import { FamilyApiError, fetchFamilies } from '@/features/families/services/familyService'
 import { getOfflineData, saveOfflineData } from '@/db/offlineDb'
 import { useAuth } from '@/features/auth/AuthProvider'
-import { listCycles, type Cycle } from '@/features/agriculture/services/cyclesService'
+import { CyclesApiError, listCycles, type Cycle } from '@/features/agriculture/services/cyclesService'
 import { addCivilDays, DIAS_CICLO_VISITA } from '@/features/visits/services/visitPlanning'
 import { saveVisitCapture, todayInGuatemala, type VisitCapture, type CropCapture, type VisitPhotoFile } from '@/features/visits/services/visitService'
 import SearchableSelect, { catalogOptions } from '@/features/visits/components/SearchableSelect'
@@ -65,6 +65,7 @@ export default function VisitRegisterPage() {
   const [reviewStates, setReviewStates] = useState<Record<string, FollowUpStatus>>({})
   const [cropsState, setCrops] = useState<CropEntry[]>([])
   const [availableCycles, setAvailableCycles] = useState<Cycle[]>([])
+  const [cyclesLoading, setCyclesLoading] = useState(false)
   const [cyclesWarning, setCyclesWarning] = useState('')
   const [commitments, setCommitments] = useState<Commitment[]>([])
   const [treatment, setTreatment] = useState('')
@@ -89,13 +90,18 @@ export default function VisitRegisterPage() {
     setCrops([])
     setAvailableCycles([])
     setCyclesWarning('')
+    setCyclesLoading(Boolean(usuario && familyId))
     if (!usuario || !familyId) return () => controller.abort()
     const key = `visits:cycles:v1:user:${usuario.id}:family:${familyId}`
     listCycles({ familiaId: Number(familyId) }, controller.signal).then(records => {
       if (controller.signal.aborted) return
       setAvailableCycles(records.filter(record => record.estado === 'ACTIVO'))
       void saveOfflineData(key, records).catch(() => {})
-    }).catch(async () => {
+    }).catch(async (reason: unknown) => {
+      if (reason instanceof CyclesApiError && [401, 403].includes(reason.status)) {
+        if (!controller.signal.aborted) setCyclesWarning('No tienes permiso para consultar siembras.')
+        return
+      }
       try {
         const cached = await getOfflineData<Cycle[]>(key)
         if (!controller.signal.aborted) {
@@ -103,7 +109,7 @@ export default function VisitRegisterPage() {
           setCyclesWarning('No se pudieron actualizar los ciclos: comprueba que las siembras estén sincronizadas antes de evaluar.')
         }
       } catch { if (!controller.signal.aborted) setCyclesWarning('No se pudieron consultar ciclos agrícolas.') }
-    })
+    }).finally(() => { if (!controller.signal.aborted) setCyclesLoading(false) })
     return () => controller.abort()
   }, [familyId, usuario?.id])
 
@@ -188,6 +194,10 @@ export default function VisitRegisterPage() {
     String(item.familyId) === familyId && item.status !== 'CUMPLIDO' && item.date <= date
   ).sort((a,b) => (a.due ?? a.date).localeCompare(b.due ?? b.date)), [followUps, familyId, date])
   const selectedFamily = useMemo(() => familyOptions.find(f => String(f.id) === familyId), [familyId, familyOptions])
+  const addCycleEvaluation = (cycle: Cycle) => {
+    setCrops(list => list.some(item => item.cicloCultivoId === cycle.id)
+      ? list : [...list, { ...newCrop(), cicloCultivoId: cycle.id, name: cycle.cultivo.nombre }])
+  }
   const updateCrop = (id: string, patch: Partial<CropEntry>) => setCrops(list => list.map(c => c.id === id ? { ...c, ...patch } : c))
   const updateFinding = (cropId: string, findingId: string, patch: Partial<Finding>) => setCrops(list => list.map(c => c.id === cropId ? { ...c, findings: c.findings.map(f => f.id === findingId ? { ...f, ...patch } : f) } : c))
   const updateCommitment = (id: string, patch: Partial<Commitment>) => setCommitments(list => list.map(c => c.id === id ? { ...c, ...patch } : c))
@@ -206,6 +216,10 @@ export default function VisitRegisterPage() {
     if (!scheduledVisitId && familyScheduled.length) { setError('Esta familia ya tiene una visita programada. Reprográmala desde el calendario.'); setStep(0); return }
     if (scheduledVisitId && !familyScheduled.some(visit => visit.id === scheduledVisitId && visit.status === 'PROGRAMADA')) {
       setError('La cita programada seleccionada ya no está disponible. Actualiza la página y vuelve a elegir.'); setStep(0); return
+    }
+    const selectedCycleIds = cropsState.map(c => c.cicloCultivoId).filter((id): id is number => id !== null)
+    if (new Set(selectedCycleIds).size !== selectedCycleIds.length) {
+      setError('Una siembra solo puede evaluarse una vez por visita.'); setStep(1); return
     }
     if (cropsState.some(c => !c.name || c.findings.some(f => !f.name || !f.damage))) {
       setError('Completa los cultivos y los hallazgos agregados antes de guardar.'); setStep(1); return
@@ -314,20 +328,43 @@ export default function VisitRegisterPage() {
 
       {step === 1 && <section className="space-y-4" aria-label="Evaluación de cultivos">
         <div className={card}>
-          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold text-slate-900 dark:text-white">Evaluación de cultivos</h2></div><Button type="button" onClick={() => setCrops(list => [...list,newCrop()])}>+ Evaluar cultivo</Button></div>
-          {cyclesWarning && <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">{cyclesWarning}</p>}
-          {!cyclesWarning && !availableCycles.length && familyId && <p className="mt-3 text-sm text-slate-500">No hay ciclos activos consultables para esta familia. Los registros manuales se conservarán sin vinculación y requerirán conciliación posterior.</p>}
+          <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold text-slate-900 dark:text-white">Evaluación de cultivos</h2>
+            {availableCycles.length === 0 && <Button type="button" disabled={!familyId} onClick={() => setCrops(list => [...list,newCrop()])}>+ Evaluación manual</Button>}
+          </div>
+          {cyclesLoading && <p className="mt-3 text-sm text-slate-500">Cargando siembras...</p>}
+          {cyclesWarning && <p role="status" className="mt-3 text-sm text-amber-700 dark:text-amber-300">{cyclesWarning}</p>}
+          {familyId && !cyclesLoading && availableCycles.length > 0 && <div className="mt-4 space-y-3">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Siembras de la familia</h3>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {availableCycles.map(cycle => {
+                const selectedCycle = cropsState.some(item => item.cicloCultivoId === cycle.id)
+                return <div key={cycle.id} className={`rounded-xl border p-3 ${selectedCycle ? 'border-brand-300 bg-brand-50 dark:border-brand-600 dark:bg-brand-500/10' : 'border-slate-200 dark:border-slate-700'}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0"><p className="text-sm font-semibold text-slate-900 dark:text-white">{cycle.cultivo.nombre}</p>
+                      <p className="mt-1 text-xs text-slate-500">{cycle.huerto.nombre || `Huerto #${cycle.huertoId}`}</p>
+                      <p className="mt-1 text-xs text-slate-500">{cycle.cantidadPlantas ?? '—'} plantas iniciales · {cycle.fechaSiembra || 'Sin fecha'}</p>
+                    </div>
+                    <Button size="sm" type="button" variant="secondary" disabled={selectedCycle} onClick={() => addCycleEvaluation(cycle)}>
+                      {selectedCycle ? 'Seleccionada' : 'Evaluar'}
+                    </Button>
+                  </div>
+                </div>
+              })}
+            </div>
+          </div>}
+          {!cyclesLoading && !cyclesWarning && availableCycles.length === 0 && familyId && <p className="mt-3 text-sm text-slate-500">Sin siembras activas.</p>}
         </div>
-        {cropsState.length === 0 && <div className={`${card} text-center text-sm text-slate-500`}>Sin cultivos registrados</div>}
+        {cropsState.length === 0 && <div className={`${card} text-center text-sm text-slate-500`}>Selecciona una siembra para evaluarla.</div>}
         {cropsState.map((crop, i) => <article key={crop.id} className={card}>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold text-slate-900 dark:text-white">Cultivo {i + 1} {crop.name && <Badge>{crop.name}</Badge>}</h3><Button type="button" size="sm" variant="secondary" onClick={() => setCrops(list => list.filter(c => c.id !== crop.id))}>Quitar</Button></div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {availableCycles.length > 0 ? <FormField label="Siembra del huerto" id={`crop-cycle-${crop.id}`}>
               <select id={`crop-cycle-${crop.id}`} className={input} value={crop.cicloCultivoId ?? ''} onChange={e => {
                 const found = availableCycles.find(item => item.id === Number(e.target.value))
+                if (found && cropsState.some(item => item.id !== crop.id && item.cicloCultivoId === found.id)) return
                 updateCrop(crop.id, { cicloCultivoId: found?.id ?? null, name: found?.cultivo.nombre ?? '' })
               }}><option value="">Seleccionar siembra</option>
-                {availableCycles.map(item => <option key={item.id} value={item.id}>{item.cultivo.nombre} · {item.huerto.nombre || `Huerto #${item.huertoId}`} · {item.fechaSiembra || item.fechaTrasplante || 'Sin fecha'} (#{item.id})</option>)}
+                {availableCycles.filter(item => item.id === crop.cicloCultivoId || !cropsState.some(selected => selected.cicloCultivoId === item.id)).map(item => <option key={item.id} value={item.id}>{item.cultivo.nombre} · {item.huerto.nombre || `Huerto #${item.huertoId}`} · {item.fechaSiembra || item.fechaTrasplante || 'Sin fecha'} (#{item.id})</option>)}
               </select>
             </FormField> : <SearchableSelect label="Planta (sin vincular)" id={`crop-name-${crop.id}`} value={crop.name} onChange={name => updateCrop(crop.id,{name, cicloCultivoId: null})} options={catalogOptions(crops)} />}
             <FormField label="Etapa" id={`crop-stage-${crop.id}`}><select id={`crop-stage-${crop.id}`} className={input} value={crop.stage} onChange={e => updateCrop(crop.id,{stage:e.target.value})}><Options items={stages}/></select></FormField>

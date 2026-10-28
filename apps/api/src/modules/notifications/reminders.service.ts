@@ -41,7 +41,7 @@ export async function actualizarRecordatorios(
   const permisoDestino = origen === 'CALENDARIO' ? 'PANTALLA_CALENDARIO' : 'PANTALLA_VISITAS_AGENDA'
   const autorizados = new Set(personas.filter(persona => persona.roles.some(relacion => {
     const nombre = relacion.rol.nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
-    return nombre === 'direccion general' || relacion.rol.permisos.some(p => p.permiso.codigo === permisoDestino)
+    return origen === 'CALENDARIO' || nombre === 'direccion general' || relacion.rol.permisos.some(p => p.permiso.codigo === permisoDestino)
   })).map(persona => persona.id))
   const ahora = Date.now()
   for (const usuarioId of [...new Set(destinatarios)].filter(id => autorizados.has(id))) {

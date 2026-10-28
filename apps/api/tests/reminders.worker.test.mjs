@@ -87,8 +87,13 @@ test('usuario inactivo no recibe aviso', async () => {
   assert.equal(state.row.estado, 'CANCELADO')
   assert.equal(state.notices.length, 0)
 })
-test('usuario sin permiso no recibe aviso', async () => {
+test('participante activo recibe recordatorio institucional aunque no vea calendario general', async () => {
   const { state, db } = fake({ user: { estado: 'ACTIVO', roles: [] } })
+  assert.equal(await procesarUno(db), 'ENVIADO')
+  assert.equal(state.notices[0].referencia, '/notificaciones')
+})
+test('sin permiso de visitas no recibe recordatorio técnico', async () => {
+  const { state, db } = fake({ row: { tipoOrigen: 'VISITA' }, user: { estado: 'ACTIVO', roles: [] } })
   assert.equal(await procesarUno(db), 'CANCELADO')
   assert.equal(state.notices.length, 0)
 })

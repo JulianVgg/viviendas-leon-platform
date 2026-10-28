@@ -1,3 +1,5 @@
+import { esSupervisorCalendario } from './calendarAccess'
+
 // Los códigos deben coincidir exactamente con la checklist de RolesPermisosPage.tsx.
 export type PermissionUser = { roles: string[]; permisos: string[] }
 
@@ -88,6 +90,7 @@ export function canWritePrograms(usuario: PermissionUser): boolean {
 
 export function canViewPath(usuario: PermissionUser, path: string): boolean {
   if (isDireccionGeneral(usuario)) return true
+  if (path === '/calendario') return esSupervisorCalendario(usuario)
   // Bandeja personal disponible para cualquier usuario autenticado.
   if (path === '/' || path === '/mi-perfil' || path === '/notificaciones') return true
   const codigo = permissionForPath(path)

@@ -95,7 +95,7 @@ export default function InvitacionDetalleDialog({ eventoId, onClose, onResponded
         <span>Estado: <strong>{etiquetas[detalle.estado ?? ''] ?? 'Solo consulta'}</strong></span>
       </div>
       {detalle.estado === 'PENDIENTE' && !finalizada && <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">
-        Si aceptas, esta actividad se incorporará a tu agenda personal dentro del calendario institucional.
+        Si aceptas, esta actividad aparecerá en tu calendario personal.
         Dirección y Coordinación podrán consultar tu respuesta.
       </p>}
       {detalle.estado === 'ACEPTADA' && <p className="text-sm text-emerald-700 dark:text-emerald-300">
@@ -119,7 +119,7 @@ export default function InvitacionDetalleDialog({ eventoId, onClose, onResponded
           {detalle?.estado === 'RECHAZADA' ? 'Cambiar a aceptada' : 'Aceptar'}
         </Button>}
       </>}
-      {detalle?.estado === 'ACEPTADA' && puedeVerCalendario && <Button type="button" onClick={() => { onClose(); navigate('/calendario') }}>Ver calendario</Button>}
+      {detalle?.estado === 'ACEPTADA' && (puedeVerCalendario || canViewPath(usuario ?? {roles:[],permisos:[]}, '/visitas/agenda')) && <Button type="button" onClick={() => { onClose(); navigate(puedeVerCalendario ? '/calendario' : '/visitas/agenda') }}>Ver calendario</Button>}
     </div>
   </Dialog>
 }

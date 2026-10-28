@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react'
-import { Link } from 'react-router'
+import { ChevronLeft, ChevronRight, Plus, List, CalendarDays } from 'lucide-react'
+
 import PageMeta from '@/components/common/PageMeta'
 import PageHeader from '@/components/common/PageHeader'
 import Button from '@/components/ui/Button'
 import Dialog from '@/components/ui/Dialog'
 import { useAuth } from '@/features/auth/AuthProvider'
-import { canViewPath, isDireccionGeneral } from '@/features/auth/screenPermissions'
+import { esSupervisorCalendario } from '@/features/auth/calendarAccess'
 import InstitutionalEventDialog from '../components/InstitutionalEventDialog'
 import { eventoHaPasado } from '../services/eventHistory'
 import {
   eventColor, eventDisplayTitle, loadCalendarView, loadParticipants, removeEvent, saveEvent,
   type CalendarEvent, type CalendarEventInput, type CalendarPerson, type CalendarTechnicalVisit, type CalendarTraining,
 } from '../services/calendarService'
+import { filtrarActividades, responsableActividad, comunidadActividad, estadoActividad, fechaActividad, type ActividadEquipo, type ActividadFiltro, type EstadoFiltro } from '../services/calendarFilters'
 
 const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre']
 const weekNames = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB']
@@ -23,15 +24,9 @@ const todayKey = () => dayKey(new Date())
 const readableDate = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('es-GT', {
   day: 'numeric', month: 'long', year: 'numeric',
 })
-function roleNormal(role: string) {
-  return role.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
-}
 
 // Sólo es una unión para la interfaz. Las visitas siguen en la tabla Visita.
-type CalendarItem =
-  | { key: string; kind: 'institutional'; event: CalendarEvent }
-  | { key: string; kind: 'technical'; visit: CalendarTechnicalVisit }
-  | { key: string; kind: 'training'; training: CalendarTraining }
+type CalendarItem = ActividadEquipo
 
 const technicalTitle = (visit: CalendarTechnicalVisit) => `Visita técnica · ${visit.familia}`
 function itemTitle(item: CalendarItem): string {
@@ -44,15 +39,13 @@ function itemColor(item: CalendarItem): string {
   if (item.kind === 'training') return 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900 dark:bg-violet-500/15 dark:text-violet-200'
   return item.visit.estado === 'REALIZADA'
     ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-200'
+    : item.visit.fecha < todayKey() ? 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-500/15 dark:text-rose-200'
     : 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-500/15 dark:text-blue-200'
 }
 
 export default function InstitutionalCalendarPage() {
   const { usuario } = useAuth()
-  const editable = Boolean(usuario && (
-    isDireccionGeneral(usuario) ||
-    usuario.roles.some(role => roleNormal(role) === 'coordinadora del programa agroforestal')
-  ))
+  const editable = Boolean(usuario && esSupervisorCalendario(usuario))
   const [month, setMonth] = useState(() => {
     const today = new Date()
     return new Date(today.getFullYear(), today.getMonth(), 1)
@@ -69,6 +62,11 @@ export default function InstitutionalCalendarPage() {
   const [selectedDate, setSelectedDate] = useState(todayKey())
   const [eventDialogOpen, setEventDialogOpen] = useState(false)
   const [dayList, setDayList] = useState<string | null>(null)
+  const [tipo, setTipo] = useState<ActividadFiltro>('todos')
+  const [estado, setEstado] = useState<EstadoFiltro>('todos')
+  const [responsable, setResponsable] = useState('')
+  const [comunidad, setComunidad] = useState('')
+  const [vista, setVista] = useState<'mes'|'lista'>('mes')
 
   const monthCells = useMemo(() => {
     const offset = new Date(month.getFullYear(), month.getMonth(), 1).getDay()
@@ -102,10 +100,19 @@ export default function InstitutionalCalendarPage() {
   }, [from, to, editable])
   useEffect(() => { void refresh() }, [refresh])
 
+  const allItems = useMemo<CalendarItem[]>(() => [
+    ...events.map(event => ({key:`institutional-${event.id}`,kind:'institutional' as const,event})),
+    ...technicalVisits.map(visit => ({key:`technical-${visit.id}`,kind:'technical' as const,visit})),
+    ...trainings.map(training => ({key:`training-${training.id}`,kind:'training' as const,training})),
+  ], [events,technicalVisits,trainings])
+  const empleados = useMemo(() => [...new Set(allItems.map(responsableActividad).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es')), [allItems])
+  const comunidades = useMemo(() => [...new Set(allItems.map(comunidadActividad).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es')), [allItems])
+  const filtradas = useMemo(() => filtrarActividades(allItems,{tipo,estado,responsable,comunidad},todayKey()),[allItems,tipo,estado,responsable,comunidad])
+  const listadas = useMemo(() => [...filtradas].sort((a,b)=>fechaActividad(a).localeCompare(fechaActividad(b))||a.key.localeCompare(b.key)),[filtradas])
   const byDay = useMemo(() => {
     const result = new Map<string, CalendarItem[]>()
     for (const cell of monthCells) result.set(cell.key, [])
-    for (const event of events) {
+    for (const event of filtradas.filter((item):item is Extract<CalendarItem,{kind:'institutional'}> => item.kind === 'institutional').map(item=>item.event)) {
       for (const cell of monthCells) {
         // Incluye registros previos de varios días, sin modificar sus datos.
         if (cell.key >= event.fechaInicio && cell.key <= event.fechaFin) {
@@ -113,14 +120,14 @@ export default function InstitutionalCalendarPage() {
         }
       }
     }
-    for (const visit of technicalVisits) {
+    for (const visit of filtradas.filter((item):item is Extract<CalendarItem,{kind:'technical'}> => item.kind === 'technical').map(item=>item.visit)) {
       result.get(visit.fecha)?.push({ key: `technical-${visit.id}`, kind: 'technical', visit })
     }
-    for (const training of trainings) {
+    for (const training of filtradas.filter((item):item is Extract<CalendarItem,{kind:'training'}> => item.kind === 'training').map(item=>item.training)) {
       result.get(training.fecha)?.push({ key: `training-${training.id}`, kind: 'training', training })
     }
     return result
-  }, [events, technicalVisits, trainings, monthCells])
+  }, [filtradas, monthCells])
 
   const createEvent = (date = todayKey()) => {
     if (!editable) return
@@ -162,12 +169,12 @@ export default function InstitutionalCalendarPage() {
     setMonth(new Date(today.getFullYear(), today.getMonth(), 1))
   }
   const selectedDayEvents = dayList ? (byDay.get(dayList) ?? []) : []
-  const canOpenVisitAgenda = Boolean(usuario && editable && canViewPath(usuario, '/visitas/agenda'))
+
 
   return (
     <>
       <PageMeta title="Calendario institucional | Viviendas León" description="Calendario de actividades institucionales" />
-      <PageHeader title="Calendario" description="" />
+      <PageHeader title="Calendario del equipo" description="" />
       {error && (
         <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
           {error}
@@ -196,7 +203,35 @@ export default function InstitutionalCalendarPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="flex flex-wrap items-center gap-3 border-b border-gray-100 p-4 dark:border-gray-800">
+          <label className="text-sm text-gray-500">Actividad
+            <select aria-label="Filtrar por actividad" value={tipo} onChange={e=>setTipo(e.target.value as ActividadFiltro)} className="mt-1 block rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+              <option value="todos">Todas</option><option value="evento">Eventos</option><option value="visita">Visitas</option><option value="capacitacion">Capacitaciones</option>
+            </select>
+          </label>
+          <label className="text-sm text-gray-500">Responsable
+            <select aria-label="Filtrar por responsable" value={responsable} onChange={e=>setResponsable(e.target.value)} className="mt-1 block max-w-52 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+              <option value="">Todos</option>{empleados.map(nombre=><option key={nombre} value={nombre}>{nombre}</option>)}
+            </select>
+          </label>
+          <label className="text-sm text-gray-500">Estado
+            <select aria-label="Filtrar por estado" value={estado} onChange={e=>setEstado(e.target.value as EstadoFiltro)} className="mt-1 block rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+              <option value="todos">Todos</option><option value="programada">Programadas</option><option value="realizada">Realizadas</option><option value="vencida">Vencidas</option><option value="finalizada">Finalizadas</option>
+            </select>
+          </label>
+          <label className="text-sm text-gray-500">Comunidad
+            <select aria-label="Filtrar por comunidad" value={comunidad} onChange={e=>setComunidad(e.target.value)} className="mt-1 block max-w-52 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+              <option value="">Todas</option>{comunidades.map(nombre=><option key={nombre} value={nombre}>{nombre}</option>)}
+            </select>
+          </label>
+          <button type="button" className="mt-5 text-sm font-medium text-brand-600 hover:underline" onClick={()=>{setTipo('todos');setResponsable('');setEstado('todos');setComunidad('')}}>Limpiar</button>
+          <span className="ml-auto mt-5 text-xs text-gray-500" aria-live="polite">{filtradas.length} actividades</span>
+          <div className="mt-4 flex items-center gap-1 rounded-lg border border-gray-200 p-1 dark:border-gray-700">
+            <button type="button" aria-pressed={vista==='mes'} onClick={()=>setVista('mes')} className={`rounded-md px-3 py-1.5 text-xs ${vista==='mes'?'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300':'text-gray-500'}`}><CalendarDays size={14} className="mr-1 inline"/> Mes</button>
+            <button type="button" aria-pressed={vista==='lista'} onClick={()=>setVista('lista')} className={`rounded-md px-3 py-1.5 text-xs ${vista==='lista'?'bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300':'text-gray-500'}`}><List size={14} className="mr-1 inline"/> Lista</button>
+          </div>
+        </div>
+        {vista==='mes' ? <div className="overflow-x-auto">
           <div className="min-w-[650px]">
             <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50 text-center text-xs font-semibold text-gray-400 dark:border-gray-800 dark:bg-gray-800/40">
               {weekNames.map(day => <div key={day} className="py-4">{day}</div>)}
@@ -225,7 +260,7 @@ export default function InstitutionalCalendarPage() {
                           type="button"
                           onDoubleClick={click => click.stopPropagation()}
                           onClick={() => viewItem(event)}
-                          title={itemTitle(event)}
+                          title={`${itemTitle(event)} · ${responsableActividad(event) || 'Sin responsable'}`}
                           className={`block w-full truncate rounded-md border border-l-[3px] px-2 py-1.5 text-left text-[11px] font-medium transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-brand-500 ${itemColor(event)}`}
                         >
                           {itemTitle(event)}
@@ -247,6 +282,13 @@ export default function InstitutionalCalendarPage() {
             </div>
           </div>
         </div>
+        : <div className="max-h-[620px] space-y-2 overflow-y-auto p-4">
+          {listadas.map(item => <button key={item.key} type="button" onClick={()=>viewItem(item)} className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 p-3 text-left hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800">
+            <span className="min-w-0"><span className="block text-sm font-semibold text-gray-800 dark:text-gray-100">{itemTitle(item)}</span><span className="mt-1 block text-xs text-gray-500">{responsableActividad(item)||'Sin responsable'}{comunidadActividad(item)?` · ${comunidadActividad(item)}`:''}</span></span>
+            <span className="text-right text-xs text-gray-500">{readableDate(fechaActividad(item))}<span className="block capitalize">{estadoActividad(item,todayKey())}</span></span>
+          </button>)}
+          {!listadas.length && <p className="p-6 text-center text-sm text-gray-500">Sin actividades.</p>}
+        </div>}
         {loading && <p role="status" className="border-t border-gray-100 p-3 text-center text-sm text-gray-500 dark:border-gray-800">Cargando eventos…</p>}
       </section>
 
@@ -273,7 +315,7 @@ export default function InstitutionalCalendarPage() {
               <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${selectedVisit.estado === 'REALIZADA'
                 ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-200'
                 : 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-500/15 dark:text-blue-200'}`}>
-                {selectedVisit.estado === 'REALIZADA' ? 'Realizada' : 'Programada'}
+                {selectedVisit.estado === 'REALIZADA' ? 'Realizada' : selectedVisit.fecha < todayKey() ? 'Vencida' : 'Programada'}
               </span>
             </div>
             <dl className="grid gap-3 sm:grid-cols-2">
@@ -294,18 +336,7 @@ export default function InstitutionalCalendarPage() {
                 <dd className="mt-1 text-gray-900 dark:text-gray-100">{readableDate(selectedVisit.fecha)}</dd>
               </div>
             </dl>
-            <div className="flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
-              <Button type="button" variant="secondary" onClick={() => setSelectedVisit(null)}>Cerrar</Button>
-              {canOpenVisitAgenda && (
-                <Link
-                  to={`/visitas/agenda?visitId=${selectedVisit.id}`}
-                  onClick={() => setSelectedVisit(null)}
-                  className="inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-500 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-600 focus-visible:outline-2 focus-visible:outline-brand-500"
-                >
-                  Gestionar en agenda de visitas
-                </Link>
-              )}
-            </div>
+            <div className="flex justify-end border-t border-gray-100 pt-4 dark:border-gray-800"><Button type="button" variant="secondary" onClick={() => setSelectedVisit(null)}>Cerrar</Button></div>
           </div>
         )}
       </Dialog>

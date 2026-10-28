@@ -50,15 +50,15 @@ export async function procesarUno(prisma: ClienteWorker = getPrismaClient()): Pr
         relacion.rol.nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() === 'direccion general' ||
         relacion.rol.permisos.some(p => p.permiso.codigo === permiso),
       )
-      if (!autorizado) return cancelar()
+      if (!autorizado && r.tipoOrigen !== 'CALENDARIO') return cancelar()
 
       let detalle: ReturnType<typeof resumenRecordatorio> | null = null
       if (r.tipoOrigen === 'CALENDARIO') {
         const evento = await tx.eventoInstitucional.findUnique({ where: { id: r.origenId }, select: {
           titulo: true, fechaInicio: true,
-          participantes: { where: { usuarioId: r.usuarioId }, select: { usuarioId: true } },
+          participantes: { where: { usuarioId: r.usuarioId, estadoInvitacion: { in: ['ACEPTADA', 'ASIGNADO'] } }, select: { usuarioId: true } },
         } })
-        if (evento?.participantes.length) detalle = resumenRecordatorio('CALENDARIO', evento.titulo, evento.fechaInicio)
+        if (evento?.participantes.length) detalle = { ...resumenRecordatorio('CALENDARIO', evento.titulo, evento.fechaInicio), referencia: '/notificaciones' }
       } else if (r.tipoOrigen === 'VISITA') {
         const visita = await tx.visita.findUnique({ where: { id: r.origenId }, select: {
           fecha: true, estado: true, usuarioResponsableId: true,

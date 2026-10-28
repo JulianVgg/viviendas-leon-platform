@@ -60,6 +60,11 @@ async function solicitud<T>(ruta: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
+/** Invitaciones de la sesión. Solo aceptadas o asignadas se muestran en Mi calendario. */
+export function obtenerMisInvitaciones(signal?: AbortSignal) {
+  return solicitud<{ data: DetalleInvitacion[] }>('/mias', { signal })
+}
+
 export function obtenerDetalleInvitacion(id: number, signal?: AbortSignal) {
   return solicitud<DetalleInvitacion>(`/${id}`, { signal })
 }

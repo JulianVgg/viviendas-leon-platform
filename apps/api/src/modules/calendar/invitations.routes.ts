@@ -45,7 +45,7 @@ const seleccionEvento = {
 invitationsRouter.get('/mias', async (req: Request, res: Response) => {
   try {
     const rows = await getPrismaClient().eventoInstitucionalParticipante.findMany({
-      where: { usuarioId: req.session.userId!, estadoInvitacion: { in: pendientes } },
+      where: { usuarioId: req.session.userId!, estadoInvitacion: { in: [...pendientes, 'ASIGNADO'] } },
       include: { evento: { select: seleccionEvento } },
       orderBy: { evento: { fechaInicio: 'desc' } },
       take: 200,
