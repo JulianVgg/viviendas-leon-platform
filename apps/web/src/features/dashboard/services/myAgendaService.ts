@@ -7,7 +7,7 @@ export type AgendaItem = {
   fecha: string | null
   fechaFin?: string
   estado: 'PROGRAMADA' | 'PENDIENTE' | 'VENCIDA'
-  destino: '/calendario' | '/visitas/agenda'
+  destino: '/calendario' | '/visitas/agenda' | '/notificaciones'
 }
 
 export type MiAgendaResponse = {

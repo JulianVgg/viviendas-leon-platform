@@ -6,11 +6,14 @@ export function obtenerDestinoSeguro(referencia: string | null, usuario: Permiss
       /[\\\s\u0000-\u001f\u007f]/.test(referencia)) return null
   try {
     const parsed = new URL(referencia, 'https://viviendas-leon.local')
-    if (parsed.origin !== 'https://viviendas-leon.local' ||
-        parsed.username || parsed.password ||
+    if (parsed.origin !== 'https://viviendas-leon.local' || parsed.username || parsed.password ||
         // Se rechaza codificación del path para evitar rutas ambiguas.
-        parsed.pathname.includes('%') ||
-        !canViewPath(usuario, parsed.pathname)) return null
+        parsed.pathname.includes('%')) return null
+    // Los avisos creados antes de separar calendarios siguen llevando a un destino válido.
+    if (parsed.pathname === '/calendario' && !canViewPath(usuario, '/calendario')) {
+      return canViewPath(usuario, '/visitas/agenda') ? '/visitas/agenda' : '/notificaciones'
+    }
+    if (!canViewPath(usuario, parsed.pathname)) return null
     return `${parsed.pathname}${parsed.search}${parsed.hash}`
   } catch {
     return null

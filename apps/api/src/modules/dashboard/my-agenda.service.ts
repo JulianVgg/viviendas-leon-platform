@@ -11,7 +11,7 @@ export type ActividadMiAgenda = {
   fecha: string | null
   fechaFin?: string
   estado: 'PROGRAMADA' | 'PENDIENTE' | 'VENCIDA'
-  destino: '/calendario' | '/visitas/agenda'
+  destino: '/calendario' | '/visitas/agenda' | '/notificaciones'
 }
 
 export const FECHA_LIMITE_DIAS = 30
@@ -31,7 +31,7 @@ export function sumarDiasISO(fecha: string, dias: number): string {
 
 export function puedeConsultarAgendaModulo(user: Pick<AuthenticatedUser, 'roles' | 'permisos'>, modulo: 'CALENDARIO' | 'VISITAS'): boolean {
   if (esDireccionGeneral(user.roles)) return true
-  if (modulo === 'CALENDARIO') return user.permisos.includes('PANTALLA_CALENDARIO')
+  if (modulo === 'CALENDARIO') return true // Consulta personal filtrada por usuario, no el calendario institucional.
   const coordinador = user.roles.some(rol => rol.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() === 'coordinadora del programa agroforestal')
   return (user.permisos.includes('PANTALLA_VISITAS_AGENDA') || coordinador) &&
     (coordinador || ['VISITAS_READ', 'VISITAS_WRITE', 'SYN-VISITAS-WRITE'].some(p => user.permisos.includes(p)))
@@ -101,7 +101,7 @@ export async function obtenerMiAgenda(user: AuthenticatedUser, ahora = new Date(
       id: `EVENTO:${e.id}`, origenId: e.id, tipo: 'EVENTO' as const, titulo: e.titulo,
       detalle: e.categoria === 'OTRO' ? 'Actividad institucional' : 'Calendario institucional',
       fecha: e.fechaInicio.toISOString().slice(0, 10) < hoy ? hoy : e.fechaInicio.toISOString().slice(0, 10),
-      fechaFin: e.fechaFin.toISOString().slice(0, 10), estado: 'PROGRAMADA' as const, destino: '/calendario' as const,
+      fechaFin: e.fechaFin.toISOString().slice(0, 10), estado: 'PROGRAMADA' as const, destino: (user.roles.some(rol => ['direccion general', 'coordinadora del programa agroforestal', 'coordinador del programa agroforestal', 'coordinacion'].includes(rol.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase())) ? '/calendario' : veVisitas ? '/visitas/agenda' : '/notificaciones') as '/calendario' | '/visitas/agenda' | '/notificaciones',
     })),
     ...visitas.map(v => ({
       id: `VISITA:${v.id}`, origenId: v.id, tipo: 'VISITA' as const,
@@ -144,6 +144,6 @@ export async function obtenerMiAgenda(user: AuthenticatedUser, ahora = new Date(
         destino: '/visitas/agenda' as const,
       })),
     } : null,
-    modulos: { calendario: veCalendario, visitas: veVisitas },
+    modulos: { calendario: user.roles.some(rol => ['direccion general', 'coordinadora del programa agroforestal', 'coordinador del programa agroforestal', 'coordinacion'].includes(rol.normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase())), visitas: veVisitas },
   }
 }

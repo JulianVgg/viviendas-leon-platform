@@ -40,7 +40,7 @@ test('fecha local de Guatemala cambia correctamente en medianoche UTC', () => {
 test('permiso de calendario y permiso doble para visitas', () => {
   assert.equal(puedeConsultarAgendaModulo(tecnico, 'CALENDARIO'), true)
   assert.equal(puedeConsultarAgendaModulo(tecnico, 'VISITAS'), true)
-  assert.equal(puedeConsultarAgendaModulo(noAutorizado, 'CALENDARIO'), false)
+  assert.equal(puedeConsultarAgendaModulo(noAutorizado, 'CALENDARIO'), true) // consulta exclusivamente actividades asignadas
   assert.equal(puedeConsultarAgendaModulo({ roles: [], permisos: ['PANTALLA_VISITAS_AGENDA'] }, 'VISITAS'), false)
 })
 test('actividades con la misma identidad aparecen una sola vez y ordenadas', () => {
@@ -66,11 +66,12 @@ test('la agenda contiene solo eventos, visitas y compromisos asignados', async (
   assert.ok(filtros.filter(([k]) => k === 'visita').every(([, q]) => q.usuarioResponsableId === 7))
   assert.ok(filtros.filter(([k]) => k.startsWith('compromiso')).every(([, q]) => q.visitaOrigen.usuarioResponsableId === 7))
 })
-test('sin permisos no consulta entidades ni revela registros', async () => {
+test('sin permisos solo consulta eventos asignados sin revelar visitas', async () => {
   const { db, filtros } = dbFalso()
   const result = await obtenerMiAgenda(noAutorizado, new Date('2026-10-22T14:00:00Z'), db)
-  assert.equal(filtros.length, 0)
-  assert.deepEqual(result.hoy, [])
+  assert.deepEqual(filtros.map(([k]) => k), ['evento'])
+  assert.deepEqual(filtros[0][1].OR, [{responsableId:8}, {participantes:{some:{usuarioId:8,estadoInvitacion:{in:['ACEPTADA','ASIGNADO']}}}}])
+  assert.equal(result.hoy.length, 1) // el mock devuelve un evento asignado; la consulta contiene el filtro personal
   assert.deepEqual(result.proximas, [])
   assert.deepEqual(result.pendientes, [])
   assert.equal(result.indicadores.visitasProgramadas, 0)

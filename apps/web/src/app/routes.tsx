@@ -44,6 +44,7 @@ import CommunitiesPage from '@/features/catalogs/pages/CommunitiesPage'
 import MunicipalitiesPage from '@/features/catalogs/pages/MunicipalitiesPage'
 import ProgramsPage from '@/features/catalogs/pages/ProgramsPage'
 import DirectoraRoute from '@/features/auth/components/DirectoraRoute'
+import SupervisorCalendarRoute from '@/features/auth/components/SupervisorCalendarRoute'
 
 const module = (
   title: string,
@@ -137,7 +138,7 @@ export default function AppRoutes() {
           )}
 
           {/* Calendario institucional (distinto de la agenda técnica) */}
-          <Route path="calendario" element={<InstitutionalCalendarPage />} />
+          <Route element={<SupervisorCalendarRoute />}><Route path="calendario" element={<InstitutionalCalendarPage />} /></Route>
 
           {/* Visitas técnicas */}
           <Route

@@ -2,14 +2,32 @@ import { Router, type Request, type Response } from 'express'
 import { getPrismaClient } from '../../config/prisma.js'
 import { requireAuth } from '../auth/auth.middleware.js'
 import { getAuthenticatedUser } from '../auth/auth.service.js'
-import { esDireccionGeneral, requirePermission } from '../auth/require-permission.middleware.js'
+import { esDireccionGeneral } from '../auth/require-permission.middleware.js'
 import { crearNotificacionesDeActividad, type AvisoActividad } from '../notifications/notifications.service.js'
 import { actualizarRecordatorios, cancelarRecordatorios, configGuardada, configParaPrisma, parseReglas } from '../notifications/reminders.service.js'
 import { descripcionAvisoCalendario, eventoTieneCambios, planificarCambioCalendario, type EventoResumen, type TipoAvisoCalendario } from '../notifications/notifications.activity.js'
 import { eventoYaFinalizo } from './event-history.js'
 
 export const calendarRouter = Router()
-calendarRouter.use(requireAuth, requirePermission('PANTALLA_CALENDARIO'))
+calendarRouter.use(requireAuth)
+// El calendario institucional es una herramienta de supervisión: ninguna otra cuenta
+// puede consultar su contenido, incluso si conserva un permiso histórico de pantalla.
+function esCoordinacion(roles: string[]): boolean {
+  return roles.some(rol => {
+    const nombre = rol.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
+    return ['coordinadora del programa agroforestal', 'coordinador del programa agroforestal', 'coordinacion'].includes(nombre)
+  })
+}
+calendarRouter.use(async (req: Request, res: Response, next) => {
+  try {
+    const usuario = req.session.userId ? await getAuthenticatedUser(req.session.userId) : null
+    if (!usuario) { res.status(401).json({ error: 'Sesión inválida.' }); return }
+    if (!esDireccionGeneral(usuario.roles) && !esCoordinacion(usuario.roles)) {
+      res.status(403).json({ error: 'Acceso reservado a Dirección y Coordinación.' }); return
+    }
+    next()
+  } catch (error) { next(error) }
+})
 
 // Tipos institucionales. Las claves históricas se aceptan para compatibilidad.
 const names: Record<string, string> = {
@@ -83,7 +101,7 @@ function avisoCalendario(eventoId: number, version: string, usuarioId: number,
 async function mayManage(req: Request, res: Response): Promise<boolean> {
   const user = req.session.userId ? await getAuthenticatedUser(req.session.userId) : null
   if (!user) { res.status(401).json({ error: 'Sesión inválida.' }); return false }
-  const isCoord = user.roles.some(r => r.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() === 'coordinadora del programa agroforestal')
+  const isCoord = esCoordinacion(user.roles)
   if (!esDireccionGeneral(user.roles) && !isCoord) {
     res.status(403).json({ error: 'Solo Dirección general o Coordinación puede modificar el calendario institucional.' })
     return false
@@ -115,7 +133,7 @@ calendarRouter.get('/', async (req: Request, res: Response) => {
       select: {
         id: true, fecha: true, estado: true,
         familia: { select: { nombreReferencia: true, comunidad: { select: { nombre: true } } } },
-        usuarioResponsable: { select: { nombre: true, apellido: true } },
+        usuarioResponsable: { select: { id: true, nombre: true, apellido: true } },
       },
       orderBy: [{ fecha: 'asc' }, { id: 'asc' }],
       take: 600,
@@ -154,6 +172,7 @@ calendarRouter.get('/', async (req: Request, res: Response) => {
         familia: visit.familia.nombreReferencia,
         comunidad: visit.familia.comunidad.nombre,
         responsable: [visit.usuarioResponsable.nombre, visit.usuarioResponsable.apellido].filter(Boolean).join(' '),
+        responsableId: visit.usuarioResponsable.id,
       })),
       data: events.map(e => ({
       id: e.id, titulo: e.titulo, categoria: e.categoria, descripcion: e.descripcion ?? '', lugar: e.lugar ?? '',

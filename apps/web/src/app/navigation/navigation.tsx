@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import type { UserRole } from '@/types/roles'
 import { canViewPath, type PermissionUser } from '@/features/auth/screenPermissions'
+import { esTecnicoCampo } from '@/features/auth/calendarAccess'
 
 export type NavigationItem = {
   id: string
@@ -80,7 +81,8 @@ export const navigationGroups: { id: string; name: string; items: NavigationItem
     items: [
       { id: 'dashboard', name: 'Dashboard', path: '/', icon: icons.dashboard, roles: ['fieldWorker', 'coordination', 'operationsDirector', 'administration', 'audit'] },
       { id: 'profile', name: 'Mi perfil', path: '/mi-perfil', icon: icons.profile, roles: ['fieldWorker', 'coordination', 'operationsDirector', 'administration', 'audit'] },
-      { id: 'institutional-calendar', name: 'Calendario', path: '/calendario', icon: icons.institutionalCalendar },
+      { id: 'institutional-calendar', name: 'Calendario del equipo', path: '/calendario', icon: icons.institutionalCalendar },
+      { id: 'my-calendar', name: 'Mi calendario', path: '/visitas/agenda', icon: icons.agenda },
       { id: 'families', name: 'Familias y beneficiarios', path: '/familias', icon: icons.families, roles: ['fieldWorker', 'coordination'], children: [
         { id: 'families-list', name: 'Listado de familias', path: '/familias', icon: icons.familyList, exact: true },
         { id: 'families-create', name: 'Registrar familias', path: '/familias/nueva', icon: icons.familyCreate, exact: true },
@@ -140,8 +142,9 @@ export function navigationForAccount(usuario: PermissionUser) {
     .map((grupo) => ({
       ...grupo,
       items: grupo.items.flatMap((item) => {
+        if (item.id === 'my-calendar' && !esTecnicoCampo(usuario)) return []
         if (!item.children) return canViewPath(usuario, item.path) ? [item] : []
-        const children = item.children.filter((child) => canViewPath(usuario, child.path))
+        const children = item.children.filter((child) => canViewPath(usuario, child.path) && !(esTecnicoCampo(usuario) && child.id === 'visits-agenda'))
         const puedeVerGeneral = canViewPath(usuario, item.path)
         if (!children.length && !puedeVerGeneral) return []
         // Sin permiso de la vista general, tampoco se ofrece el enlace "Vista general".

@@ -6,6 +6,8 @@ import { navigationForAccount, type NavigationItem } from '@/app/navigation/navi
 import { canViewPath } from '@/features/auth/screenPermissions'
 import { cn } from '@/app/lib/cn'
 import BrandMark from '@/components/common/BrandMark'
+import { Bell } from 'lucide-react'
+import { obtenerContadorNotificaciones, NOTIFICACIONES_ACTUALIZADAS } from '@/features/notifications/services/notificationsService'
 
 function activePath(pathname: string, path?: string, exact = false) {
   if (!path) return false
@@ -26,6 +28,17 @@ export default function AppSidebar() {
     [usuario?.id, usuario?.roles.join(','), usuario?.permisos.join(',')],
   )
   const sidebarRef = useRef<HTMLElement>(null)
+  const [sinLeer, setSinLeer] = useState(0)
+  useEffect(() => {
+    if (!usuario) { return }
+    let mounted = true
+    const consultar = () => { void obtenerContadorNotificaciones().then(r => { if (mounted) setSinLeer(r.noLeidas) }).catch(() => {}) }
+    consultar()
+    const timer = window.setInterval(consultar, 60_000)
+    window.addEventListener('focus', consultar)
+    window.addEventListener(NOTIFICACIONES_ACTUALIZADAS, consultar)
+    return () => { mounted = false; window.clearInterval(timer); window.removeEventListener('focus', consultar); window.removeEventListener(NOTIFICACIONES_ACTUALIZADAS, consultar) }
+  }, [usuario?.id])
   const [submenu, setSubmenu] = useState<{ route: string; role: string; expanded: Record<string, boolean> } | null>(null)
   // Match the most specific child so the inventory route does not open agriculture.
   const activeParentId = groups.flatMap((group) => group.items).flatMap((item) => item.children
@@ -115,6 +128,12 @@ export default function AppSidebar() {
       <button type="button" onClick={closeMobileSidebar} aria-label="Cerrar navegación" className="layout-icon-button layout-focus size-9 xl:hidden"><span aria-hidden="true">×</span></button>
     </div>
     <div className="custom-scrollbar min-h-0 flex-1 overflow-y-auto p-1 -mx-1"><nav aria-label="Navegación principal" className="space-y-7">{groups.map((group) => <section key={group.id}>{group.name && <h2 className="mb-3 px-3 text-theme-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-400"><span className={cn(!showLabels && 'xl:sr-only')}>{group.name}</span>{!showLabels && <span aria-hidden="true" className="hidden text-center xl:block">···</span>}</h2>}{renderItems(group.items)}</section>)}</nav></div>
-    <div className={cn('mt-5 border-t border-gray-200 pt-4 text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400', !showLabels && 'xl:hidden')}><p className="font-medium text-gray-700 dark:text-gray-300">{usuario?.roles.join(', ') || 'Sin rol asignado'}</p><p className="mt-1">Rol real de la sesión</p></div>
+    <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-800">
+      <Link to="/notificaciones" onClick={closeMobileSidebar} aria-label={`Notificaciones${sinLeer ? `, ${sinLeer} sin leer` : ''}`} className={cn('layout-menu-item layout-focus', pathname === '/notificaciones' ? 'layout-menu-active' : 'layout-menu-inactive', !showLabels && 'xl:justify-center')}>
+        <Bell size={19} strokeWidth={1.8} aria-hidden="true" />
+        <span className={cn('min-w-0 flex-1', !showLabels && 'xl:hidden')}>Notificaciones</span>
+        {sinLeer > 0 && <span className="rounded-full bg-brand-500 px-2 py-0.5 text-xs font-semibold text-white" aria-hidden="true">{sinLeer > 99 ? '99+' : sinLeer}</span>}
+      </Link>
+    </div>
   </aside>
 }
