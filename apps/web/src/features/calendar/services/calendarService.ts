@@ -14,6 +14,7 @@ export type CalendarTechnicalVisit = {
   familia: string
   comunidad: string
   responsable: string
+  responsableId: number
 }
 
 export type CalendarTraining = {
