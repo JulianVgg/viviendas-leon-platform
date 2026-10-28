@@ -746,6 +746,27 @@ model Notificacion {
 }
 
 // ============================================================
+// SUSCRIPCIONES WEB PUSH (NTF-11)
+// ============================================================
+
+model SuscripcionPush {
+  id                 Int      @id @default(autoincrement())
+  usuarioId          Int      @map("usuario_id")
+  endpoint           String   @db.Text
+  endpointHash       String   @unique @map("endpoint_hash") @db.VarChar(64)
+  claveP256dh        String   @map("clave_p256dh") @db.Text
+  claveAuth          String   @map("clave_auth") @db.Text
+  navegador          String?  @db.VarChar(120)
+  fechaCreacion      DateTime @default(now()) @map("fecha_creacion") @db.Timestamptz(6)
+  fechaActualizacion DateTime @updatedAt @map("fecha_actualizacion") @db.Timestamptz(6)
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([usuarioId])
+  @@map("suscripcion_push")
+}
+
+// ============================================================
 // USUARIOS, ROLES Y PERMISOS
 // ============================================================
 
@@ -777,6 +798,7 @@ model Usuario {
   seguimientos SeguimientoTecnico[]
   bitacoras    Bitacora[]
   notificaciones Notificacion[]
+  suscripcionesPush SuscripcionPush[]
   avisosSeguimiento AvisoSeguimiento[]
   cambiosFechaVisita VisitaReprogramacion[]
   cambiosFechaSeguimiento SeguimientoReprogramacion[]

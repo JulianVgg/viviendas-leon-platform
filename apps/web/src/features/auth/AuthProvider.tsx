@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { desactivarPushAlCerrarSesion, desvincularPushDeOtraCuenta } from '@/features/notifications/services/pushService'
 
 
 
@@ -57,6 +58,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const data: { usuario: AuthUser } = await response.json()
+      // Un navegador compartido no debe conservar suscripciones de otra cuenta.
+      try { await desvincularPushDeOtraCuenta() } catch {
+        // Si el servicio push no responde, el usuario aún puede corregirlo en Notificaciones.
+      }
       setUsuario(data.usuario)
       return true
     } catch {
@@ -83,6 +88,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [verificarSesion])
 
   const cerrarSesion = useCallback(async () => {
+    // Cancelar Web Push de este navegador antes de invalidar la sesión.
+    await desactivarPushAlCerrarSesion()
     const response = await fetch('/api/v1/auth/logout', {
       method: 'POST',
       credentials: 'same-origin',
