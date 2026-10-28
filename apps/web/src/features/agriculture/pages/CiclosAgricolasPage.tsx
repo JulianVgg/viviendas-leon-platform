@@ -59,6 +59,7 @@ export default function CiclosAgricolasPage() {
         <p className="mt-2 text-xs text-slate-500">Siembra: {cycle.fechaSiembra ?? 'No registrada'} · Trasplante: {cycle.fechaTrasplante ?? 'No registrado'}</p>
         <p className="mt-1 text-xs text-slate-500">Plantas iniciales: {cycle.cantidadPlantas ?? 'No indicado'}</p>
         <Link to={`/familias/${cycle.huerto.familiaId}?tab=gardens`} className="mt-3 inline-block text-sm font-medium text-brand-600 underline">Abrir expediente</Link>
+        <Link to={`/gestion-agricola/ciclos/${cycle.id}`} className="ml-3 inline-block text-sm font-medium text-brand-600 underline">Ver seguimiento</Link>
       </article>)}</div>}
     </CardBody></Card>
   </>

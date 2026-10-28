@@ -4,6 +4,7 @@ import { Prisma } from '../../generated/prisma/client.js'
 import { requireAuth } from '../auth/auth.middleware.js'
 import { requirePermission } from '../auth/require-permission.middleware.js'
 import { parseCycleId, validateCycleInput } from './cycles.validation.js'
+import { parseEvaluationObservations } from './followup-format.js'
 
 export const cyclesRouter = Router()
 cyclesRouter.use(requireAuth)
@@ -55,6 +56,54 @@ cyclesRouter.get('/:id', requirePermission('PANTALLA_CICLOS'), async (req, res, 
     const record = await getPrismaClient().cicloCultivo.findUnique({ where: { id }, select: cycleSelect })
     if (!record) { res.status(404).json(issue('CYCLE_NOT_FOUND', 'La siembra no existe.')); return }
     res.json({ data: serialize(record) })
+  } catch (err) { next(err) }
+})
+
+// AGR-04: historial paginado de las evaluaciones de una siembra, no de un nombre de cultivo.
+cyclesRouter.get('/:id/seguimientos', requirePermission('PANTALLA_CICLOS'), async (req, res, next) => {
+  const id = parseCycleId(req.params.id)
+  const rawPage = req.query.page
+  const page = rawPage === undefined ? 1
+    : typeof rawPage === 'string' && /^[1-9]\d{0,5}$/.test(rawPage) ? Number(rawPage) : 0
+  if (!id || !Number.isSafeInteger(page) || page < 1 || page > 100000) {
+    res.status(400).json(issue('VALIDATION_ERROR', 'Selecciona una siembra y página válidas.'))
+    return
+  }
+  try {
+    const prisma = getPrismaClient()
+    const exists = await prisma.cicloCultivo.findUnique({ where: { id }, select: { id: true } })
+    if (!exists) { res.status(404).json(issue('CYCLE_NOT_FOUND', 'La siembra no existe.')); return }
+    const limit = 20
+    const where = { cicloCultivoId: id, visita: { estado: 'REALIZADA' } }
+    const [total, evaluations] = await Promise.all([
+      prisma.evaluacionCultivo.count({ where }),
+      prisma.evaluacionCultivo.findMany({
+        where,
+        select: {
+          id: true, visitaId: true, cicloCultivoId: true, observaciones: true,
+          etapaCultivo: { select: { nombre: true } },
+          calidad: { select: { nombre: true } },
+          visita: { select: { fecha: true, usuarioResponsableId: true,
+            usuarioResponsable: { select: { nombre: true, apellido: true } } } },
+        },
+        orderBy: [{ visita: { fecha: 'desc' } }, { id: 'desc' }],
+        skip: (page - 1) * limit, take: limit,
+      }),
+    ])
+    res.setHeader('Cache-Control', 'no-store')
+    res.json({ data: {
+      items: evaluations.map(record => ({
+        id: record.id, visitaId: record.visitaId, cicloCultivoId: record.cicloCultivoId,
+        fecha: day(record.visita.fecha),
+        usuarioResponsableId: record.visita.usuarioResponsableId,
+        responsable: [record.visita.usuarioResponsable.nombre, record.visita.usuarioResponsable.apellido]
+          .filter(Boolean).join(' ') || `Usuario #${record.visita.usuarioResponsableId}`,
+        etapa: record.etapaCultivo?.nombre ?? null,
+        calidad: record.calidad?.nombre ?? null,
+        ...parseEvaluationObservations(record.observaciones),
+      })),
+      pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+    } })
   } catch (err) { next(err) }
 })
 

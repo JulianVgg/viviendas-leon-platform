@@ -23,6 +23,7 @@ type CropEntry = {
   id: string; cicloCultivoId: number | null; name: string; stage: string; plants: string; quality: string
   findings: Finding[]; production: boolean; perPlantUnits: string; perPlantKg: string
   units: string; kg: string; priceQ: string; priceBasis: 'unidad' | 'kg'
+  observacionesCultivo: string
 }
 type Commitment = { id: string; text: string; due: string; nextVisit: boolean; category: string }
 const steps = ['Información general', 'Evaluación de cultivos', 'Recomendaciones y observaciones']
@@ -30,7 +31,7 @@ const input = `${formControlClassName} w-full`
 const area = `${formControlClassName} h-auto min-h-24 resize-y`
 const card = 'rounded-2xl border border-slate-200 bg-white p-4 shadow-theme-xs dark:border-slate-800 dark:bg-slate-900 md:p-6'
 const todayLocal = todayInGuatemala
-const newCrop = (): CropEntry => ({ id: crypto.randomUUID(), cicloCultivoId: null, name: '', stage: '', plants: '', quality: '', findings: [], production: false, perPlantUnits: '', perPlantKg: '', units: '', kg: '', priceQ: '', priceBasis: 'unidad' })
+const newCrop = (): CropEntry => ({ id: crypto.randomUUID(), cicloCultivoId: null, name: '', stage: '', plants: '', quality: '', findings: [], production: false, perPlantUnits: '', perPlantKg: '', units: '', kg: '', priceQ: '', priceBasis: 'unidad', observacionesCultivo: '' })
 const newCommitment = (): Commitment => ({ id: crypto.randomUUID(), text: '', due: '', nextVisit: true, category: 'Familia' })
 const currencyTotal = (entry: CropEntry, currency: 'priceQ') => {
   const quantity = Number(entry.priceBasis === 'kg' ? entry.kg : entry.units)
@@ -233,9 +234,13 @@ export default function VisitRegisterPage() {
         cropsState.some(c => c.plants.trim() && !Number.isSafeInteger(Number(c.plants)))) {
       setError('Revisa las cantidades y precios; deben ser números positivos.'); setStep(1); return
     }
+    if (cropsState.some(c => c.observacionesCultivo.length > 2000)) {
+      setError('Las observaciones del cultivo no pueden superar 2000 caracteres.'); setStep(1); return
+    }
     const cropsCapture: CropCapture[] = cropsState.map(c => ({
       ...(c.cicloCultivoId ? { cicloCultivoId: c.cicloCultivoId } : {}),
       name: c.name, stage: c.stage, quality: c.quality, plants: numberOrNull(c.plants),
+      ...(c.observacionesCultivo.trim() ? { observacionesCultivo: c.observacionesCultivo.trim() } : {}),
       findings: c.findings.map(f => ({ type: f.type, name: f.name, damage: f.damage })),
       production: c.production, perPlantUnits: c.production ? numberOrNull(c.perPlantUnits) : null,
       perPlantKg: c.production ? numberOrNull(c.perPlantKg) : null,
@@ -362,14 +367,21 @@ export default function VisitRegisterPage() {
               <select id={`crop-cycle-${crop.id}`} className={input} value={crop.cicloCultivoId ?? ''} onChange={e => {
                 const found = availableCycles.find(item => item.id === Number(e.target.value))
                 if (found && cropsState.some(item => item.id !== crop.id && item.cicloCultivoId === found.id)) return
-                updateCrop(crop.id, { cicloCultivoId: found?.id ?? null, name: found?.cultivo.nombre ?? '' })
+                updateCrop(crop.id, { cicloCultivoId: found?.id ?? null, name: found?.cultivo.nombre ?? '',
+                  observacionesCultivo: found?.id === crop.cicloCultivoId ? crop.observacionesCultivo : '' })
               }}><option value="">Seleccionar siembra</option>
                 {availableCycles.filter(item => item.id === crop.cicloCultivoId || !cropsState.some(selected => selected.cicloCultivoId === item.id)).map(item => <option key={item.id} value={item.id}>{item.cultivo.nombre} · {item.huerto.nombre || `Huerto #${item.huertoId}`} · {item.fechaSiembra || item.fechaTrasplante || 'Sin fecha'} (#{item.id})</option>)}
               </select>
             </FormField> : <SearchableSelect label="Planta (sin vincular)" id={`crop-name-${crop.id}`} value={crop.name} onChange={name => updateCrop(crop.id,{name, cicloCultivoId: null})} options={catalogOptions(crops)} />}
             <FormField label="Etapa" id={`crop-stage-${crop.id}`}><select id={`crop-stage-${crop.id}`} className={input} value={crop.stage} onChange={e => updateCrop(crop.id,{stage:e.target.value})}><Options items={stages}/></select></FormField>
-            <FormField label="Cantidad de plantas" id={`crop-plants-${crop.id}`}><input id={`crop-plants-${crop.id}`} className={input} type="number" min="0" step="1" value={crop.plants} onChange={e=>updateCrop(crop.id,{plants:e.target.value})}/></FormField>
+            <FormField label="Plantas observadas" id={`crop-plants-${crop.id}`}><input id={`crop-plants-${crop.id}`} className={input} type="number" min="0" step="1" value={crop.plants} onChange={e=>updateCrop(crop.id,{plants:e.target.value})}/></FormField>
             <FormField label="Calidad" id={`crop-quality-${crop.id}`}><select id={`crop-quality-${crop.id}`} className={input} value={crop.quality} onChange={e=>updateCrop(crop.id,{quality:e.target.value})}><Options items={qualities}/></select></FormField>
+          </div>
+          <div className="mt-4">
+            <FormField label="Observaciones del cultivo" id={`crop-observations-${crop.id}`}>
+              <textarea id={`crop-observations-${crop.id}`} className={area} maxLength={2000}
+                value={crop.observacionesCultivo} onChange={e => updateCrop(crop.id, { observacionesCultivo: e.target.value })} />
+            </FormField>
           </div>
           <details className="mt-5 rounded-xl border border-slate-200 p-4 dark:border-slate-700"><summary className="cursor-pointer font-medium text-slate-900 dark:text-white">¿Detectaste plagas o enfermedades? <span className="text-xs font-normal text-slate-500">({crop.findings.length} hallazgos)</span></summary>
             <div className="mt-4 space-y-3">{crop.findings.map(f => <div key={f.id} className="grid gap-2 rounded-lg bg-slate-50 p-3 dark:bg-slate-800/40 md:grid-cols-[135px_1fr_110px_auto] md:items-end">
