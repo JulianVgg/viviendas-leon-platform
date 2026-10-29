@@ -16,6 +16,8 @@ export default function AppHeader() {
   const { isExpanded, isMobileOpen, toggleSidebar, toggleMobileSidebar } = useSidebar()
   const { theme, toggleTheme } = useTheme()
   const [userOpen, setUserOpen] = useState(false)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [avatarVersion, setAvatarVersion] = useState(0)
   const [cerrandoSesion, setCerrandoSesion] = useState(false)
   const [errorLogout, setErrorLogout] = useState('')
   const userRef = useRef<HTMLDivElement>(null)
@@ -24,6 +26,29 @@ export default function AppHeader() {
   const toggleMenu = () => window.innerWidth >= 1280 ? toggleSidebar() : toggleMobileSidebar()
   const canViewSettings = Boolean(usuario && canViewPath(usuario, '/administracion/configuracion'))
   const inicialesUsuario = usuario?.nombre.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((parte) => parte.charAt(0)).join('').toUpperCase() || 'U'
+
+  useEffect(() => {
+    const onChange = () => setAvatarVersion(version => version + 1)
+    window.addEventListener('viviendas-leon:photo-updated', onChange)
+    return () => window.removeEventListener('viviendas-leon:photo-updated', onChange)
+  }, [])
+
+  useEffect(() => {
+    if (!usuario?.id) { setAvatarUrl(null); return }
+    const controller = new AbortController()
+    let objectUrl: string | null = null
+    setAvatarUrl(null)
+    void fetch('/api/v1/perfil/foto', { credentials: 'same-origin', cache: 'no-store', signal: controller.signal })
+      .then(async response => {
+        if (!response.ok) return
+        const blob = await response.blob()
+        if (controller.signal.aborted) return
+        objectUrl = URL.createObjectURL(blob)
+        setAvatarUrl(objectUrl)
+      })
+      .catch(() => { /* Sin fotografía, se usan las iniciales. */ })
+    return () => { controller.abort(); if (objectUrl) URL.revokeObjectURL(objectUrl) }
+  }, [usuario?.id, avatarVersion])
 
   async function handleLogout() {
     if (cerrandoSesion) return
@@ -74,7 +99,7 @@ export default function AppHeader() {
         <NotificationDropdown />
         <div ref={userRef} className="relative" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setUserOpen(false) }}>
           <button ref={roleButtonRef} type="button" className="layout-focus flex min-h-11 max-w-56 items-center gap-2 rounded-lg px-1 text-start hover:bg-slate-100 dark:hover:bg-white/5" onClick={() => setUserOpen((value) => !value)} aria-label="Abrir menú de usuario" aria-controls="user-account-panel" aria-expanded={userOpen}>
-            <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-50 text-xs font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">{inicialesUsuario}</span>
+            <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-50 text-xs font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">{avatarUrl ? <img src={avatarUrl} alt="" className="size-full object-cover"/> : inicialesUsuario}</span>
             <span className="hidden min-w-0 md:block"><span className="block truncate text-sm font-medium text-slate-800 dark:text-white">{usuario?.nombre ?? 'Usuario'}</span><span className="block truncate text-xs text-slate-500 dark:text-slate-400">{usuario?.roles.join(', ') || 'Sin rol asignado'}</span></span>
             <span aria-hidden="true" className="hidden text-slate-500 sm:block">{userOpen ? '⌃' : '⌄'}</span>
           </button>

@@ -14,6 +14,8 @@ import VisitDetailDialog from '@/features/visits/components/VisitDetailDialog'
 import InvitacionDetalleDialog from '@/features/notifications/components/InvitacionDetalleDialog'
 import { obtenerMisInvitaciones, type DetalleInvitacion } from '@/features/notifications/services/invitationsService'
 import { filtrarAgenda, filtrosIniciales, type FiltrosAgenda } from '@/features/visits/services/personalCalendarFilters'
+import ScheduleTrainingDialog from '@/features/training/components/ScheduleTrainingDialog'
+import { getTrainings, type Training } from '@/features/training/services/trainingService'
 import { deleteScheduledVisit, getVisitFollowUps, getVisitList, syncPendingVisits, todayInGuatemala, type VisitFollowUp, type VisitListItem } from '@/features/visits/services/visitService'
 
 const monthLabels = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
@@ -22,8 +24,8 @@ const dateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth()+
 const dateLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('es-GT',{ day:'numeric', month:'short', year:'numeric' })
 const card = 'rounded-2xl border border-gray-200 bg-white shadow-theme-xs dark:border-gray-800 dark:bg-gray-900'
 const visitKey = (visit: VisitListItem) => visit.operationId ?? `visit-${visit.id}`
-type Reminder = { key: string; date: string | null; sortDate: string; family: string; description: string; type: 'visit' | 'followup' | 'institutional'; visit?: VisitListItem; followup?: VisitFollowUp; invitation?: DetalleInvitacion }
-type CalendarEvent = { key: string; label: string; kind: 'visit' | 'followup' | 'visit-history' | 'followup-history' | 'institutional'; visit?: VisitListItem; followup?: VisitFollowUp; movedTo?: string; invitation?: DetalleInvitacion }
+type Reminder = { key: string; date: string | null; sortDate: string; family: string; description: string; type: 'visit' | 'followup' | 'institutional' | 'training'; training?: Training; visit?: VisitListItem; followup?: VisitFollowUp; invitation?: DetalleInvitacion }
+type CalendarEvent = { key: string; label: string; kind: 'visit' | 'followup' | 'visit-history' | 'followup-history' | 'institutional' | 'training'; training?: Training; visit?: VisitListItem; followup?: VisitFollowUp; movedTo?: string; invitation?: DetalleInvitacion }
 
 export default function VisitAgendaPage() {
   const { usuario } = useAuth()
@@ -34,6 +36,11 @@ export default function VisitAgendaPage() {
   const [items, setItems] = useState<VisitListItem[]>([])
   const [followups, setFollowups] = useState<VisitFollowUp[]>([])
   const [invitaciones, setInvitaciones] = useState<DetalleInvitacion[]>([])
+  const [capacitaciones, setCapacitaciones] = useState<Training[]>([])
+  const [capacitacionAbierta, setCapacitacionAbierta] = useState<Training | null>(null)
+  const [capacitacionFecha, setCapacitacionFecha] = useState<string | null>(null)
+  const [seleccionarTipoFecha, setSeleccionarTipoFecha] = useState<string | null>(null)
+  const [avisoCapacitaciones, setAvisoCapacitaciones] = useState('')
   const [filtros, setFiltros] = useState<FiltrosAgenda>(filtrosIniciales)
   const [eventoAbierto, setEventoAbierto] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
@@ -56,6 +63,8 @@ export default function VisitAgendaPage() {
     const normalized = role.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase()
     return normalized === 'direccion general' || normalized === 'coordinadora del programa agroforestal'
   }))
+  const puedeAgendarCapacitaciones = Boolean(usuario?.permisos.includes('PANTALLA_CAPACITACIONES') && usuario.permisos.includes('CAPACITACIONES_WRITE'))
+  const puedeConsultarCapacitaciones = Boolean(usuario?.permisos.includes('PANTALLA_CAPACITACIONES'))
   const visitOwner = (visit: VisitListItem) => visit.responsibleUserId === usuario?.id
   const canManageVisit = (visit: VisitListItem) => visitOwner(visit) || (institutionManager && visit.status === 'PROGRAMADA' && visit.id !== null)
   const canManageFollowUp = (followup: VisitFollowUp) => followup.responsibleUserId === usuario?.id
@@ -65,16 +74,18 @@ export default function VisitAgendaPage() {
     setLoading(true)
     try {
       await syncPendingVisits(usuario.id)
-      const [visits, pending, eventos] = await Promise.all([
+      const [visits, pending, eventos, mias] = await Promise.all([
         getVisitList(usuario.id), getVisitFollowUps(usuario.id),
         obtenerMisInvitaciones().catch(() => ({ data: [] as DetalleInvitacion[] })),
+        puedeConsultarCapacitaciones ? getTrainings({ mias: true }).then(data => ({ data, error: '' })).catch(() => ({ data: [] as Training[], error: 'No se pudieron consultar tus capacitaciones.' })) : Promise.resolve({ data: [] as Training[], error: '' }),
       ])
       setItems(visits.items); setFollowups(pending.items)
       setInvitaciones(eventos.data.filter(e => ['ACEPTADA','ASIGNADO'].includes(e.estado ?? '')))
+      setCapacitaciones(mias.data); setAvisoCapacitaciones(mias.error)
       setLocal(visits.local || pending.local); setError('')
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'No se pudo cargar la agenda.') }
     finally { setLoading(false) }
-  }, [usuario])
+  }, [usuario, puedeConsultarCapacitaciones])
 
   useEffect(() => { void refresh() }, [refresh])
   // Enlace del calendario institucional: abre la visita original, sin copiarla.
@@ -164,8 +175,13 @@ export default function VisitAgendaPage() {
         cursor=fecha.toISOString().slice(0,10)
       }
     }
+    for (const capacitacion of capacitaciones) {
+      const lista = map.get(capacitacion.fecha) ?? []
+      lista.push({ key: `training-${capacitacion.id}`, label: capacitacion.tema, kind: 'training', training: capacitacion })
+      map.set(capacitacion.fecha, lista)
+    }
     return map
-  }, [byDate, followups, items, invitaciones])
+  }, [byDate, followups, items, invitaciones, capacitaciones])
   const eventosVisibles = useMemo(() => new Map([...eventsByDate].map(([fecha, eventos]) =>
     [fecha, filtrarAgenda(eventos, filtros, today)] as const)), [eventsByDate, filtros, today])
   const cells = useMemo(() => {
@@ -190,13 +206,17 @@ export default function VisitAgendaPage() {
       family: e.titulo, description: [e.categoria, e.lugar].filter(Boolean).join(' · '),
       type: 'institutional', invitation: e,
     }))
+    const trainings: Reminder[] = capacitaciones.map(c => ({
+      key: `training-${c.id}`, date: c.fecha, sortDate: c.fecha, family: c.tema,
+      description: [c.comunidad?.nombre, c.facilitadorNombre].filter(Boolean).join(' · '), type: 'training', training: c,
+    }))
     // La lista lateral utiliza los mismos filtros que el calendario mensual.
-    const todos = [...scheduled, ...followUpReminders, ...institutional]
+    const todos = [...scheduled, ...followUpReminders, ...institutional, ...trainings]
     return todos.filter(item => filtrarAgenda([{
       key: item.key, label: item.family, kind: item.type === 'institutional' ? 'institutional' : item.type,
-      visit: item.visit, followup: item.followup, invitation: item.invitation,
+      visit: item.visit, followup: item.followup, invitation: item.invitation, training: item.training,
     }], filtros, today).length > 0).sort((a,b) => a.sortDate.localeCompare(b.sortDate)).slice(0,24)
-  }, [items,followups,invitaciones,today,filtros])
+  }, [items,followups,invitaciones,capacitaciones,today,filtros])
   const pendingCount = followups.filter(f => f.status !== 'CUMPLIDO').length
   useEffect(() => { setSlide(0) }, [filtros])
   const detailsFollowUps = selected ? followups.filter(f => f.familyId === selected.familyId && (f.status !== 'CUMPLIDO' || f.sourceVisitId === selected.id)) : []
@@ -229,13 +249,15 @@ export default function VisitAgendaPage() {
     }
   }
   return <div className="visits-enter">
-    <PageMeta title="Agenda de visitas | Viviendas León" description="Agenda y compromisos de visitas técnicas" />
-    <PageHeader title="Agenda de visitas" description="" />
+    <PageMeta title="Mi calendario | Viviendas León" description="Visitas, capacitaciones y actividades" />
+    <PageHeader title="Mi calendario" description="" />
     {error && <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-500/10 dark:text-red-300">{error}</div>}
+    {avisoCapacitaciones && <p role="status" className="mb-3 text-xs text-amber-700 dark:text-amber-400">{avisoCapacitaciones}</p>}
     {local && !error && <p className="mb-3 text-xs font-medium text-amber-700 dark:text-amber-300">Mostrando datos guardados en este dispositivo. Editar pendientes requiere conexión.</p>}
     <div className="mb-4 flex flex-wrap items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
       <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-brand-500"/>Programada</span>
       <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-violet-500"/>Evento</span>
+      <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-cyan-500"/>Capacitación</span>
       <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-rose-500"/>Visita vencida</span>
       <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-slate-400"/>Reprogramación</span>
       <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-emerald-500"/>Realizada</span>
@@ -247,7 +269,7 @@ export default function VisitAgendaPage() {
         <select aria-label="Filtrar por actividad" className="mt-1 block w-full rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-white" value={filtros.tipo}
           onChange={e => setFiltros(old => ({...old, tipo:e.target.value as FiltrosAgenda['tipo']}))}>
           <option value="todos">Todas</option><option value="visitas">Visitas</option><option value="compromisos">Compromisos</option>
-          <option value="eventos">Eventos</option><option value="reprogramaciones">Reprogramaciones</option>
+          <option value="eventos">Eventos</option><option value="capacitaciones">Capacitaciones</option><option value="reprogramaciones">Reprogramaciones</option>
         </select>
       </label>
       <label className="block text-xs font-medium text-gray-600 dark:text-gray-300">Estado
@@ -277,19 +299,19 @@ export default function VisitAgendaPage() {
           <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50 text-center text-xs font-semibold text-gray-500 dark:border-gray-800 dark:bg-gray-800/40 dark:text-gray-400">{weekdays.map(day=><span key={day} className="py-3">{day}</span>)}</div>
           <div className="grid grid-cols-7">{cells.map((cell,index) => {
             const daily = eventosVisibles.get(cell.key) ?? []
-            return <div key={cell.key} onDoubleClick={() => { if (cell.key >= today) setSchedulingDate(cell.key) }}
-              title={cell.key >= today ? `Agendar visita el ${cell.key}` : undefined}
+            return <div key={cell.key} onDoubleClick={() => { if (cell.key >= today) setSeleccionarTipoFecha(cell.key) }}
+              title={cell.key >= today ? `Agendar actividad el ${cell.key}` : undefined}
               className={`min-h-28 border-b border-r border-gray-100 p-1.5 transition-colors hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-white/5 md:min-h-36 ${index%7===0 ? 'border-l border-gray-100 dark:border-gray-800' : ''} ${!cell.currentMonth ? 'bg-gray-50/70 dark:bg-gray-950/30' : ''}`}>
-              <button type="button" onClick={() => { if (cell.key >= today) setSchedulingDate(cell.key) }}
+              <button type="button" onClick={() => { if (cell.key >= today) setSeleccionarTipoFecha(cell.key) }}
                 disabled={cell.key < today}
-                aria-label={cell.key < today ? `Día ${cell.key}` : `Agendar visita el ${cell.key}`}
+                aria-label={cell.key < today ? `Día ${cell.key}` : `Agendar actividad el ${cell.key}`}
                 className={`mb-2 inline-flex size-7 items-center justify-center rounded-full text-xs font-semibold focus-visible:outline-2 focus-visible:outline-brand-500 ${cell.key < today ? 'cursor-default text-gray-400 dark:text-gray-500' : 'hover:bg-brand-100'} ${cell.key===today?'bg-brand-500 text-white':cell.currentMonth?'text-gray-800 dark:text-gray-200':'text-gray-400'}`}>{cell.date}</button>
               <div className="space-y-1">
                 {daily.slice(0,3).map(event => <button key={event.key} type="button"
-                  onClick={() => event.invitation ? setEventoAbierto(event.invitation.eventoId) : event.visit ? setSelected(event.visit) : event.followup && openFollowUp(event.followup)}
+                  onClick={() => event.training ? setCapacitacionAbierta(event.training) : event.invitation ? setEventoAbierto(event.invitation.eventoId) : event.visit ? setSelected(event.visit) : event.followup && openFollowUp(event.followup)}
                   onDoubleClick={e => e.stopPropagation()}
-                  title={event.movedTo ? `Reprogramado para ${dateLabel(event.movedTo)}` : event.kind === 'institutional' ? `Ver evento: ${event.label}` : event.kind === 'visit' ? `Ver visita: ${event.label}` : `Ver seguimiento: ${event.label}`}
-                  className={`block w-full truncate rounded-md border-l-[3px] px-1.5 py-1 text-left text-[11px] font-medium transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-brand-500 ${event.kind==='institutional' ? 'border-violet-500 bg-violet-50 text-violet-800 dark:bg-violet-500/10 dark:text-violet-200' : event.kind.endsWith('history') ? 'border-slate-400 border-dashed bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300' : event.kind==='visit' && event.visit?.status==='PROGRAMADA' && event.visit.date < today ? 'border-rose-500 bg-rose-50 text-rose-800 dark:bg-rose-500/10 dark:text-rose-300' : event.kind==='followup' ? event.followup?.status === 'NO_CUMPLIDO' ? 'border-red-500 bg-red-50 text-red-800 dark:bg-red-500/10 dark:text-red-300' : 'border-amber-500 bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300' :event.visit?.status==='REALIZADA'?'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300':'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-200'}`}>
+                  title={event.movedTo ? `Reprogramado para ${dateLabel(event.movedTo)}` : event.kind === 'training' ? `Ver capacitación: ${event.label}` : event.kind === 'institutional' ? `Ver evento: ${event.label}` : event.kind === 'visit' ? `Ver visita: ${event.label}` : `Ver seguimiento: ${event.label}`}
+                  className={`block w-full truncate rounded-md border-l-[3px] px-1.5 py-1 text-left text-[11px] font-medium transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-brand-500 ${event.kind==='training' ? 'border-cyan-500 bg-cyan-50 text-cyan-800 dark:bg-cyan-500/10 dark:text-cyan-200' : event.kind==='institutional' ? 'border-violet-500 bg-violet-50 text-violet-800 dark:bg-violet-500/10 dark:text-violet-200' : event.kind.endsWith('history') ? 'border-slate-400 border-dashed bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300' : event.kind==='visit' && event.visit?.status==='PROGRAMADA' && event.visit.date < today ? 'border-rose-500 bg-rose-50 text-rose-800 dark:bg-rose-500/10 dark:text-rose-300' : event.kind==='followup' ? event.followup?.status === 'NO_CUMPLIDO' ? 'border-red-500 bg-red-50 text-red-800 dark:bg-red-500/10 dark:text-red-300' : 'border-amber-500 bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300' :event.visit?.status==='REALIZADA'?'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300':'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-200'}`}>
                   {event.kind === 'followup' && <Clock3 size={10} className="mr-1 inline"/>}{event.label}
                 </button>)}
                 {daily.length > 3 && <button type="button" onClick={() => setExpandedDay(cell.key)}
@@ -314,16 +336,17 @@ export default function VisitAgendaPage() {
           }} className="custom-scrollbar max-h-[450px] min-w-0 flex-1 snap-y snap-mandatory space-y-3 overflow-y-auto overscroll-contain">
             {loading ? <p className="py-8 text-center text-sm text-gray-500">Cargando…</p> : reminders.length === 0 ? <div className="py-9 text-center text-sm text-gray-500"><CheckCheck className="mx-auto mb-2 text-emerald-500" size={27}/>Sin actividades para estos filtros.</div>
             : reminders.map(item => <article key={item.key} data-reminder className="snap-start rounded-xl border border-gray-200 bg-gray-50/30 p-3 dark:border-gray-800 dark:bg-white/5">
-              <div className="mb-2 flex items-center gap-2 text-xs font-semibold"><span className={`rounded-full px-2 py-1 ${item.type==='institutional' ? 'bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300' : item.type==='visit' ? item.date && item.date < today ? 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300' : 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300' : item.followup?.status === 'NO_CUMPLIDO' ? 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'}`}>{item.type==='institutional' ? 'Evento' : item.type==='visit' ? item.date && item.date < today ? 'Visita vencida' : 'Visita programada' : item.followup?.status === 'NO_CUMPLIDO' ? 'No cumplido' : 'Seguimiento'}</span><span className={item.date && item.date<today?'text-rose-600':'text-gray-500'}>{item.date ? dateLabel(item.date) : item.followup?.nextVisit ? 'Próxima visita' : 'Sin fecha'}{item.date && item.date<today?' · Vencido':''}</span></div>
+              <div className="mb-2 flex items-center gap-2 text-xs font-semibold"><span className={`rounded-full px-2 py-1 ${item.type==='training' ? 'bg-cyan-50 text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-300' : item.type==='institutional' ? 'bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300' : item.type==='visit' ? item.date && item.date < today ? 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300' : 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300' : item.followup?.status === 'NO_CUMPLIDO' ? 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'}`}>{item.type==='training' ? 'Capacitación' : item.type==='institutional' ? 'Evento' : item.type==='visit' ? item.date && item.date < today ? 'Visita vencida' : 'Visita programada' : item.followup?.status === 'NO_CUMPLIDO' ? 'No cumplido' : 'Seguimiento'}</span><span className={item.date && item.date<today?'text-rose-600':'text-gray-500'}>{item.date ? dateLabel(item.date) : item.followup?.nextVisit ? 'Próxima visita' : 'Sin fecha'}{item.date && item.date<today?' · Vencido':''}</span></div>
               <p className="text-sm font-semibold text-gray-900 dark:text-white">{item.family}</p>
               <p className="mt-1 line-clamp-3 text-sm leading-5 text-gray-600 dark:text-gray-300">{item.description}</p>
               <div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold text-brand-600 dark:text-brand-400">
+                {item.training && <button type="button" onClick={()=>setCapacitacionAbierta(item.training!)} className="hover:underline">Ver capacitación →</button>}
                 {item.invitation && <button type="button" onClick={() => setEventoAbierto(item.invitation!.eventoId)} className="hover:underline">Ver evento →</button>}
                 {item.visit && <><button type="button" onClick={()=>setSelected(item.visit!)} className="hover:underline">Ver detalle →</button>
                   {canManageVisit(item.visit) && <button type="button" disabled={!item.visit.id || Boolean(item.visit.syncStatus && item.visit.syncStatus !== 'synced')} onClick={()=>openReschedule(item.visit!)} className="hover:underline disabled:cursor-not-allowed disabled:opacity-40">Cambiar fecha</button>}</>}
                 {item.followup && <button type="button" onClick={()=>openFollowUp(item.followup!)} className="inline-flex items-center gap-1 hover:underline"><Edit3 size={13}/> {canManageFollowUp(item.followup) ? 'Editar seguimiento' : 'Ver seguimiento'}</button>}
                 {item.visit && item.visit.date < today && canManageVisit(item.visit) && <button type="button" className="font-semibold text-rose-700 underline" onClick={()=>openReschedule(item.visit!)}>Reprogramar primero ↗</button>}
-                {item.visit ? (canManageVisit(item.visit) && item.visit.date === today && <Link to={`/visitas/nueva?familia=${item.visit.familyId}&fecha=${today}${item.visit.id && item.visit.status === 'PROGRAMADA' ? `&programada=${item.visit.id}` : ''}`} className="hover:underline">Registrar visita ↗</Link>) : (item.followup && canManageFollowUp(item.followup) && <Link to={`/visitas/nueva?familia=${item.followup.familyId}&fecha=${today}`} className="hover:underline">Registrar visita ↗</Link>)}
+                {item.visit ? (!institutionManager && canManageVisit(item.visit) && item.visit.date === today && <Link to={`/visitas/nueva?familia=${item.visit.familyId}&fecha=${today}${item.visit.id && item.visit.status === 'PROGRAMADA' ? `&programada=${item.visit.id}` : ''}`} className="hover:underline">Registrar visita ↗</Link>) : (!institutionManager && item.followup && canManageFollowUp(item.followup) && <Link to={`/visitas/nueva?familia=${item.followup.familyId}&fecha=${today}`} className="hover:underline">Registrar visita ↗</Link>)}
               </div>
             </article>)}
           </div>
@@ -341,13 +364,38 @@ export default function VisitAgendaPage() {
       className="visit-followup-modal">
       <div className="space-y-2">
         {(expandedDay ? eventosVisibles.get(expandedDay) ?? [] : []).map(event => <button type="button" key={event.key}
-          onClick={() => { setExpandedDay(null); if (event.invitation) setEventoAbierto(event.invitation.eventoId); else if (event.visit) setSelected(event.visit); else if (event.followup) openFollowUp(event.followup) }}
+          onClick={() => { setExpandedDay(null); if (event.training) setCapacitacionAbierta(event.training); else if (event.invitation) setEventoAbierto(event.invitation.eventoId); else if (event.visit) setSelected(event.visit); else if (event.followup) openFollowUp(event.followup) }}
           className="flex w-full items-start gap-3 rounded-lg border border-gray-200 p-3 text-left transition hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-brand-500 dark:border-gray-700 dark:hover:bg-gray-800">
-          <span className={`mt-1 size-2.5 shrink-0 rounded-full ${event.kind==='institutional' ? 'bg-violet-500' : event.kind.endsWith('history') ? 'bg-slate-400' : event.kind==='visit' && event.visit?.status==='PROGRAMADA' && event.visit.date < today ? 'bg-rose-500' : event.kind==='followup' ? event.followup?.status === 'NO_CUMPLIDO' ? 'bg-red-500' : 'bg-amber-500' :event.visit?.status==='REALIZADA'?'bg-emerald-500':'bg-brand-500'}`}/>
+          <span className={`mt-1 size-2.5 shrink-0 rounded-full ${event.kind==='training' ? 'bg-cyan-500' : event.kind==='institutional' ? 'bg-violet-500' : event.kind.endsWith('history') ? 'bg-slate-400' : event.kind==='visit' && event.visit?.status==='PROGRAMADA' && event.visit.date < today ? 'bg-rose-500' : event.kind==='followup' ? event.followup?.status === 'NO_CUMPLIDO' ? 'bg-red-500' : 'bg-amber-500' :event.visit?.status==='REALIZADA'?'bg-emerald-500':'bg-brand-500'}`}/>
           <span className="min-w-0"><span className="block break-words text-sm font-semibold text-gray-900 dark:text-white">{event.label}</span>
-          <span className="mt-1 block text-xs text-gray-500">{event.movedTo ? `Se trasladó al ${dateLabel(event.movedTo)}` : event.kind==='institutional' ? 'Actividad institucional' : event.kind==='followup'?'Seguimiento pendiente':event.visit?.status==='REALIZADA'?'Visita realizada':event.visit?.date && event.visit.date < today ? 'Visita vencida':'Visita programada'} · Abrir detalle</span></span>
+          <span className="mt-1 block text-xs text-gray-500">{event.movedTo ? `Se trasladó al ${dateLabel(event.movedTo)}` : event.kind==='training' ? 'Capacitación' : event.kind==='institutional' ? 'Actividad institucional' : event.kind==='followup'?'Seguimiento pendiente':event.visit?.status==='REALIZADA'?'Visita realizada':event.visit?.date && event.visit.date < today ? 'Visita vencida':'Visita programada'} · Abrir detalle</span></span>
         </button>)}
       </div>
+    </Dialog>
+    <Dialog open={Boolean(seleccionarTipoFecha)} onClose={()=>setSeleccionarTipoFecha(null)} title="Nueva actividad"
+      description={seleccionarTipoFecha ? dateLabel(seleccionarTipoFecha) : undefined}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <button type="button" className="rounded-xl border border-gray-200 p-5 text-left font-semibold transition hover:border-brand-500 hover:bg-brand-50 dark:border-gray-700 dark:hover:bg-gray-800"
+          onClick={()=>{setSchedulingDate(seleccionarTipoFecha);setSeleccionarTipoFecha(null)}}>Visita técnica</button>
+        <button type="button" disabled={!puedeAgendarCapacitaciones}
+          className="rounded-xl border border-gray-200 p-5 text-left font-semibold transition hover:border-brand-500 hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:hover:bg-gray-800"
+          onClick={()=>{setCapacitacionFecha(seleccionarTipoFecha);setSeleccionarTipoFecha(null)}}>Capacitación</button>
+      </div>
+    </Dialog>
+    <ScheduleTrainingDialog date={capacitacionFecha} onClose={()=>setCapacitacionFecha(null)}
+      onSaved={()=>{setCapacitacionFecha(null);void refresh()}} />
+    <Dialog open={Boolean(capacitacionAbierta)} onClose={()=>setCapacitacionAbierta(null)} title={capacitacionAbierta?.tema ?? 'Capacitación'}
+      description={capacitacionAbierta ? dateLabel(capacitacionAbierta.fecha) : undefined}
+      actions={<><Button type="button" variant="secondary" onClick={()=>setCapacitacionAbierta(null)}>Cerrar</Button>
+        {capacitacionAbierta && capacitacionAbierta.estado === 'PROGRAMADA' && puedeAgendarCapacitaciones && <Link to={`/actividades/capacitaciones/registrar?capacitacion=${capacitacionAbierta.id}`}
+          className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white">Registrar asistencia</Link>}</>}>
+      {capacitacionAbierta && <dl className="space-y-3 text-sm dark:text-gray-200">
+        <div><dt className="font-semibold">Estado</dt><dd>{capacitacionAbierta.estado === 'REALIZADA' ? 'Realizada' : 'Programada'}</dd></div>
+        <div><dt className="font-semibold">Comunidad</dt><dd>{capacitacionAbierta.comunidad?.nombre || '—'}</dd></div>
+        <div><dt className="font-semibold">Horario</dt><dd>{capacitacionAbierta.horaInicio || '—'}{capacitacionAbierta.horaFin ? ` – ${capacitacionAbierta.horaFin}` : ''}</dd></div>
+        <div><dt className="font-semibold">Facilitador</dt><dd>{capacitacionAbierta.facilitadorNombre || '—'}</dd></div>
+        <div><dt className="font-semibold">Descripción</dt><dd>{capacitacionAbierta.descripcion || '—'}</dd></div>
+      </dl>}
     </Dialog>
     <InvitacionDetalleDialog eventoId={eventoAbierto} onClose={()=>setEventoAbierto(null)} onResponded={()=>{void refresh()}} />
     <ScheduleVisitDialog date={schedulingDate} onClose={() => setSchedulingDate(null)} onSaved={() => { setSchedulingDate(null); void refresh() }}/>
@@ -362,7 +410,7 @@ export default function VisitAgendaPage() {
       <div className="mt-3 flex flex-wrap gap-4">
         {canManageVisit(selected) && selected.status === 'PROGRAMADA' && <button type="button" disabled={!selected.id} onClick={()=>openReschedule(selected)} className="text-xs font-semibold text-brand-600 hover:underline disabled:opacity-40 dark:text-brand-400">Cambiar fecha programada</button>}
         {canManageVisit(selected) && selected.status === 'PROGRAMADA' && <button type="button" disabled={!selected.id || Boolean(selected.syncStatus && selected.syncStatus !== 'synced')} onClick={()=>requestDelete(selected)} className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:underline disabled:cursor-not-allowed disabled:opacity-40 dark:text-red-400"><Trash2 size={14}/> Eliminar visita</button>}
-        {visitOwner(selected) && !(selected.status === 'PROGRAMADA' && selected.date < today) && <Link className="text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400" to={`/visitas/nueva?familia=${selected.familyId}${selected.id && selected.status === 'PROGRAMADA' ? `&programada=${selected.id}` : ''}`}>Registrar siguiente visita ↗</Link>}
+        {!institutionManager && visitOwner(selected) && !(selected.status === 'PROGRAMADA' && selected.date < today) && <Link className="text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400" to={`/visitas/nueva?familia=${selected.familyId}${selected.id && selected.status === 'PROGRAMADA' ? `&programada=${selected.id}` : ''}`}>Registrar siguiente visita ↗</Link>}
       </div>
     </section> : undefined}/>
     <Dialog open={Boolean(deleteTarget)} onClose={() => { if (!deleteBusy) setDeleteTarget(null) }}

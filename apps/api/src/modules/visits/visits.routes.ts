@@ -18,7 +18,9 @@ import { buildEvaluationObservations } from '../agriculture/followup-format.js'
 // Dirección y Coordinación supervisan y pueden reprogramar citas institucionales.
 // Los demás técnicos conservan exclusivamente los registros propios.
 const isCoordinator = (roles: string[]) => roles.some(role =>
-  role.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() === 'coordinadora del programa agroforestal',
+  ['coordinadora del programa agroforestal', 'coordinador del programa agroforestal', 'coordinacion'].includes(
+    role.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase(),
+  ),
 )
 const isSupervisor = (roles: string[]) => esDireccionGeneral(roles) || isCoordinator(roles)
 
@@ -27,6 +29,12 @@ visitsRouter.use(requireAuth)
 visitsRouter.use(async (req, res, next) => {
   try {
     const user = await getAuthenticatedUser(req.session.userId!)
+    // Supervisión consulta y reprograma; la captura y su evidencia pertenecen al técnico.
+    if (user && isSupervisor(user.roles) && req.method === 'POST' &&
+      (req.path === '/sync' || /^\/[^/]+\/evidencias\/[^/]+$/.test(req.path))) {
+      res.status(403).json({ error: 'Solo el personal técnico puede registrar visitas.' })
+      return
+    }
     const allowed =
       esDireccionGeneral(user?.roles ?? []) ||
       // Coordinación: lectura de agenda y gestión de citas; no puede registrar

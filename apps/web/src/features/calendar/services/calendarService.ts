@@ -1,3 +1,4 @@
+import type { VisitListItem } from '@/features/visits/services/visitService'
 // Los tipos visibles son independientes del texto libre para la opción OTRO.
 // Se conservan las claves históricas para poder consultar eventos ya creados.
 export type InstitutionalCategory =
@@ -88,4 +89,20 @@ export async function saveEvent(data: CalendarEventInput, id?: number): Promise<
 }
 export async function removeEvent(id: number): Promise<void> {
   await request(`/${id}`, { method:'DELETE' })
+}
+
+// Los datos sensibles se solicitan únicamente al abrir una visita y nunca se incluyen
+// en el listado mensual del calendario.
+export async function loadSupervisionVisitDetail(id: number, signal?: AbortSignal): Promise<VisitListItem> {
+  if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Visita inválida.')
+  const response = await fetch(`/api/v1/calendario/visitas/${id}/detalle`, {
+    credentials: 'same-origin', cache: 'no-store', signal,
+    headers: { Accept: 'application/json' },
+  })
+  if (!response.ok) {
+    const result = await response.json().catch(() => null) as { error?: string } | null
+    throw new Error(result?.error || 'No se pudo consultar el detalle de la visita.')
+  }
+  const result = await response.json() as { data: VisitListItem }
+  return result.data
 }

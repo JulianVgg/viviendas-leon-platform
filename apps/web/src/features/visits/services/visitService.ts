@@ -44,6 +44,7 @@ export type VisitListItem = {
   familyId: number; familyName: string; community: string
   capture: VisitCapture | null; evidences?: VisitEvidence[]; localPhotos?: VisitPhotoFile[]
   reprogramaciones?: RescheduleHistory[]
+  followUps?: { id: string; text: string; status: string; due: string | null; category: string }[]
   syncStatus?: 'pending' | 'syncing' | 'failed' | 'synced'
 }
 

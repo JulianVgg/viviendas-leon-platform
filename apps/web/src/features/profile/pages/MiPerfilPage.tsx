@@ -180,6 +180,7 @@ export default function MiPerfilPage() {
           return
         }
         setFotoVersion((version) => version + 1)
+        window.dispatchEvent(new Event('viviendas-leon:photo-updated'))
       }
 
       if (!(await verificarSesion())) {
