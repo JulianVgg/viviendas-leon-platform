@@ -5,6 +5,7 @@ import Dialog from '@/components/ui/Dialog'
 import Button from '@/components/ui/Button'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { canViewPath } from '@/features/auth/screenPermissions'
+import { puedeConsultarAgendaVisitas } from '../utils/pushAccess'
 import { eventoHaPasado } from '@/features/calendar/services/eventHistory'
 import {
   obtenerDetalleInvitacion, responderInvitacion, type DetalleInvitacion,
@@ -66,6 +67,9 @@ export default function InvitacionDetalleDialog({ eventoId, onClose, onResponded
   }
 
   const puedeVerCalendario = Boolean(usuario && canViewPath(usuario, '/calendario'))
+  // El permiso del menú por sí solo no garantiza acceso a /api/v1/visitas.
+  const puedeVerAgenda = Boolean(usuario && canViewPath(usuario, '/visitas/agenda') &&
+    puedeConsultarAgendaVisitas(usuario))
   const finalizada = Boolean(detalle && eventoHaPasado(detalle.fechaFin))
   const puedeResponder = Boolean(detalle && !finalizada &&
     ['PENDIENTE', 'ACEPTADA', 'RECHAZADA'].includes(detalle.estado ?? ''))
@@ -99,7 +103,9 @@ export default function InvitacionDetalleDialog({ eventoId, onClose, onResponded
         Dirección y Coordinación podrán consultar tu respuesta.
       </p>}
       {detalle.estado === 'ACEPTADA' && <p className="text-sm text-emerald-700 dark:text-emerald-300">
-        Confirmaste tu participación. La actividad aparecerá en tu agenda personal.
+        {puedeVerCalendario || puedeVerAgenda
+          ? 'Confirmaste tu participación. La actividad aparecerá en tu agenda personal.'
+          : 'Confirmaste tu participación. Puedes consultar los detalles de la actividad en esta invitación.'}
       </p>}
       {detalle.estado === 'RECHAZADA' && <p className="text-sm text-gray-600 dark:text-gray-300">
         Has rechazado la invitación. La actividad no aparecerá en tu agenda personal.
@@ -119,7 +125,7 @@ export default function InvitacionDetalleDialog({ eventoId, onClose, onResponded
           {detalle?.estado === 'RECHAZADA' ? 'Cambiar a aceptada' : 'Aceptar'}
         </Button>}
       </>}
-      {detalle?.estado === 'ACEPTADA' && (puedeVerCalendario || canViewPath(usuario ?? {roles:[],permisos:[]}, '/visitas/agenda')) && <Button type="button" onClick={() => { onClose(); navigate(puedeVerCalendario ? '/calendario' : '/visitas/agenda') }}>Ver calendario</Button>}
+      {detalle?.estado === 'ACEPTADA' && (puedeVerCalendario || puedeVerAgenda) && <Button type="button" onClick={() => { onClose(); navigate(puedeVerCalendario ? '/calendario' : '/visitas/agenda') }}>{puedeVerCalendario ? 'Ver calendario' : 'Ver agenda de visitas'}</Button>}
     </div>
   </Dialog>
 }

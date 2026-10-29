@@ -3,7 +3,7 @@ import { BellRing, BellOff, LoaderCircle, Trash2 } from 'lucide-react'
 import {
   convertirClaveVapid, eliminarDispositivoPush, enviarPruebaPush, hashEndpoint,
   listarDispositivosPush, navegadorPermitePush, obtenerClavePublicaPush,
-  registrarDispositivoPush, suscripcionDelNavegador,
+  registrarDispositivoPush, suscripcionDelNavegador, recordarActivacionPush,
   type DispositivoPush,
 } from '../services/pushService'
 
@@ -108,6 +108,7 @@ export default function PushPreferences({ usuarioId }: { usuarioId?: number }) {
         if (nueva) await suscripcion.unsubscribe().catch(() => false)
         throw error
       }
+      if (usuarioId) recordarActivacionPush(usuarioId, true)
       return 'Notificaciones activadas para este dispositivo.'
     })
   }
@@ -115,7 +116,10 @@ export default function PushPreferences({ usuarioId }: { usuarioId?: number }) {
   async function desactivarActual() {
     await ejecutar(async () => {
       const local = await suscripcionDelNavegador()
-      if (!local) return 'No hay una suscripción activa en este navegador.'
+      if (!local) {
+        if (usuarioId) recordarActivacionPush(usuarioId, false)
+        return 'No hay una suscripción activa en este navegador.'
+      }
       const hash = await hashEndpoint(local.endpoint)
       const propio = dispositivos.find(item => item.endpointHash === hash)
       if (propio) await eliminarDispositivoPush(propio.id)
@@ -123,6 +127,7 @@ export default function PushPreferences({ usuarioId }: { usuarioId?: number }) {
       if (!eliminado) {
         throw new Error('No se pudo cancelar la suscripción local. Revisa los permisos del navegador.')
       }
+      if (usuarioId) recordarActivacionPush(usuarioId, false)
       return propio ? 'Notificaciones desactivadas en este dispositivo.'
         : 'Suscripción local anterior desvinculada. Ya puedes activar la de tu cuenta.'
     })
@@ -151,9 +156,6 @@ export default function PushPreferences({ usuarioId }: { usuarioId?: number }) {
     <h2 className="flex items-center gap-2 text-base font-semibold text-gray-800 dark:text-gray-100">
       <BellRing size={18} /> Notificaciones push
     </h2>
-    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-      Recibe avisos de Viviendas León aunque la página no esté abierta, cuando el dispositivo sea compatible.
-    </p>
     {!compatible && <p role="status" className="mt-3 text-sm text-amber-700 dark:text-amber-300">
       Este navegador o conexión no admite Web Push. Utiliza HTTPS o localhost y un navegador compatible.
       En iPhone/iPad, añade la PWA a la pantalla de inicio.
@@ -176,9 +178,6 @@ export default function PushPreferences({ usuarioId }: { usuarioId?: number }) {
         </button>}
         {ocupado && <LoaderCircle size={16} className="animate-spin text-gray-500" aria-label="Procesando" />}
       </div>
-      {compatible && !dispositivoActual && !otraCuenta && <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-        Se solicitará tu autorización solamente cuando pulses «Activar notificaciones».
-      </p>}
       {compatible && !dispositivoActual && !otraCuenta && dispositivos.length > 0 && <p role="status" className="mt-2 text-sm text-amber-700 dark:text-amber-300">
         Esta página no detecta una suscripción activa en el navegador actual. La lista puede incluir otros
         navegadores o instalaciones. Para recibir avisos aquí, abre Viviendas León desde su dirección

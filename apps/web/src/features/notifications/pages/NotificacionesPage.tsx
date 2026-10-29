@@ -7,13 +7,15 @@ import { useAuth } from '@/features/auth/AuthProvider'
 import NotificacionItem from '../components/NotificacionItem'
 import ReminderPreferences from '../components/ReminderPreferences'
 import PushPreferences from '../components/PushPreferences'
+import PushDeliveryPreferences from '../components/PushDeliveryPreferences'
 import CrearInvitacionButton, { puedeGestionarInvitaciones } from '../components/CrearInvitacionButton'
 import InvitacionDetalleDialog from '../components/InvitacionDetalleDialog'
 import SeguimientoInvitaciones from '../components/SeguimientoInvitaciones'
 import { eventoDeNotificacion } from '../services/invitationsService'
 import {
   emitirCambioNotificaciones, marcarNotificacionLeida, marcarTodasNotificacionesLeidas,
-  obtenerNotificaciones, type EstadoNotificacion, type ListadoNotificaciones, type Notificacion,
+  obtenerNotificaciones, obtenerDestinoPushNotificacion,
+  type EstadoNotificacion, type ListadoNotificaciones, type Notificacion,
 } from '../services/notificationsService'
 import { obtenerDestinoSeguro } from '../utils/notificationUtils'
 
@@ -41,6 +43,31 @@ export default function NotificacionesPage() {
   const param = searchParams.get('invitacion')
   const idParam = Number(param)
   const idDesdeUrl = param && /^[1-9]\d*$/.test(param) && Number.isSafeInteger(idParam) && idParam <= 2_147_483_647 ? idParam : null
+  // Un clic del sistema operativo primero abre este centro autenticado.
+  // Luego la API decide si el usuario puede consultar el calendario o las visitas.
+  const pushId = searchParams.get('pushId')
+  useEffect(() => {
+    if (pushId === null || !usuario) return
+    let activo = true
+    const limpiar = () => {
+      const siguientes = new URLSearchParams(searchParams)
+      siguientes.delete('pushId')
+      setSearchParams(siguientes, { replace: true })
+    }
+    const id = Number(pushId)
+    if (!/^[1-9]\d*$/.test(pushId) || !Number.isSafeInteger(id) || id > 2_147_483_647) {
+      limpiar()
+      return
+    }
+    void obtenerDestinoPushNotificacion(id).then(({ destino }) => {
+      if (!activo) return
+      const permitido = obtenerDestinoSeguro(destino, usuario)
+      if (permitido && permitido !== '/notificaciones') navigate(permitido, { replace: true })
+      else limpiar()
+    }).catch(() => { if (activo) limpiar() })
+    return () => { activo = false }
+  }, [pushId, usuario, navigate, searchParams, setSearchParams])
+
   const invitacionAbierta = invitacionId ?? idDesdeUrl
 
   const recargar = useCallback(() => setRevision(actual => actual + 1), [])
@@ -137,6 +164,7 @@ export default function NotificacionesPage() {
     </div>
     <div className="mt-5"><ReminderPreferences usuarioId={usuario?.id} /></div>
     <PushPreferences usuarioId={usuario?.id} />
+    <PushDeliveryPreferences usuarioId={usuario?.id} />
     <InvitacionDetalleDialog eventoId={invitacionAbierta} onClose={cerrarInvitacion}
       onResponded={() => { emitirCambioNotificaciones(); recargar() }} />
   </div>

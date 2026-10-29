@@ -11,7 +11,17 @@ export function obtenerDestinoSeguro(referencia: string | null, usuario: Permiss
         parsed.pathname.includes('%')) return null
     // Los avisos creados antes de separar calendarios siguen llevando a un destino válido.
     if (parsed.pathname === '/calendario' && !canViewPath(usuario, '/calendario')) {
-      return canViewPath(usuario, '/visitas/agenda') ? '/visitas/agenda' : '/notificaciones'
+      return '/notificaciones'
+    }
+    // El menú puede tener PANTALLA_VISITAS_AGENDA, pero la API exige
+    // permisos propios de visitas. No abrir una pantalla que responderá 403.
+    if (parsed.pathname === '/visitas/agenda') {
+      const roles = usuario.roles.map(rol => rol.normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '').trim().toLowerCase())
+      const supervisor = roles.includes('direccion general') ||
+        roles.includes('coordinadora del programa agroforestal')
+      if (!supervisor && !['SYN-VISITAS-WRITE', 'VISITAS_READ', 'VISITAS_WRITE']
+        .some(permiso => usuario.permisos.includes(permiso))) return '/notificaciones'
     }
     if (!canViewPath(usuario, parsed.pathname)) return null
     return `${parsed.pathname}${parsed.search}${parsed.hash}`

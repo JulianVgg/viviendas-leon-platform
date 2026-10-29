@@ -7,6 +7,8 @@ import {
   eliminarSuscripcionPush,
 } from './push-subscriptions.service.js'
 import { enviarPruebaPush } from './push-sender.service.js'
+import { consultarPreferenciasPush, guardarPreferenciasPush } from './push-preferences.service.js'
+import { validarPreferenciasPush } from './push-automatic.rules.js'
 
 export const pushSubscriptionsRouter = Router()
 pushSubscriptionsRouter.use(requireAuth)
@@ -19,6 +21,31 @@ function requireAjax(req: Request, res: Response, next: NextFunction) {
   }
   next()
 }
+
+// GET /api/v1/notificaciones/push/preferencias
+pushSubscriptionsRouter.get('/preferencias', async (req, res, next) => {
+  try {
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.json(await consultarPreferenciasPush(req.session.userId!))
+  } catch (error) { next(error) }
+})
+
+// PUT /api/v1/notificaciones/push/preferencias
+pushSubscriptionsRouter.put('/preferencias', requireAjax, async (req, res, next) => {
+  if (!req.is('application/json')) {
+    res.status(415).json({ error: { code: 'INVALID_CONTENT_TYPE', message: 'Se requiere JSON.' } })
+    return
+  }
+  const preferencias = validarPreferenciasPush(req.body)
+  if (!preferencias) {
+    res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Preferencias push no válidas.' } })
+    return
+  }
+  try {
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.json(await guardarPreferenciasPush(req.session.userId!, preferencias))
+  } catch (error) { next(error) }
+})
 
 // GET /api/v1/notificaciones/push/clave-publica
 pushSubscriptionsRouter.get('/clave-publica', (_req, res) => {
