@@ -82,7 +82,11 @@ export const navigationGroups: { id: string; name: string; items: NavigationItem
       { id: 'dashboard', name: 'Dashboard', path: '/', icon: icons.dashboard, roles: ['fieldWorker', 'coordination', 'operationsDirector', 'administration', 'audit'] },
       { id: 'profile', name: 'Mi perfil', path: '/mi-perfil', icon: icons.profile, roles: ['fieldWorker', 'coordination', 'operationsDirector', 'administration', 'audit'] },
       { id: 'institutional-calendar', name: 'Calendario', path: '/calendario', icon: icons.institutionalCalendar },
-      { id: 'my-calendar', name: 'Mi calendario', path: '/visitas/agenda', icon: icons.agenda },
+      { id: 'my-calendar', name: 'Mi calendario', path: '', icon: icons.agenda, children: [
+        { id: 'calendar-personal', name: 'Calendario', path: '/visitas/agenda', icon: icons.agenda, exact: true },
+        { id: 'my-agenda', name: 'Mi agenda', path: '/mi-agenda', icon: icons.history, exact: true },
+      ] },
+      { id: 'my-agenda-standalone', name: 'Mi agenda', path: '/mi-agenda', icon: icons.history },
       { id: 'families', name: 'Familias y beneficiarios', path: '/familias', icon: icons.families, roles: ['fieldWorker', 'coordination'], children: [
         { id: 'families-list', name: 'Listado de familias', path: '/familias', icon: icons.familyList, exact: true },
         { id: 'families-create', name: 'Registrar familias', path: '/familias/nueva', icon: icons.familyCreate, exact: true },
@@ -141,6 +145,7 @@ export function navigationForAccount(usuario: PermissionUser) {
       ...grupo,
       items: grupo.items.flatMap((item) => {
         if (item.id === 'my-calendar' && !esTecnicoCampo(usuario)) return []
+        if (item.id === 'my-agenda-standalone' && esTecnicoCampo(usuario)) return []
         if ((item.id === 'visits' || item.id === 'activities') && !esTecnicoCampo(usuario)) return []
         if (!item.children) return canViewPath(usuario, item.path) ? [item] : []
         const children = item.children.filter((child) => canViewPath(usuario, child.path) && !(esTecnicoCampo(usuario) && child.id === 'visits-agenda'))

@@ -12,7 +12,6 @@ import {
 
 import { useAuth } from '@/features/auth/AuthProvider'
 import { esSupervisorCalendario } from '@/features/auth/calendarAccess'
-import { DEPARTAMENTOS_GUATEMALA } from '../services/geografiaGuatemala'
 
 export default function MiPerfilPage() {
   const { usuario, verificarSesion } = useAuth()
@@ -157,7 +156,7 @@ export default function MiPerfilPage() {
       }
       datosGuardados = true
 
-      if (puedeEditarDatos && (fotoArchivo || quitarFoto)) {
+      if (fotoArchivo || quitarFoto) {
         const respuestaFoto = fotoArchivo
           ? await fetch('/api/v1/perfil/foto', {
               method: 'PUT',
@@ -208,7 +207,9 @@ export default function MiPerfilPage() {
   const [editandoDireccion, setEditandoDireccion] = useState(false)
   const [departamento, setDepartamento] = useState('')
   const [municipio, setMunicipio] = useState('')
-  const [municipiosDisponibles, setMunicipiosDisponibles] = useState<string[]>([])
+  const [ubicaciones, setUbicaciones] = useState<Record<string, string[]>>({})
+  const departamentos = Object.keys(ubicaciones)
+  const municipiosDisponibles = ubicaciones[departamento] ?? []
   const [direccion, setDireccion] = useState('')
   const [guardandoDireccion, setGuardandoDireccion] = useState(false)
   const [errorDireccion, setErrorDireccion] = useState('')
@@ -217,11 +218,13 @@ export default function MiPerfilPage() {
   useEffect(() => {
     if (!editandoDireccion) return
     const controller = new AbortController()
-    void fetch('/api/v1/municipios', { credentials: 'same-origin', signal: controller.signal })
-      .then(async response => response.ok ? response.json() : null)
-      .then((data: { data?: { nombre: string }[] } | null) => {
-        if (!controller.signal.aborted) setMunicipiosDisponibles((data?.data ?? []).map(item => item.nombre))
-      }).catch(() => {})
+    void fetch('/api/v1/perfil/ubicaciones', { credentials: 'same-origin', signal: controller.signal })
+      .then(async response => {
+        if (!response.ok) throw new Error('No se pudo cargar el catálogo territorial.')
+        return response.json() as Promise<{ municipiosPorDepartamento: Record<string, string[]> }>
+      })
+      .then(data => { if (!controller.signal.aborted) setUbicaciones(data.municipiosPorDepartamento) })
+      .catch(() => { if (!controller.signal.aborted) setErrorDireccion('No se pudieron cargar los municipios.') })
     return () => controller.abort()
   }, [editandoDireccion])
 
@@ -256,9 +259,10 @@ export default function MiPerfilPage() {
     if (
       departamento.trim().length > 100 ||
       municipio.trim().length > 100 ||
-      direccion.trim().length > 255
+      direccion.trim().length > 255 ||
+      (!!departamento && !municipiosDisponibles.includes(municipio))
     ) {
-      setErrorDireccion('Revisa la longitud de los campos de dirección.')
+      setErrorDireccion('Selecciona un municipio válido o revisa la dirección.')
       return
     }
 
@@ -424,12 +428,12 @@ export default function MiPerfilPage() {
       {/* Tarjeta principal */}
       <section className={cardClass}>
         <div className="flex items-center gap-4">
-          <button type="button" onClick={abrirEditorPerfil} disabled={!puedeEditarDatos}
-            title={puedeEditarDatos ? 'Cambiar fotografía' : 'Fotografía de perfil'}
-            aria-label={puedeEditarDatos ? 'Editar fotografía de perfil' : 'Fotografía de perfil'}
-            className="group relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-50 text-brand-600 disabled:cursor-default dark:bg-brand-500/10">
+          <button type="button" onClick={abrirEditorPerfil}
+            title="Cambiar fotografía"
+            aria-label="Cambiar fotografía de perfil"
+            className="group relative flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-50 text-brand-600 ring-2 ring-brand-100 transition-transform hover:scale-[1.03] dark:bg-brand-500/10 sm:size-24">
             {fotoUrl ? <img src={fotoUrl} alt="" className="h-full w-full object-cover" /> : <UserRound size={30} aria-hidden="true" />}
-            {puedeEditarDatos && <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"><Camera size={23} /></span>}
+            <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"><Camera size={23} /></span>
           </button>
 
           <div className="min-w-0">
@@ -524,7 +528,7 @@ export default function MiPerfilPage() {
           </div>
 
           <form onSubmit={(event) => void guardarPerfil(event)}>
-            {puedeEditarDatos && <div className="mb-6 rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+            <div className="mb-6 rounded-xl border border-gray-200 p-4 dark:border-gray-700">
               <div className="flex flex-wrap items-center gap-4">
                 <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-50 text-brand-600 dark:bg-brand-500/10">
                   {fotoPreviewUrl || (!quitarFoto && fotoUrl) ? (
@@ -571,7 +575,7 @@ export default function MiPerfilPage() {
                   )}
                 </div>
               </div>
-            </div>}
+            </div>
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <div>
                 <label htmlFor="perfil-nombre" className="mb-2 block text-sm font-medium dark:text-white">
@@ -632,7 +636,7 @@ export default function MiPerfilPage() {
             </div>
 
             <p className="mt-5 text-sm text-gray-500 dark:text-gray-400">
-              {puedeEditarDatos ? 'El rol y el estado se administran desde Usuarios.' : 'Solo puedes actualizar tu teléfono.'}
+              {puedeEditarDatos ? 'El rol y el estado se administran desde Usuarios.' : 'Puedes cambiar tu fotografía y teléfono.'}
             </p>
 
             {errorPerfil && (
@@ -744,18 +748,16 @@ export default function MiPerfilPage() {
                 <select id="perfil-departamento" autoFocus className={inputClass} value={departamento}
                   onChange={event => { setDepartamento(event.target.value); setMunicipio('') }}>
                   <option value="">Seleccionar departamento</option>
-                  {DEPARTAMENTOS_GUATEMALA.map(nombre => <option key={nombre} value={nombre}>{nombre}</option>)}
+                  {departamentos.map(nombre => <option key={nombre} value={nombre}>{nombre}</option>)}
                 </select>
               </div>
               <div>
                 <label htmlFor="perfil-municipio" className="mb-2 block text-sm font-medium dark:text-white">
                   Municipio
                 </label>
-                <select id="perfil-municipio" className={inputClass} value={municipio}
+                <select id="perfil-municipio" className={inputClass} value={municipio} disabled={!departamento || departamentos.length === 0}
                   onChange={event => setMunicipio(event.target.value)}>
                   <option value="">Seleccionar municipio</option>
-                  {municipio && !municipiosDisponibles.includes(municipio) &&
-                    <option value={municipio}>{municipio}</option>}
                   {municipiosDisponibles.map(nombre => <option key={nombre} value={nombre}>{nombre}</option>)}
                 </select>
               </div>

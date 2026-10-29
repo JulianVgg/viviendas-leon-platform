@@ -4,6 +4,7 @@ import { getPrismaClient } from '../../config/prisma.js'
 import { requireAuth } from '../auth/auth.middleware.js'
 import { getAuthenticatedUser } from '../auth/auth.service.js'
 import { puedeEditarPerfilCompleto } from './profile.permissions.js'
+import { DEPARTAMENTOS, MUNICIPIOS_POR_DEPARTAMENTO, municipioValido } from './guatemala-ubicaciones.js'
 
 export const profileExtrasRouter = Router()
 
@@ -18,6 +19,12 @@ async function permitirEdicionCompleta(req: import('express').Request, res: impo
   }
   return true
 }
+
+// Catálogo de ubicación independiente de los municipios sintéticos de pruebas.
+profileExtrasRouter.get('/ubicaciones', (_req, res) => {
+  res.setHeader('Cache-Control', 'private, max-age=86400')
+  res.json({ departamentos: DEPARTAMENTOS, municipiosPorDepartamento: MUNICIPIOS_POR_DEPARTAMENTO })
+})
 
 // =====================================================
 // EDITAR DIRECCIÓN DEL USUARIO
@@ -82,6 +89,11 @@ profileExtrasRouter.patch('/direccion', async (req, res, next) => {
       return
     }
 
+    if ((departamento || municipio) && (!departamento || !municipio || !municipioValido(departamento, municipio))) {
+      res.status(400).json({ error: { message: 'Selecciona un municipio del departamento indicado.' } })
+      return
+    }
+
     const usuarioId = req.session.userId!
 
     await getPrismaClient().usuario.update({
@@ -143,7 +155,6 @@ profileExtrasRouter.put(
   }),
   async (req, res, next) => {
     try {
-      if (!await permitirEdicionCompleta(req, res)) return
       const archivo: unknown = req.body
       const mimeType = req.headers['content-type']
         ?.split(';')[0]
@@ -226,7 +237,6 @@ profileExtrasRouter.put(
 
 profileExtrasRouter.delete('/foto', async (req, res, next) => {
   try {
-    if (!await permitirEdicionCompleta(req, res)) return
     await getPrismaClient().usuarioFotoPerfil.deleteMany({
       where: { usuarioId: req.session.userId! },
     })
