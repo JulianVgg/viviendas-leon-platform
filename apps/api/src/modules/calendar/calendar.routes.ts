@@ -185,6 +185,48 @@ calendarRouter.get('/', async (req: Request, res: Response) => {
   } catch (error) { console.error('Error consultando calendario:', error); res.status(503).json({ error: 'No se pudo consultar el calendario.' }) }
 })
 
+// Consulta detallada bajo demanda. Los resúmenes mensuales siguen sin exponer datos privados.
+// Solo Dirección y Coordinación pueden acceder; la ruta es exclusivamente GET.
+calendarRouter.get('/visitas/:id/detalle', async (req: Request, res: Response) => {
+  const id = Number(req.params.id)
+  if (!Number.isSafeInteger(id) || id <= 0) { res.status(400).json({ error: 'Visita inválida.' }); return }
+  try {
+    const visit = await getPrismaClient().visita.findUnique({
+      where: { id },
+      include: {
+        familia: { select: { id: true, nombreReferencia: true, comunidad: { select: { nombre: true } } } },
+        usuarioResponsable: { select: { id: true, nombre: true, apellido: true } },
+        captura: { select: { operationId: true, datos: true } },
+        evidencias: { select: { evidencia: { select: { id: true, nombreArchivo: true } } } },
+        compromisosVisita: { select: { id: true, texto: true, estado: true, fechaLimite: true, responsable: true }, orderBy: { creadoEn: 'asc' } },
+        reprogramaciones: { select: { id: true, fechaAnterior: true, fechaNueva: true, motivo: true, usuarioId: true, creadoEn: true }, orderBy: { creadoEn: 'asc' } },
+      },
+    })
+    if (!visit) { res.status(404).json({ error: 'La visita no existe.' }); return }
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.json({ data: {
+      id: visit.id,
+      operationId: visit.captura?.operationId ?? null,
+      date: visit.fecha.toISOString().slice(0, 10), status: visit.estado,
+      responsibleUserId: visit.usuarioResponsable.id,
+      responsibleName: [visit.usuarioResponsable.nombre, visit.usuarioResponsable.apellido].filter(Boolean).join(' '),
+      familyId: visit.familia.id, familyName: visit.familia.nombreReferencia,
+      community: visit.familia.comunidad.nombre,
+      capture: visit.captura?.datos ?? null,
+      evidences: visit.evidencias.map(item => ({ id: item.evidencia.id, name: item.evidencia.nombreArchivo,
+        url: `/api/v1/visitas/${visit.id}/evidencias/${item.evidencia.id}` })),
+      followUps: visit.compromisosVisita.map(item => ({ id: item.id, text: item.texto, status: item.estado,
+        due: item.fechaLimite?.toISOString().slice(0, 10) ?? null, category: item.responsable })),
+      reprogramaciones: visit.reprogramaciones.map(item => ({ id: item.id,
+        oldDate: item.fechaAnterior.toISOString().slice(0, 10), newDate: item.fechaNueva.toISOString().slice(0, 10),
+        actorId: item.usuarioId, reason: item.motivo, at: item.creadoEn.toISOString() })),
+    } })
+  } catch (error) {
+    console.error('Error consultando detalle de visita para supervisión:', error)
+    res.status(503).json({ error: 'No se pudo consultar el detalle de la visita.' })
+  }
+})
+
 // Los participantes se enumeran únicamente para Dirección y Coordinación.
 calendarRouter.get('/usuarios', async (req: Request, res: Response) => {
   if (!await mayManage(req, res)) return

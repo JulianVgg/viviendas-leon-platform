@@ -11,6 +11,7 @@ import FamilyEditPage from '@/features/families/pages/FamilyEditPage'
 import HuertosPage, { CreateGardenPage } from '@/features/agriculture/pages/HuertosPage'
 import CultivosPage from '@/features/agriculture/pages/CultivosPage'
 import CiclosAgricolasPage from '@/features/agriculture/pages/CiclosAgricolasPage'
+import CicloDetallePage from '@/features/agriculture/pages/CicloDetallePage'
 
 import OfflineTestPage from '@/features/offline/pages/OfflineTestPage'
 import OfflineOperationsTestPage from '@/features/offline/pages/OfflineOperationsTestPage'
@@ -23,7 +24,6 @@ import VisitRegisterPage from '@/features/visits/pages/VisitRegisterPage'
 import VisitHistoryPage from '@/features/visits/pages/VisitHistoryPage'
 import InstitutionalCalendarPage from '@/features/calendar/pages/InstitutionalCalendarPage'
 import NotificacionesPage from '@/features/notifications/pages/NotificacionesPage'
-import TrainingAgendaPage from '@/features/training/pages/TrainingAgendaPage'
 import TrainingRegisterPage from '@/features/training/pages/TrainingRegisterPage'
 import TrainingHistoryPage from '@/features/training/pages/TrainingHistoryPage'
 
@@ -45,6 +45,7 @@ import MunicipalitiesPage from '@/features/catalogs/pages/MunicipalitiesPage'
 import ProgramsPage from '@/features/catalogs/pages/ProgramsPage'
 import DirectoraRoute from '@/features/auth/components/DirectoraRoute'
 import SupervisorCalendarRoute from '@/features/auth/components/SupervisorCalendarRoute'
+import PersonalCalendarRoute from '@/features/auth/components/PersonalCalendarRoute'
 
 const module = (
   title: string,
@@ -151,10 +152,7 @@ export default function AppRoutes() {
             }
           />
 
-          <Route
-            path="visitas/agenda"
-            element={<VisitAgendaPage />}
-          />
+          <Route element={<PersonalCalendarRoute />}><Route path="visitas/agenda" element={<VisitAgendaPage />} /></Route>
 
           <Route
             path="actividades/visitas"
@@ -210,6 +208,7 @@ export default function AppRoutes() {
           <Route path="gestion-agricola/huertos" element={<HuertosPage />} />
           <Route path="gestion-agricola/huertos/nuevo" element={<CreateGardenPage />} />
           <Route path="gestion-agricola/ciclos" element={<CiclosAgricolasPage />} />
+          <Route path="gestion-agricola/ciclos/:id" element={<CicloDetallePage />} />
           <Route path="gestion-agricola/cultivos" element={<Navigate to="/administracion/cultivos" replace />} />
           <Route
             path="gestion-agricola/produccion"
@@ -259,7 +258,7 @@ export default function AppRoutes() {
 
           <Route
             path="actividades/capacitaciones"
-            element={<TrainingAgendaPage />}
+            element={<Navigate to="/visitas/agenda" replace />}
           />
           <Route path="actividades/capacitaciones/registrar" element={<TrainingRegisterPage />} />
           <Route path="actividades/capacitaciones/historial" element={<TrainingHistoryPage />} />

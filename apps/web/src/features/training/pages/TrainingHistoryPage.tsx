@@ -20,6 +20,10 @@ export default function TrainingHistoryPage() {
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('TODAS')
+  const [desde, setDesde] = useState('')
+  const [hasta, setHasta] = useState('')
+  const [pagina, setPagina] = useState(1)
+  const [porPagina, setPorPagina] = useState(20)
   const [selected, setSelected] = useState<Training | null>(null)
 
   const refresh = useCallback(async () => {
@@ -33,15 +37,19 @@ export default function TrainingHistoryPage() {
   const visible = useMemo(() => rows.filter(item => {
     const term = search.trim().toLocaleLowerCase('es')
     if (term && !`${item.tema} ${item.comunidad?.nombre ?? ''} ${item.facilitadorNombre ?? ''} ${item.familiasPresentes.map(f => f.nombreReferencia).join(' ')}`.toLocaleLowerCase('es').includes(term)) return false
-    return filter === 'TODAS' || item.estado === filter
-  }), [rows, filter, search])
+    return (filter === 'TODAS' || item.estado === filter) && (!desde || item.fecha >= desde) && (!hasta || item.fecha <= hasta)
+  }), [rows, filter, search, desde, hasta])
+  useEffect(() => { setPagina(1) }, [search, filter, desde, hasta, porPagina])
+  const totalPaginas = Math.max(1, Math.ceil(visible.length / porPagina))
+  const paginaActual = Math.min(pagina, totalPaginas)
+  const registrosPagina = visible.slice((paginaActual-1)*porPagina, paginaActual*porPagina)
   const completed = rows.filter(item => item.estado === 'REALIZADA').length
   const upcoming = rows.filter(item => item.estado === 'PROGRAMADA').length
   const familiesPresent = rows.reduce((total, item) => total + item.familiasPresentes.length, 0)
 
   return <div>
     <PageMeta title="Historial de capacitaciones | Viviendas León" description="Consulta de actividades y asistencia" />
-    <PageHeader title="Historial de capacitaciones" description="Consulta los registros y las familias asistentes, sin sección de seguimientos."
+    <PageHeader title="Historial de capacitaciones" description=""
       actions={canWrite ? <Link to="/actividades/capacitaciones/registrar" className="inline-flex min-h-11 items-center rounded-lg bg-brand-500 px-5 text-sm font-medium text-white hover:bg-brand-600">+ Registrar capacitación</Link> : undefined} />
     {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">{error}</p>}
     <div className="mb-5 grid gap-4 sm:grid-cols-3">
@@ -50,14 +58,16 @@ export default function TrainingHistoryPage() {
     </div>
     <section className={card} aria-label="Registro de capacitaciones">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 p-5 dark:border-gray-800"><h2 className="font-semibold text-gray-900 dark:text-white">Registro de capacitaciones</h2><Button size="sm" type="button" variant="secondary" onClick={() => void refresh()} disabled={loading}><RefreshCw size={16} /> Actualizar</Button></header>
-      <div className="grid gap-3 p-5 md:grid-cols-[1fr_240px]">
+      <div className="grid gap-3 p-5 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_200px_180px_180px]">
         <label className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 dark:border-gray-700 dark:bg-gray-900"><Search size={17} className="text-gray-400" /><input aria-label="Buscar capacitación o familia" value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar tema, comunidad o familia" className="h-11 min-w-0 flex-1 bg-transparent text-sm text-gray-800 outline-none dark:text-white" /></label>
         <select aria-label="Filtrar por estado" value={filter} onChange={e => setFilter(e.target.value)} className="h-11 rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white">
           <option value="TODAS">Todos los estados</option><option value="REALIZADA">Realizadas</option><option value="PROGRAMADA">Programadas</option>
         </select>
+        <label className="text-xs text-gray-500">Desde<input aria-label="Fecha inicial" type="date" value={desde} onChange={e=>setDesde(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-gray-300 bg-white px-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white"/></label>
+        <label className="text-xs text-gray-500">Hasta<input aria-label="Fecha final" type="date" min={desde || undefined} value={hasta} onChange={e=>setHasta(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-gray-300 bg-white px-2 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white"/></label>
       </div>
       <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500 dark:bg-gray-800/40"><tr><th className="px-5 py-3">Tema</th><th className="px-5 py-3">Comunidad</th><th className="px-5 py-3">Fecha</th><th className="px-5 py-3">Facilitador</th><th className="px-5 py-3">Estado</th><th className="px-5 py-3">Familias presentes</th><th className="px-5 py-3">Detalle</th></tr></thead>
-        <tbody className="divide-y divide-gray-100 dark:divide-gray-800">{visible.map(item => <tr key={item.id} className="align-top text-gray-700 dark:text-gray-300">
+        <tbody className="divide-y divide-gray-100 dark:divide-gray-800">{registrosPagina.map(item => <tr key={item.id} className="align-top text-gray-700 dark:text-gray-300">
           <td className="px-5 py-4 font-medium text-gray-900 dark:text-white">{item.tema}</td>
           <td className="px-5 py-4">{item.comunidad?.nombre ?? 'Sin comunidad'}</td>
           <td className="px-5 py-4">{dateLabel(item.fecha)}</td>
@@ -69,7 +79,16 @@ export default function TrainingHistoryPage() {
         {loading && <p className="p-8 text-center text-sm text-gray-500">Cargando historial…</p>}
         {!loading && visible.length === 0 && <p className="p-8 text-center text-sm text-gray-500">No se encontraron capacitaciones.</p>}
       </div>
-      <footer className="border-t border-gray-200 px-5 py-4 text-xs text-gray-500 dark:border-gray-800">{visible.length} capacitación(es) · Sin seguimientos</footer>
+      <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 px-5 py-4 text-xs text-gray-500 dark:border-gray-800">
+        <span>{visible.length} capacitaciones · Página {paginaActual} de {totalPaginas}</span>
+        <div className="flex items-center gap-2">
+          <select aria-label="Registros por página" value={porPagina} onChange={e=>setPorPagina(Number(e.target.value))} className="rounded-lg border border-gray-300 bg-white px-2 py-2 dark:border-gray-700 dark:bg-gray-900 dark:text-white">
+            <option value={10}>10</option><option value={20}>20</option><option value={50}>50</option>
+          </select>
+          <Button size="sm" variant="secondary" type="button" disabled={paginaActual<=1} onClick={()=>setPagina(p=>Math.max(1,p-1))}>Anterior</Button>
+          <Button size="sm" variant="secondary" type="button" disabled={paginaActual>=totalPaginas} onClick={()=>setPagina(p=>Math.min(totalPaginas,p+1))}>Siguiente</Button>
+        </div>
+      </footer>
     </section>
     <Dialog open={Boolean(selected)} onClose={() => setSelected(null)} title={selected?.tema ?? 'Capacitación'}
       description={selected ? `${dateLabel(selected.fecha)} · ${selected.estado === 'REALIZADA' ? 'Realizada' : 'Programada'}` : ''}

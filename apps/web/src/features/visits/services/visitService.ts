@@ -21,6 +21,7 @@ export type VisitEvidence = { id: number; name: string; url: string }
 export type CropCapture = {
   // Optional for backwards compatibility with unsynchronised VIS-03/VIS-04 captures.
   cicloCultivoId?: number
+  observacionesCultivo?: string
   name: string; stage: string; quality: string; plants: number | null
   findings: { type: 'plaga' | 'enfermedad'; name: string; damage: string }[]
   production: boolean; perPlantUnits: number | null; perPlantKg: number | null
@@ -43,6 +44,7 @@ export type VisitListItem = {
   familyId: number; familyName: string; community: string
   capture: VisitCapture | null; evidences?: VisitEvidence[]; localPhotos?: VisitPhotoFile[]
   reprogramaciones?: RescheduleHistory[]
+  followUps?: { id: string; text: string; status: string; due: string | null; category: string }[]
   syncStatus?: 'pending' | 'syncing' | 'failed' | 'synced'
 }
 

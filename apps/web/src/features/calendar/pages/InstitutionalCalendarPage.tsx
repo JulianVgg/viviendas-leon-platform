@@ -5,12 +5,14 @@ import PageMeta from '@/components/common/PageMeta'
 import PageHeader from '@/components/common/PageHeader'
 import Button from '@/components/ui/Button'
 import Dialog from '@/components/ui/Dialog'
+import VisitDetailDialog from '@/features/visits/components/VisitDetailDialog'
+import type { VisitListItem } from '@/features/visits/services/visitService'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { esSupervisorCalendario } from '@/features/auth/calendarAccess'
 import InstitutionalEventDialog from '../components/InstitutionalEventDialog'
 import { eventoHaPasado } from '../services/eventHistory'
 import {
-  eventColor, eventDisplayTitle, loadCalendarView, loadParticipants, removeEvent, saveEvent,
+  eventColor, eventDisplayTitle, loadCalendarView, loadParticipants, loadSupervisionVisitDetail, removeEvent, saveEvent,
   type CalendarEvent, type CalendarEventInput, type CalendarPerson, type CalendarTechnicalVisit, type CalendarTraining,
 } from '../services/calendarService'
 import { filtrarActividades, responsableActividad, comunidadActividad, estadoActividad, fechaActividad, type ActividadEquipo, type ActividadFiltro, type EstadoFiltro } from '../services/calendarFilters'
@@ -58,6 +60,9 @@ export default function InstitutionalCalendarPage() {
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<CalendarEvent | null>(null)
   const [selectedVisit, setSelectedVisit] = useState<CalendarTechnicalVisit | null>(null)
+  const [fullVisit, setFullVisit] = useState<VisitListItem | null>(null)
+  const [detailError, setDetailError] = useState('')
+  const [detailLoading, setDetailLoading] = useState(false)
   const [selectedTraining, setSelectedTraining] = useState<CalendarTraining | null>(null)
   const [selectedDate, setSelectedDate] = useState(todayKey())
   const [eventDialogOpen, setEventDialogOpen] = useState(false)
@@ -67,6 +72,19 @@ export default function InstitutionalCalendarPage() {
   const [responsable, setResponsable] = useState('')
   const [comunidad, setComunidad] = useState('')
   const [vista, setVista] = useState<'mes'|'lista'>('mes')
+
+  useEffect(() => {
+    if (!selectedVisit) { setFullVisit(null); setDetailError(''); setDetailLoading(false); return }
+    const controller = new AbortController()
+    setFullVisit(null)
+    setDetailError('')
+    setDetailLoading(true)
+    void loadSupervisionVisitDetail(selectedVisit.id, controller.signal)
+      .then(item => { if (!controller.signal.aborted) setFullVisit(item) })
+      .catch(error => { if (!controller.signal.aborted) setDetailError(error instanceof Error ? error.message : 'No se pudo consultar la visita.') })
+      .finally(() => { if (!controller.signal.aborted) setDetailLoading(false) })
+    return () => controller.abort()
+  }, [selectedVisit])
 
   const monthCells = useMemo(() => {
     const offset = new Date(month.getFullYear(), month.getMonth(), 1).getDay()
@@ -173,8 +191,8 @@ export default function InstitutionalCalendarPage() {
 
   return (
     <>
-      <PageMeta title="Calendario institucional | Viviendas León" description="Calendario de actividades institucionales" />
-      <PageHeader title="Calendario del equipo" description="" />
+      <PageMeta title="Calendario | Viviendas León" description="Calendario de actividades institucionales" />
+      <PageHeader title="Calendario" description="" />
       {error && (
         <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
           {error}
@@ -303,42 +321,11 @@ export default function InstitutionalCalendarPage() {
         onSave={save}
         onDelete={erase}
       />
-      <Dialog
-        open={selectedVisit !== null}
-        title="Visita técnica"
-        description={selectedVisit ? readableDate(selectedVisit.fecha) : undefined}
-        onClose={() => setSelectedVisit(null)}
-      >
-        {selectedVisit && (
-          <div className="space-y-4 text-sm">
-            <div>
-              <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${selectedVisit.estado === 'REALIZADA'
-                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-200'
-                : 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900 dark:bg-blue-500/15 dark:text-blue-200'}`}>
-                {selectedVisit.estado === 'REALIZADA' ? 'Realizada' : selectedVisit.fecha < todayKey() ? 'Vencida' : 'Programada'}
-              </span>
-            </div>
-            <dl className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">Familia</dt>
-                <dd className="mt-1 break-words font-medium text-gray-900 dark:text-gray-100">{selectedVisit.familia}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">Comunidad</dt>
-                <dd className="mt-1 break-words text-gray-900 dark:text-gray-100">{selectedVisit.comunidad}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">Responsable</dt>
-                <dd className="mt-1 break-words text-gray-900 dark:text-gray-100">{selectedVisit.responsable}</dd>
-              </div>
-              <div>
-                <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">Fecha</dt>
-                <dd className="mt-1 text-gray-900 dark:text-gray-100">{readableDate(selectedVisit.fecha)}</dd>
-              </div>
-            </dl>
-            <div className="flex justify-end border-t border-gray-100 pt-4 dark:border-gray-800"><Button type="button" variant="secondary" onClick={() => setSelectedVisit(null)}>Cerrar</Button></div>
-          </div>
-        )}
+      {fullVisit && fullVisit.id === selectedVisit?.id && <VisitDetailDialog key={fullVisit.id} visit={fullVisit} onClose={() => setSelectedVisit(null)} />}
+      <Dialog open={Boolean(selectedVisit) && fullVisit?.id !== selectedVisit?.id} title="Detalle de visita" description={selectedVisit ? readableDate(selectedVisit.fecha) : undefined} onClose={() => setSelectedVisit(null)}>
+        <div role={detailError ? 'alert' : 'status'} className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+          {detailLoading ? 'Cargando detalle…' : detailError || 'Sin información adicional.'}
+        </div>
       </Dialog>
       <Dialog
         open={selectedTraining !== null}

@@ -23,6 +23,7 @@ export type Training = {
   horaInicio: string | null
   horaFin: string | null
   facilitadorNombre: string | null
+  usuarioResponsableId: number | null
   estado: TrainingStatus
   observaciones: string | null
   comunidadId: number | null
@@ -73,8 +74,8 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   return result.data as T
 }
 
-export function getTrainings(): Promise<Training[]> {
-  return request<Training[]>('v1/capacitaciones')
+export function getTrainings(options: { mias?: boolean } = {}): Promise<Training[]> {
+  return request<Training[]>(options.mias ? 'v1/capacitaciones?mias=1' : 'v1/capacitaciones')
 }
 
 export function getTrainingCommunities(): Promise<TrainingCommunity[]> {

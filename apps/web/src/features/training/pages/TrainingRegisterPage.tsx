@@ -134,7 +134,7 @@ export default function TrainingRegisterPage() {
         <Button type="button" variant="secondary" size="sm" disabled={loading || saving} onClick={() => void refresh()}><RefreshCw size={16} /> Actualizar</Button>
       </div>
       {loading && <p role="status" className="mt-3 text-sm text-gray-500">Cargando capacitaciones y familias…</p>}
-      {!loading && trainings.length === 0 && <p className="mt-3 text-sm text-gray-500">Todavía no hay capacitaciones. <Link className="text-brand-600 underline" to="/actividades/capacitaciones">Agendar una cita</Link></p>}
+      {!loading && trainings.length === 0 && <p className="mt-3 text-sm text-gray-500">Todavía no hay capacitaciones. <Link className="text-brand-600 underline" to="/visitas/agenda">Agendar una capacitación</Link></p>}
       {selected && <div className="mt-4 rounded-lg bg-gray-50 p-4 text-sm dark:bg-gray-800/40">
         <p className="font-semibold text-gray-900 dark:text-white">{selected.tema}</p>
         <p className="mt-1 text-gray-500">{selected.fecha} · {selected.comunidad?.nombre ?? 'Sin comunidad específica'} · Facilitador: {selected.facilitadorNombre || 'No indicado'}</p>

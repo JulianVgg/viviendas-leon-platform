@@ -13,11 +13,14 @@ import { descripcionAvisoVisita, type TipoAvisoVisita } from '../notifications/n
 import { sincronizarAvisosSeguimiento } from '../notifications/followup-alerts.service.js'
 import { resolverAvisosVisitaVencida } from '../notifications/overdue-visits.worker.js'
 import { actualizarRecordatorios, cancelarRecordatorios, configGuardada, configParaPrisma, parseReglas, reglasTrasCambioFecha, type ReglaRecordatorio } from '../notifications/reminders.service.js'
+import { buildEvaluationObservations } from '../agriculture/followup-format.js'
 
 // Dirección y Coordinación supervisan y pueden reprogramar citas institucionales.
 // Los demás técnicos conservan exclusivamente los registros propios.
 const isCoordinator = (roles: string[]) => roles.some(role =>
-  role.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() === 'coordinadora del programa agroforestal',
+  ['coordinadora del programa agroforestal', 'coordinador del programa agroforestal', 'coordinacion'].includes(
+    role.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase(),
+  ),
 )
 const isSupervisor = (roles: string[]) => esDireccionGeneral(roles) || isCoordinator(roles)
 
@@ -26,6 +29,12 @@ visitsRouter.use(requireAuth)
 visitsRouter.use(async (req, res, next) => {
   try {
     const user = await getAuthenticatedUser(req.session.userId!)
+    // Supervisión consulta y reprograma; la captura y su evidencia pertenecen al técnico.
+    if (user && isSupervisor(user.roles) && req.method === 'POST' &&
+      (req.path === '/sync' || /^\/[^/]+\/evidencias\/[^/]+$/.test(req.path))) {
+      res.status(403).json({ error: 'Solo el personal técnico puede registrar visitas.' })
+      return
+    }
     const allowed =
       esDireccionGeneral(user?.roles ?? []) ||
       // Coordinación: lectura de agenda y gestión de citas; no puede registrar
@@ -82,6 +91,10 @@ function validate(input: unknown, operationId: unknown): { capturedAt?: string; 
     const c = item as Record<string, unknown>
     if (!clean(c.name, 80) || !Array.isArray(c.findings) || c.findings.length > 20) return null
     if (c.cicloCultivoId !== undefined && (!Number.isSafeInteger(c.cicloCultivoId) || Number(c.cicloCultivoId) <= 0 || Number(c.cicloCultivoId) > 2147483647)) return null
+    // Opcional: permitir reintentos de capturas anteriores sin este campo.
+    if (c.observacionesCultivo !== undefined && (
+      typeof c.observacionesCultivo !== 'string' || c.observacionesCultivo.length > 2000 ||
+      /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(c.observacionesCultivo))) return null
     if (c.findings.some(f => !f || typeof f !== 'object' || !['plaga','enfermedad'].includes((f as Record<string,unknown>).type as string) || !clean((f as Record<string,unknown>).name,100) || !['1','3','5','10','20'].includes(String((f as Record<string,unknown>).damage)))) return null
     for (const name of ['plants','perPlantUnits','perPlantKg','units','kg','priceQ','priceUSD']) {
       if (!positive(c[name])) return null
@@ -89,6 +102,7 @@ function validate(input: unknown, operationId: unknown): { capturedAt?: string; 
     if (c.plants !== null && c.plants !== undefined && c.plants !== '' && !Number.isSafeInteger(c.plants)) return null
     crops.push({
       ...(c.cicloCultivoId !== undefined ? { cicloCultivoId: c.cicloCultivoId } : {}),
+      ...(c.observacionesCultivo !== undefined ? { observacionesCultivo: clean(c.observacionesCultivo, 2000) } : {}),
       name: clean(c.name,80), stage: clean(c.stage,60), quality: clean(c.quality,60),
       plants: c.plants ?? null, production: Boolean(c.production),
       perPlantUnits: c.perPlantUnits ?? null, perPlantKg: c.perPlantKg ?? null,
@@ -397,7 +411,7 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
             await tx.evaluacionCultivo.create({ data: {
               visitaId, cicloCultivoId: cycleId, etapaCultivoId: stage?.id ?? null,
               calidadId: quality?.id ?? null,
-              observaciones: typeof crop.plants === 'number' ? `Plantas observadas: ${crop.plants}.` : null,
+              observaciones: buildEvaluationObservations(crop.plants, crop.observacionesCultivo),
             } })
           }
         }

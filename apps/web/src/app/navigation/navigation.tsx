@@ -81,7 +81,7 @@ export const navigationGroups: { id: string; name: string; items: NavigationItem
     items: [
       { id: 'dashboard', name: 'Dashboard', path: '/', icon: icons.dashboard, roles: ['fieldWorker', 'coordination', 'operationsDirector', 'administration', 'audit'] },
       { id: 'profile', name: 'Mi perfil', path: '/mi-perfil', icon: icons.profile, roles: ['fieldWorker', 'coordination', 'operationsDirector', 'administration', 'audit'] },
-      { id: 'institutional-calendar', name: 'Calendario del equipo', path: '/calendario', icon: icons.institutionalCalendar },
+      { id: 'institutional-calendar', name: 'Calendario', path: '/calendario', icon: icons.institutionalCalendar },
       { id: 'my-calendar', name: 'Mi calendario', path: '/visitas/agenda', icon: icons.agenda },
       { id: 'families', name: 'Familias y beneficiarios', path: '/familias', icon: icons.families, roles: ['fieldWorker', 'coordination'], children: [
         { id: 'families-list', name: 'Listado de familias', path: '/familias', icon: icons.familyList, exact: true },
@@ -96,12 +96,11 @@ export const navigationGroups: { id: string; name: string; items: NavigationItem
         { id: 'supplies', name: 'Insumos', path: '/gestion-agricola/insumos', icon: icons.supplies },
       ] },
       { id: 'visits', name: 'Visitas técnicas', path: '/visitas', icon: icons.visits, roles: ['fieldWorker', 'coordination'], children: [
-        { id: 'visits-agenda', name: 'Agenda de visitas', path: '/visitas/agenda', icon: icons.agenda },
         { id: 'visits-new', name: 'Registrar visita', path: '/visitas/nueva', icon: icons.register },
         { id: 'visits-history', name: 'Historial de visitas', path: '/visitas/historial', icon: icons.history },
       ] },
       { id: 'activities', name: 'Actividades de campo', path: '/actividades', icon: icons.activities, roles: ['fieldWorker', 'coordination'], children: [
-      { id: 'training', name: 'Agendar citas', path: '/actividades/capacitaciones', icon: icons.agenda, exact: true },        { id: 'training-register', name: 'Registrar capacitación', path: '/actividades/capacitaciones/registrar', icon: icons.register },
+        { id: 'training-register', name: 'Registrar capacitación', path: '/actividades/capacitaciones/registrar', icon: icons.register },
         { id: 'training-history', name: 'Historial de capacitaciones', path: '/actividades/capacitaciones/historial', icon: icons.history },
       ] },
       { id: 'volunteering', name: 'Voluntariado', path: '/voluntariado', icon: icons.users, roles: ['coordination'] },
@@ -143,6 +142,7 @@ export function navigationForAccount(usuario: PermissionUser) {
       ...grupo,
       items: grupo.items.flatMap((item) => {
         if (item.id === 'my-calendar' && !esTecnicoCampo(usuario)) return []
+        if ((item.id === 'visits' || item.id === 'activities') && !esTecnicoCampo(usuario)) return []
         if (!item.children) return canViewPath(usuario, item.path) ? [item] : []
         const children = item.children.filter((child) => canViewPath(usuario, child.path) && !(esTecnicoCampo(usuario) && child.id === 'visits-agenda'))
         const puedeVerGeneral = canViewPath(usuario, item.path)

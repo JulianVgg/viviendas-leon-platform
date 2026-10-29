@@ -61,6 +61,7 @@ function serialize(item: {
   horaInicio: Date | null
   horaFin: Date | null
   facilitadorNombre: string | null
+  usuarioResponsableId?: number | null
   estado: string
   observaciones: string | null
   comunidadId: number | null
@@ -76,6 +77,7 @@ function serialize(item: {
     horaInicio: item.horaInicio?.toISOString().slice(11, 16) ?? null,
     horaFin: item.horaFin?.toISOString().slice(11, 16) ?? null,
     facilitadorNombre: item.facilitadorNombre,
+    usuarioResponsableId: item.usuarioResponsableId ?? null,
     estado: item.estado,
     observaciones: item.observaciones,
     comunidadId: item.comunidadId,
@@ -86,9 +88,11 @@ function serialize(item: {
 }
 
 // CAP-01: consultar capacitaciones; cada registro se puede mostrar en el calendario.
-trainingRouter.get('/', async (_req, res, next) => {
+trainingRouter.get('/', async (req, res, next) => {
   try {
+    const soloMias = req.query.mias === '1'
     const rows = await getPrismaClient().capacitacion.findMany({
+      ...(soloMias ? { where: { usuarioResponsableId: req.session.userId! } } : {}),
       include: {
         comunidad: { select: { id: true, nombre: true } },
         evidencias: { where: { evidencia: { rutaArchivo: { startsWith: 'training/' } } }, include: { evidencia: { select: { id: true, nombreArchivo: true, tipoArchivo: true } } } },
@@ -154,6 +158,7 @@ trainingRouter.post('/', requirePermission('CAPACITACIONES_WRITE'), async (req, 
       data: {
         tema,
         descripcion,
+        usuarioResponsableId: req.session.userId!,
         fecha: new Date(`${fecha}T00:00:00.000Z`),
         horaInicio,
         horaFin,

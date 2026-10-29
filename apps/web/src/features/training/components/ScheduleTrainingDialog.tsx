@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import Dialog from '@/components/ui/Dialog'
 import Button from '@/components/ui/Button'
 import FormField, { formControlClassName } from '@/components/ui/FormField'
-import { createTraining, getTrainingCommunities, type Training, type TrainingCommunity, type TrainingStatus } from '../services/trainingService'
+import { createTraining, getTrainingCommunities, type Training, type TrainingCommunity } from '../services/trainingService'
 
 const textAreaClass = `${formControlClassName} h-auto min-h-24 resize-y`
 const formatDate = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString('es-GT', { day: 'numeric', month: 'long', year: 'numeric' })
@@ -19,7 +19,6 @@ export default function ScheduleTrainingDialog({ date, onClose, onSaved }: {
   const [horaFin, setHoraFin] = useState('')
   const [facilitador, setFacilitador] = useState('')
   const [comunidadId, setComunidadId] = useState('')
-  const [estado, setEstado] = useState<TrainingStatus>('PROGRAMADA')
   const [observaciones, setObservaciones] = useState('')
   const [comunidades, setComunidades] = useState<TrainingCommunity[]>([])
   const [communityWarning, setCommunityWarning] = useState('')
@@ -31,7 +30,7 @@ export default function ScheduleTrainingDialog({ date, onClose, onSaved }: {
     let active = true
     setTema(''); setFecha(date); setDescripcion('')
     setHoraInicio(''); setHoraFin(''); setFacilitador('')
-    setComunidadId(''); setEstado('PROGRAMADA'); setObservaciones('')
+    setComunidadId(''); setObservaciones('')
     setError(''); setCommunityWarning(''); setComunidades([])
     void getTrainingCommunities().then(items => {
       if (active) setComunidades(items)
@@ -43,7 +42,7 @@ export default function ScheduleTrainingDialog({ date, onClose, onSaved }: {
 
   const save = async () => {
     if (saving || !date) return
-    if (!tema.trim() || !fecha) { setError('Ingresa un tema y una fecha válida.'); return }
+    if (!tema.trim() || !fecha || fecha < new Intl.DateTimeFormat('sv-SE',{ timeZone:'America/Guatemala' }).format(new Date())) { setError('Selecciona una fecha vigente.'); return }
     if (horaInicio && horaFin && horaFin <= horaInicio) {
       setError('La hora de finalización debe ser posterior a la hora de inicio.'); return
     }
@@ -54,7 +53,7 @@ export default function ScheduleTrainingDialog({ date, onClose, onSaved }: {
         tema: tema.trim(), descripcion: descripcion.trim(), fecha,
         horaInicio: horaInicio || null, horaFin: horaFin || null,
         facilitadorNombre: facilitador.trim(), observaciones: observaciones.trim(),
-        comunidadId: comunidadId ? Number(comunidadId) : null, estado,
+        comunidadId: comunidadId ? Number(comunidadId) : null, estado: 'PROGRAMADA',
       })
       onSaved(created)
     } catch (cause) {
@@ -65,12 +64,12 @@ export default function ScheduleTrainingDialog({ date, onClose, onSaved }: {
   }
 
   return <Dialog open={Boolean(date)} onClose={() => { if (!saving) onClose() }}
-    title="Registrar capacitación" description={date ? `Fecha seleccionada: ${formatDate(date)}` : ''}
+    title="Agendar capacitación" description={date ? `Fecha seleccionada: ${formatDate(date)}` : ''}
     className="max-w-2xl"
     actions={<>
       <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>Cancelar</Button>
       <Button type="button" onClick={() => void save()} disabled={saving || !tema.trim() || !fecha}>
-        {saving ? 'Guardando…' : 'Guardar capacitación'}
+        {saving ? 'Guardando…' : 'Agendar capacitación'}
       </Button>
     </>}>
     <div className="space-y-4">
@@ -82,13 +81,7 @@ export default function ScheduleTrainingDialog({ date, onClose, onSaved }: {
       </FormField>
       <div className="grid gap-4 sm:grid-cols-2">
         <FormField label="Fecha" required>
-          <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} className={formControlClassName} disabled={saving} />
-        </FormField>
-        <FormField label="Estado" required>
-          <select value={estado} onChange={e => setEstado(e.target.value as TrainingStatus)} className={formControlClassName} disabled={saving}>
-            <option value="PROGRAMADA">Programada</option>
-            <option value="REALIZADA">Realizada</option>
-          </select>
+          <input type="date" value={fecha} min={new Intl.DateTimeFormat('sv-SE', {timeZone: 'America/Guatemala'}).format(new Date())} onChange={e => setFecha(e.target.value)} className={formControlClassName} disabled={saving} />
         </FormField>
         <FormField label="Hora de inicio">
           <input type="time" value={horaInicio} onChange={e => setHoraInicio(e.target.value)} className={formControlClassName} disabled={saving} />

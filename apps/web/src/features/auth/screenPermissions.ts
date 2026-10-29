@@ -59,6 +59,7 @@ export const SCREEN_PERMISSIONS: Record<string, string> = {
 
 export function permissionForPath(path: string): string | null {
   if (SCREEN_PERMISSIONS[path]) return SCREEN_PERMISSIONS[path]
+  if (/^\/gestion-agricola\/ciclos\/[1-9]\d*$/.test(path)) return 'PANTALLA_CICLOS'
   if (/^\/familias\/[^/]+\/editar$/.test(path)) return 'PANTALLA_FAMILIAS_EDITAR'
   if (/^\/familias\/[^/]+$/.test(path)) return 'PANTALLA_FAMILIAS_DETALLE'
   return null
@@ -89,6 +90,8 @@ export function canWritePrograms(usuario: PermissionUser): boolean {
 }
 
 export function canViewPath(usuario: PermissionUser, path: string): boolean {
+  // La captura técnica queda reservada a personal operativo, incluso para Dirección.
+  if (path === '/visitas/nueva' && esSupervisorCalendario(usuario)) return false
   if (isDireccionGeneral(usuario)) return true
   if (path === '/calendario') return esSupervisorCalendario(usuario)
   // Bandeja personal disponible para cualquier usuario autenticado.
