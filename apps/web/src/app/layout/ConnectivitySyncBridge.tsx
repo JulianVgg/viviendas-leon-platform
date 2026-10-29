@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useAuth } from '@/features/auth/AuthProvider'
+import { esTecnicoCampo } from '@/features/auth/calendarAccess'
 import { syncPendingVisits } from '@/features/visits/services/visitService'
 import { getConnectivitySnapshot, subscribeConnectivity, subscribeConnectionRecovery } from '@/services/connectivity'
 import { listPendingOperations } from '@/services/pendingOperations'
@@ -16,7 +17,7 @@ export default function ConnectivitySyncBridge() {
   const { usuario } = useAuth()
   // Procesa una vez al abrir una sesión que ya tiene la API disponible.
   useEffect(() => {
-    if (!usuario) return
+    if (!usuario || !esTecnicoCampo(usuario)) return
     let started = false
     const startOnce = () => {
       if (started || getConnectivitySnapshot().status !== 'connected') return
@@ -38,7 +39,7 @@ export default function ConnectivitySyncBridge() {
       }))
     }
 
-    if (usuario) {
+    if (usuario && esTecnicoCampo(usuario)) {
       try { await syncPendingVisits(usuario.id) } catch { /* Pendientes conservados */ }
     }
     if (!import.meta.env.DEV) return

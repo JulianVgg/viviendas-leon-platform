@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Plus, List, CalendarDays } from 'lucide-react'
 
 import PageMeta from '@/components/common/PageMeta'
@@ -11,6 +11,7 @@ import { useAuth } from '@/features/auth/AuthProvider'
 import { esSupervisorCalendario } from '@/features/auth/calendarAccess'
 import InstitutionalEventDialog from '../components/InstitutionalEventDialog'
 import { eventoHaPasado } from '../services/eventHistory'
+import { todayInGuatemala } from '@/features/visits/services/visitService'
 import {
   eventColor, eventDisplayTitle, loadCalendarView, loadParticipants, loadSupervisionVisitDetail, removeEvent, saveEvent,
   type CalendarEvent, type CalendarEventInput, type CalendarPerson, type CalendarTechnicalVisit, type CalendarTraining,
@@ -22,7 +23,7 @@ const weekNames = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB']
 function dayKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
-const todayKey = () => dayKey(new Date())
+const todayKey = () => todayInGuatemala()
 const readableDate = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('es-GT', {
   day: 'numeric', month: 'long', year: 'numeric',
 })
@@ -59,10 +60,10 @@ export default function InstitutionalCalendarPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<CalendarEvent | null>(null)
-  const [selectedVisit, setSelectedVisit] = useState<CalendarTechnicalVisit | null>(null)
   const [fullVisit, setFullVisit] = useState<VisitListItem | null>(null)
   const [detailError, setDetailError] = useState('')
-  const [detailLoading, setDetailLoading] = useState(false)
+  const [loadingVisitId, setLoadingVisitId] = useState<number | null>(null)
+  const detailRequest = useRef<AbortController | null>(null)
   const [selectedTraining, setSelectedTraining] = useState<CalendarTraining | null>(null)
   const [selectedDate, setSelectedDate] = useState(todayKey())
   const [eventDialogOpen, setEventDialogOpen] = useState(false)
@@ -73,18 +74,30 @@ export default function InstitutionalCalendarPage() {
   const [comunidad, setComunidad] = useState('')
   const [vista, setVista] = useState<'mes'|'lista'>('mes')
 
-  useEffect(() => {
-    if (!selectedVisit) { setFullVisit(null); setDetailError(''); setDetailLoading(false); return }
+  // Se monta únicamente el modal definitivo: nunca uno provisional de carga.
+  // Cancelar la consulta anterior evita mostrar otra visita si hay clics consecutivos.
+  useEffect(() => () => detailRequest.current?.abort(), [])
+
+  const openVisitDetail = async (visit: CalendarTechnicalVisit) => {
+    detailRequest.current?.abort()
     const controller = new AbortController()
-    setFullVisit(null)
+    detailRequest.current = controller
     setDetailError('')
-    setDetailLoading(true)
-    void loadSupervisionVisitDetail(selectedVisit.id, controller.signal)
-      .then(item => { if (!controller.signal.aborted) setFullVisit(item) })
-      .catch(error => { if (!controller.signal.aborted) setDetailError(error instanceof Error ? error.message : 'No se pudo consultar la visita.') })
-      .finally(() => { if (!controller.signal.aborted) setDetailLoading(false) })
-    return () => controller.abort()
-  }, [selectedVisit])
+    setLoadingVisitId(visit.id)
+    try {
+      const item = await loadSupervisionVisitDetail(visit.id, controller.signal)
+      if (!controller.signal.aborted) setFullVisit(item)
+    } catch (cause) {
+      if (!controller.signal.aborted) {
+        setDetailError(cause instanceof Error ? cause.message : 'No se pudo consultar la visita.')
+      }
+    } finally {
+      if (detailRequest.current === controller) {
+        detailRequest.current = null
+        setLoadingVisitId(null)
+      }
+    }
+  }
 
   const monthCells = useMemo(() => {
     const offset = new Date(month.getFullYear(), month.getMonth(), 1).getDay()
@@ -148,7 +161,7 @@ export default function InstitutionalCalendarPage() {
   }, [filtradas, monthCells])
 
   const createEvent = (date = todayKey()) => {
-    if (!editable) return
+    if (!editable || date < todayKey()) return
     setSelected(null)
     setSelectedDate(date)
     setDayList(null)
@@ -166,8 +179,8 @@ export default function InstitutionalCalendarPage() {
       return
     }
     if (item.kind === 'technical') {
-      setSelectedVisit(item.visit)
       setDayList(null)
+      void openVisitDetail(item.visit)
       return
     }
     setSelectedTraining(item.training)
@@ -193,9 +206,9 @@ export default function InstitutionalCalendarPage() {
     <>
       <PageMeta title="Calendario | Viviendas León" description="Calendario de actividades institucionales" />
       <PageHeader title="Calendario" description="" />
-      {error && (
+      {(error || detailError) && (
         <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
-          {error}
+          {error || detailError}
         </p>
       )}
       <section aria-label="Calendario institucional mensual" className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-theme-xs dark:border-gray-800 dark:bg-gray-900">
@@ -265,8 +278,8 @@ export default function InstitutionalCalendarPage() {
                   >
                     <button
                       type="button"
-                      onClick={() => editable ? createEvent(cell.key) : setDayList(cell.key)}
-                      title={editable ? 'Crear evento este día' : 'Consultar actividades del día'}
+                      onClick={() => editable && cell.key >= todayKey() ? createEvent(cell.key) : setDayList(cell.key)}
+                      title={editable && cell.key >= todayKey() ? 'Crear evento este día' : 'Consultar actividades del día'}
                       className={`mb-2 ml-auto flex size-7 items-center justify-center rounded-full text-xs font-medium ${cell.key === todayKey() ? 'bg-brand-500 text-white' : cell.inMonth ? 'text-gray-800 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800' : 'text-gray-400'}`}
                     >
                       {cell.number}
@@ -278,6 +291,7 @@ export default function InstitutionalCalendarPage() {
                           type="button"
                           onDoubleClick={click => click.stopPropagation()}
                           onClick={() => viewItem(event)}
+                          aria-busy={event.kind === 'technical' && loadingVisitId === event.visit.id}
                           title={`${itemTitle(event)} · ${responsableActividad(event) || 'Sin responsable'}`}
                           className={`block w-full truncate rounded-md border border-l-[3px] px-2 py-1.5 text-left text-[11px] font-medium transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-brand-500 ${itemColor(event)}`}
                         >
@@ -301,7 +315,7 @@ export default function InstitutionalCalendarPage() {
           </div>
         </div>
         : <div className="max-h-[620px] space-y-2 overflow-y-auto p-4">
-          {listadas.map(item => <button key={item.key} type="button" onClick={()=>viewItem(item)} className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 p-3 text-left hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800">
+          {listadas.map(item => <button key={item.key} type="button" onClick={()=>viewItem(item)} aria-busy={item.kind === 'technical' && loadingVisitId === item.visit.id} className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 p-3 text-left hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800">
             <span className="min-w-0"><span className="block text-sm font-semibold text-gray-800 dark:text-gray-100">{itemTitle(item)}</span><span className="mt-1 block text-xs text-gray-500">{responsableActividad(item)||'Sin responsable'}{comunidadActividad(item)?` · ${comunidadActividad(item)}`:''}</span></span>
             <span className="text-right text-xs text-gray-500">{readableDate(fechaActividad(item))}<span className="block capitalize">{estadoActividad(item,todayKey())}</span></span>
           </button>)}
@@ -321,12 +335,7 @@ export default function InstitutionalCalendarPage() {
         onSave={save}
         onDelete={erase}
       />
-      {fullVisit && fullVisit.id === selectedVisit?.id && <VisitDetailDialog key={fullVisit.id} visit={fullVisit} onClose={() => setSelectedVisit(null)} />}
-      <Dialog open={Boolean(selectedVisit) && fullVisit?.id !== selectedVisit?.id} title="Detalle de visita" description={selectedVisit ? readableDate(selectedVisit.fecha) : undefined} onClose={() => setSelectedVisit(null)}>
-        <div role={detailError ? 'alert' : 'status'} className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-          {detailLoading ? 'Cargando detalle…' : detailError || 'Sin información adicional.'}
-        </div>
-      </Dialog>
+      {fullVisit && <VisitDetailDialog key={fullVisit.id} visit={fullVisit} onClose={() => setFullVisit(null)} />}
       <Dialog
         open={selectedTraining !== null}
         title="Capacitación"

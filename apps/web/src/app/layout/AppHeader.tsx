@@ -99,7 +99,7 @@ export default function AppHeader() {
         <NotificationDropdown />
         <div ref={userRef} className="relative" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setUserOpen(false) }}>
           <button ref={roleButtonRef} type="button" className="layout-focus flex min-h-11 max-w-56 items-center gap-2 rounded-lg px-1 text-start hover:bg-slate-100 dark:hover:bg-white/5" onClick={() => setUserOpen((value) => !value)} aria-label="Abrir menú de usuario" aria-controls="user-account-panel" aria-expanded={userOpen}>
-            <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-50 text-xs font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">{avatarUrl ? <img src={avatarUrl} alt="" className="size-full object-cover"/> : inicialesUsuario}</span>
+            <span aria-hidden="true" className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full ring-2 ring-brand-100 dark:ring-brand-500/20 sm:size-12 bg-brand-50 text-xs font-semibold text-brand-700 dark:bg-brand-500/15 dark:text-brand-300">{avatarUrl ? <img src={avatarUrl} alt="" className="size-full object-cover"/> : inicialesUsuario}</span>
             <span className="hidden min-w-0 md:block"><span className="block truncate text-sm font-medium text-slate-800 dark:text-white">{usuario?.nombre ?? 'Usuario'}</span><span className="block truncate text-xs text-slate-500 dark:text-slate-400">{usuario?.roles.join(', ') || 'Sin rol asignado'}</span></span>
             <span aria-hidden="true" className="hidden text-slate-500 sm:block">{userOpen ? '⌃' : '⌄'}</span>
           </button>
