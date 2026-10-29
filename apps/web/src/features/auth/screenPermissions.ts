@@ -95,7 +95,7 @@ export function canViewPath(usuario: PermissionUser, path: string): boolean {
   if (isDireccionGeneral(usuario)) return true
   if (path === '/calendario') return esSupervisorCalendario(usuario)
   // Bandeja personal disponible para cualquier usuario autenticado.
-  if (path === '/' || path === '/mi-perfil' || path === '/notificaciones') return true
+  if (path === '/' || path === '/mi-perfil' || path === '/notificaciones' || path === '/mi-agenda') return true
   const codigo = permissionForPath(path)
   if (!codigo) return false
   if (path.startsWith('/offline-') && !import.meta.env.DEV) return false

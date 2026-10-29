@@ -3,11 +3,28 @@ import express, { Router } from 'express'
 import { getPrismaClient } from '../../config/prisma.js'
 import { requireAuth } from '../auth/auth.middleware.js'
 import { getAuthenticatedUser } from '../auth/auth.service.js'
+import { puedeEditarPerfilCompleto } from './profile.permissions.js'
+import { DEPARTAMENTOS, MUNICIPIOS_POR_DEPARTAMENTO, municipioValido } from './guatemala-ubicaciones.js'
 
 export const profileExtrasRouter = Router()
 
 // Todas las operaciones requieren una sesión válida.
 profileExtrasRouter.use(requireAuth)
+
+async function permitirEdicionCompleta(req: import('express').Request, res: import('express').Response): Promise<boolean> {
+  const usuario = await getAuthenticatedUser(req.session.userId!)
+  if (!usuario || !puedeEditarPerfilCompleto(usuario.roles)) {
+    res.status(403).json({ error: { message: 'No tienes permiso para cambiar esos datos.' } })
+    return false
+  }
+  return true
+}
+
+// Catálogo de ubicación independiente de los municipios sintéticos de pruebas.
+profileExtrasRouter.get('/ubicaciones', (_req, res) => {
+  res.setHeader('Cache-Control', 'private, max-age=86400')
+  res.json({ departamentos: DEPARTAMENTOS, municipiosPorDepartamento: MUNICIPIOS_POR_DEPARTAMENTO })
+})
 
 // =====================================================
 // EDITAR DIRECCIÓN DEL USUARIO
@@ -15,6 +32,7 @@ profileExtrasRouter.use(requireAuth)
 
 profileExtrasRouter.patch('/direccion', async (req, res, next) => {
   try {
+    if (!await permitirEdicionCompleta(req, res)) return
     const datos: unknown = req.body
 
     if (
@@ -68,6 +86,11 @@ profileExtrasRouter.patch('/direccion', async (req, res, next) => {
           message: 'Uno o más campos superan la longitud permitida.',
         },
       })
+      return
+    }
+
+    if ((departamento || municipio) && (!departamento || !municipio || !municipioValido(departamento, municipio))) {
+      res.status(400).json({ error: { message: 'Selecciona un municipio del departamento indicado.' } })
       return
     }
 

@@ -4,6 +4,7 @@ import Dialog from '@/components/ui/Dialog'
 import ReminderPicker from '@/features/notifications/components/ReminderPicker'
 import Button from '@/components/ui/Button'
 import { eventoHaPasado } from '../services/eventHistory'
+import { todayInGuatemala } from '@/features/visits/services/visitService'
 import RespuestasParticipantesEvento from './RespuestasParticipantesEvento'
 import {
   eventTypes, eventDisplayTitle,
@@ -95,8 +96,8 @@ export default function InstitutionalEventDialog({
       setError('Escribe un nombre válido de hasta 160 caracteres para el evento.')
       return
     }
-    if (!data.fechaInicio) {
-      setError('Selecciona la fecha del evento.')
+    if (!data.fechaInicio || data.fechaInicio < todayInGuatemala()) {
+      setError('Selecciona una fecha a partir de hoy.')
       return
     }
     setBusy(true)
@@ -166,6 +167,7 @@ export default function InstitutionalEventDialog({
           <input
             id="institutional-event-date"
             type="date"
+            min={todayInGuatemala()}
             required
             disabled={!editable || busy}
             className={inputClass}
