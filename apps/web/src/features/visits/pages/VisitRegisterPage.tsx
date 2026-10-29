@@ -1,22 +1,23 @@
 import '../visits.css'
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router'
+import { Link, Navigate, useSearchParams } from 'react-router'
 import PageHeader from '@/components/common/PageHeader'
 import PageMeta from '@/components/common/PageMeta'
 import Button from '@/components/ui/Button'
-import Badge from '@/components/ui/Badge'
 import FormField, { formControlClassName } from '@/components/ui/FormField'
 import { FamilyApiError, fetchFamilies } from '@/features/families/services/familyService'
 import { getOfflineData, saveOfflineData } from '@/db/offlineDb'
 import { useAuth } from '@/features/auth/AuthProvider'
+import { esSupervisorCalendario } from '@/features/auth/calendarAccess'
 import { CyclesApiError, listCycles, type Cycle } from '@/features/agriculture/services/cyclesService'
 import { addCivilDays, DIAS_CICLO_VISITA } from '@/features/visits/services/visitPlanning'
-import { saveVisitCapture, todayInGuatemala, type VisitCapture, type CropCapture, type VisitPhotoFile } from '@/features/visits/services/visitService'
+import { productionEstimate, estimatedSaleQ } from '@/features/visits/services/visitProduction'
+import { saveVisitCapture, todayInGuatemala, type VisitCapture, type CropCapture, type VisitPhotoFile, type VisitTimeSlot } from '@/features/visits/services/visitService'
 import SearchableSelect, { catalogOptions } from '@/features/visits/components/SearchableSelect'
 import { getVisitFollowUps, getVisitList, type VisitListItem, type VisitFollowUp, type FollowUpStatus } from '@/features/visits/services/visitService'
 import VisitEvidencePicker from '@/features/visits/components/VisitEvidencePicker'
 import type { FamilyListItem } from '@/features/families/types/family'
-import { crops, stages, qualities, weatherOptions, diseases, pests, damage, organicInsecticides, fertilizers, chemicalInsecticides } from '@/features/visits/data/visitCatalogs'
+import { crops, stages, qualities, weatherOptions, diseases, pests, damage } from '@/features/visits/data/visitCatalogs'
 
 type Finding = { id: string; type: 'plaga' | 'enfermedad'; name: string; damage: string }
 type CropEntry = {
@@ -26,19 +27,18 @@ type CropEntry = {
   observacionesCultivo: string
 }
 type Commitment = { id: string; text: string; due: string; nextVisit: boolean; category: string }
-const steps = ['Información general', 'Evaluación de cultivos', 'Recomendaciones y observaciones']
+const steps = ['Información general', 'Evaluación de cultivos', 'Compromisos y observaciones']
 const input = `${formControlClassName} w-full`
 const area = `${formControlClassName} h-auto min-h-24 resize-y`
 const card = 'rounded-2xl border border-slate-200 bg-white p-4 shadow-theme-xs dark:border-slate-800 dark:bg-slate-900 md:p-6'
 const todayLocal = todayInGuatemala
 const newCrop = (): CropEntry => ({ id: crypto.randomUUID(), cicloCultivoId: null, name: '', stage: '', plants: '', quality: '', findings: [], production: false, perPlantUnits: '', perPlantKg: '', units: '', kg: '', priceQ: '', priceBasis: 'unidad', observacionesCultivo: '' })
 const newCommitment = (): Commitment => ({ id: crypto.randomUUID(), text: '', due: '', nextVisit: true, category: 'Familia' })
-const currencyTotal = (entry: CropEntry, currency: 'priceQ') => {
-  const quantity = Number(entry.priceBasis === 'kg' ? entry.kg : entry.units)
-  const price = Number(entry[currency])
-  if (!entry[currency].trim() || !(entry.priceBasis === 'kg' ? entry.kg : entry.units).trim() || !Number.isFinite(quantity * price)) return '—'
-  return (quantity * price).toLocaleString('es-GT', { maximumFractionDigits: 2, minimumFractionDigits: 2 })
+const currencyTotal = (entry: CropEntry) => {
+  const total = estimatedSaleQ(entry)
+  return total === null ? '—' : total.toLocaleString('es-GT', { maximumFractionDigits: 2, minimumFractionDigits: 2 })
 }
+
 function Options({ items, placeholder = 'Seleccionar' }: { items: string[]; placeholder?: string }) {
   return <><option value="">{placeholder}</option>{items.map(value => <option key={value} value={value}>{value}</option>)}</>
 }
@@ -52,6 +52,7 @@ export default function VisitRegisterPage() {
   const [familyId, setFamilyId] = useState(initialFamily && /^\d+$/.test(initialFamily) ? initialFamily : '')
   const [date, setDate] = useState(initialDate && initialDate === todayLocal() ? initialDate : todayLocal)
   const [weather, setWeather] = useState('')
+  const [turno, setTurno] = useState<VisitTimeSlot>('MANANA')
   const [scheduledVisits, setScheduledVisits] = useState<VisitListItem[]>([])
   const [previousVisits, setPreviousVisits] = useState<VisitListItem[]>([])
   const [scheduledVisitId, setScheduledVisitId] = useState<number | null>(null)
@@ -69,9 +70,6 @@ export default function VisitRegisterPage() {
   const [cyclesLoading, setCyclesLoading] = useState(false)
   const [cyclesWarning, setCyclesWarning] = useState('')
   const [commitments, setCommitments] = useState<Commitment[]>([])
-  const [treatment, setTreatment] = useState('')
-  const [treatmentGroup, setTreatmentGroup] = useState('orgánico')
-  const [recommendation, setRecommendation] = useState('')
   const [observations, setObservations] = useState('')
   const [photos, setPhotos] = useState<VisitPhotoFile[]>([])
   const [familyOptions, setFamilyOptions] = useState<FamilyListItem[]>([])
@@ -234,6 +232,14 @@ export default function VisitRegisterPage() {
         cropsState.some(c => c.plants.trim() && !Number.isSafeInteger(Number(c.plants)))) {
       setError('Revisa las cantidades y precios; deben ser números positivos.'); setStep(1); return
     }
+    if (cropsState.some(c => c.production && (c.perPlantUnits.trim() || c.perPlantKg.trim() || c.priceQ.trim()) &&
+      (!c.plants.trim() || Number(c.plants) <= 0))) {
+      setError('Ingresa las plantas observadas para calcular la producción.'); setStep(1); return
+    }
+    if (cropsState.some(c => c.production && c.priceQ.trim() &&
+      !(c.priceBasis === 'kg' ? c.perPlantKg : c.perPlantUnits).trim())) {
+      setError('Completa la producción por planta antes de calcular la venta.'); setStep(1); return
+    }
     if (cropsState.some(c => c.observacionesCultivo.length > 2000)) {
       setError('Las observaciones del cultivo no pueden superar 2000 caracteres.'); setStep(1); return
     }
@@ -244,16 +250,17 @@ export default function VisitRegisterPage() {
       findings: c.findings.map(f => ({ type: f.type, name: f.name, damage: f.damage })),
       production: c.production, perPlantUnits: c.production ? numberOrNull(c.perPlantUnits) : null,
       perPlantKg: c.production ? numberOrNull(c.perPlantKg) : null,
-      units: c.production ? numberOrNull(c.units) : null, kg: c.production ? numberOrNull(c.kg) : null,
+      units: c.production ? productionEstimate(c).units : null,
+      kg: c.production ? productionEstimate(c).kg : null,
       priceQ: c.production ? numberOrNull(c.priceQ) : null,
       priceUSD: null, // Los importes en dólares se calcularán en reportes.
       priceBasis: c.priceBasis,
     }))
     const payload: VisitCapture = {
-      familyId: Number(familyId), date, status: type, capturedAt: type === 'REALIZADA' ? new Date().toISOString() : undefined, weather,
+      familyId: Number(familyId), date, status: type, timeSlot: turno, capturedAt: type === 'REALIZADA' ? new Date().toISOString() : undefined, weather,
       ...(scheduledVisitId ? { scheduledVisitId } : {}),
-      checkIn: '', crops: cropsCapture, recommendation: recommendation.trim(),
-      treatment, observations: observations.trim(),
+      checkIn: '', crops: cropsCapture, recommendation: '',
+      treatment: '', observations: observations.trim(),
       commitments: commitments.map(c => ({ id: c.id, text: c.text.trim(), due: c.nextVisit ? null : c.due || null, nextVisit: c.nextVisit, category: c.category as 'Familia' | 'ONG' })),
       reviews: type === 'REALIZADA' ? previousFollowUps.filter(f => reviewStates[f.id] && reviewStates[f.id] !== f.status).map(f => ({ id: f.id, status: reviewStates[f.id] })) : [],
     }
@@ -265,6 +272,8 @@ export default function VisitRegisterPage() {
       setError(reason instanceof Error ? reason.message : 'No se pudo guardar la visita en este dispositivo.')
     } finally { setSaving(false) }
   }
+
+  if (usuario && esSupervisorCalendario(usuario)) return <Navigate to="/visitas/historial" replace />
 
   return <>
     <PageMeta title="Registrar visita técnica | Viviendas León" description="Formulario guiado de evaluación agrícola." />
@@ -288,9 +297,9 @@ export default function VisitRegisterPage() {
             : scheduleError ? <p role="alert" className="mt-3 text-sm text-red-600">{scheduleError}. No es posible confirmar las citas hasta recuperar la conexión.</p>
             : familyScheduled.length ? <div className="mt-3 space-y-2" role="radiogroup" aria-label="Vincular visita programada">
               {familyScheduled.map(visit => <label key={visit.operationId ?? visit.id} className={`flex items-start gap-3 rounded-lg border p-3 text-sm dark:bg-gray-900 ${visit.date < today ? 'border-rose-300 bg-rose-50 dark:bg-rose-500/10' : 'bg-white'} ${scheduledVisitId === visit.id && visit.id !== null ? 'border-brand-500 ring-1 ring-brand-300' : 'border-gray-200 dark:border-gray-700'}`}>
-                <input type="radio" name="scheduled-visit" className="mt-1 accent-brand-500" checked={scheduledVisitId === visit.id && visit.id !== null} disabled={!visit.id || visit.date !== today || Boolean(visit.syncStatus && visit.syncStatus !== 'synced')} onChange={() => setScheduledVisitId(visit.id)} />
+                <input type="radio" name="scheduled-visit" className="mt-1 accent-brand-500" checked={scheduledVisitId === visit.id && visit.id !== null} disabled={!visit.id || visit.date !== today || Boolean(visit.syncStatus && visit.syncStatus !== 'synced')} onChange={() => { setScheduledVisitId(visit.id); if (visit.capture?.timeSlot) setTurno(visit.capture.timeSlot) }} />
                 <span><strong className="block text-gray-900 dark:text-white">{new Date(`${visit.date}T12:00:00`).toLocaleDateString('es-GT', {day:'numeric', month:'long', year:'numeric'})}</strong>
-                  <span className="mt-1 block text-xs text-gray-600 dark:text-gray-300">{visit.capture?.timeSlot === 'TARDE' ? 'Tarde' : visit.capture?.timeSlot === 'MANANA' ? 'Mañana' : 'Sin turno'} · Responsable: {visit.responsibleName || 'Sin dato'}</span>
+                  <span className="mt-1 block text-xs text-gray-600 dark:text-gray-300">{visit.capture?.timeSlot === 'TARDE' ? 'Turno tarde' : visit.capture?.timeSlot === 'MANANA' ? 'Turno mañana' : 'Sin horario'} · Responsable: {visit.responsibleName || 'Sin dato'}</span>
                   {visit.date < today && <span className="mt-1 block text-xs font-semibold text-rose-700 dark:text-rose-300">Vencida · Reprogramar antes de registrar. <Link to="/visitas/agenda" className="underline">Abrir calendario</Link></span>}
                   {visit.date > today && <span className="mt-1 block text-xs text-blue-700">Esta visita todavía no corresponde a hoy.</span>}
                   {!visit.id && <span className="mt-1 block text-xs text-amber-700">Pendiente de sincronizar. Primero sincroniza esta cita para vincularla.</span>}
@@ -303,6 +312,12 @@ export default function VisitRegisterPage() {
             </div> : <p className="mt-3 text-sm text-gray-600 dark:text-gray-300">No se encontraron visitas programadas para esta familia. Puedes registrar una visita no programada.</p>}
             {scheduleLocal && <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">Datos de agenda almacenados localmente. Confirma la cita al recuperar conexión.</p>}
           </div>}
+          <FormField id="visit-turno" label="Horario" required>
+            <select id="visit-turno" value={turno} onChange={e => setTurno(e.target.value as VisitTimeSlot)} className={input}>
+              <option value="MANANA">Turno mañana</option>
+              <option value="TARDE">Turno tarde</option>
+            </select>
+          </FormField>
           <FormField id="visit-weather" label="Condición climática"><select id="visit-weather" className={input} value={weather} onChange={e => setWeather(e.target.value)}><Options items={weatherOptions}/></select></FormField>
           <div className="md:col-span-2 rounded-xl border border-gray-200 bg-gray-50/60 p-4 dark:border-gray-700 dark:bg-gray-800/30">
             <h3 className="font-semibold text-gray-900 dark:text-white">¿Cómo le ha ido desde la última visita?</h3>
@@ -361,14 +376,18 @@ export default function VisitRegisterPage() {
         </div>
         {cropsState.length === 0 && <div className={`${card} text-center text-sm text-slate-500`}>Selecciona una siembra para evaluarla.</div>}
         {cropsState.map((crop, i) => <article key={crop.id} className={card}>
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold text-slate-900 dark:text-white">Cultivo {i + 1} {crop.name && <Badge>{crop.name}</Badge>}</h3><Button type="button" size="sm" variant="secondary" onClick={() => setCrops(list => list.filter(c => c.id !== crop.id))}>Quitar</Button></div>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold text-slate-900 dark:text-white">{crop.name || `Cultivo ${i + 1}`}</h3><Button type="button" size="sm" variant="secondary" onClick={() => setCrops(list => list.filter(c => c.id !== crop.id))}>Quitar</Button></div>
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {availableCycles.length > 0 ? <FormField label="Siembra del huerto" id={`crop-cycle-${crop.id}`}>
               <select id={`crop-cycle-${crop.id}`} className={input} value={crop.cicloCultivoId ?? ''} onChange={e => {
                 const found = availableCycles.find(item => item.id === Number(e.target.value))
                 if (found && cropsState.some(item => item.id !== crop.id && item.cicloCultivoId === found.id)) return
                 updateCrop(crop.id, { cicloCultivoId: found?.id ?? null, name: found?.cultivo.nombre ?? '',
-                  observacionesCultivo: found?.id === crop.cicloCultivoId ? crop.observacionesCultivo : '' })
+                  ...(found?.id === crop.cicloCultivoId ? {} : {
+                    stage: '', plants: '', quality: '', findings: [], production: false,
+                    perPlantUnits: '', perPlantKg: '', units: '', kg: '', priceQ: '', priceBasis: 'unidad',
+                    observacionesCultivo: '',
+                  }) })
               }}><option value="">Seleccionar siembra</option>
                 {availableCycles.filter(item => item.id === crop.cicloCultivoId || !cropsState.some(selected => selected.cicloCultivoId === item.id)).map(item => <option key={item.id} value={item.id}>{item.cultivo.nombre} · {item.huerto.nombre || `Huerto #${item.huertoId}`} · {item.fechaSiembra || item.fechaTrasplante || 'Sin fecha'} (#{item.id})</option>)}
               </select>
@@ -383,7 +402,7 @@ export default function VisitRegisterPage() {
                 value={crop.observacionesCultivo} onChange={e => updateCrop(crop.id, { observacionesCultivo: e.target.value })} />
             </FormField>
           </div>
-          <details className="mt-5 rounded-xl border border-slate-200 p-4 dark:border-slate-700"><summary className="cursor-pointer font-medium text-slate-900 dark:text-white">¿Detectaste plagas o enfermedades? <span className="text-xs font-normal text-slate-500">({crop.findings.length} hallazgos)</span></summary>
+          <details className="mt-5 rounded-xl border border-slate-200 p-4 dark:border-slate-700"><summary className="cursor-pointer font-medium text-slate-900 dark:text-white">Plagas y enfermedades <span className="text-xs font-normal text-slate-500">({crop.findings.length})</span></summary>
             <div className="mt-4 space-y-3">{crop.findings.map(f => <div key={f.id} className="grid gap-2 rounded-lg bg-slate-50 p-3 dark:bg-slate-800/40 md:grid-cols-[135px_1fr_110px_auto] md:items-end">
               <FormField id={`finding-type-${f.id}`} label="Tipo"><select id={`finding-type-${f.id}`} className={input} value={f.type} onChange={e => updateFinding(crop.id,f.id,{type:e.target.value as Finding['type'],name:''})}><option value="plaga">Plaga</option><option value="enfermedad">Enfermedad</option></select></FormField>
               <SearchableSelect id={`finding-name-${f.id}`} label="Hallazgo" value={f.name} onChange={name => updateFinding(crop.id,f.id,{name})} options={catalogOptions(f.type === 'plaga' ? pests : diseases)} />
@@ -391,48 +410,51 @@ export default function VisitRegisterPage() {
               <Button type="button" variant="secondary" size="sm" onClick={() => updateCrop(crop.id, {findings: crop.findings.filter(item => item.id !== f.id)})}>Quitar</Button>
             </div>)}<Button type="button" variant="secondary" size="sm" onClick={()=>updateCrop(crop.id,{findings:[...crop.findings,{id:crypto.randomUUID(),type:'plaga',name:'',damage:''}]})}>+ Añadir hallazgo</Button></div>
           </details>
-          <details className="mt-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700" open={crop.production || undefined}><summary className="cursor-pointer font-medium text-slate-900 dark:text-white">¿Hubo producción o ventas? <span className="text-xs font-normal text-slate-500">(opcional)</span></summary>
+          <details className="mt-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700" open={crop.production || undefined}><summary className="cursor-pointer font-medium text-slate-900 dark:text-white">Producción y ventas</summary>
             <div className="mt-4 space-y-4"><label className="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={crop.production} onChange={e=>updateCrop(crop.id,{production:e.target.checked})}/> Registrar producción y ventas</label>
-              {crop.production && <><div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {([['perPlantUnits','Producto/planta (unidades)'],['perPlantKg','Producto/planta (kg)'],['units','Total obtenido (unidades)'],['kg','Total obtenido (kg)']] as const).map(([key,name]) => <FormField key={key} id={`${key}-${crop.id}`} label={name}><input id={`${key}-${crop.id}`} className={input} type="number" min="0" step="any" value={crop[key]} onChange={e=>updateCrop(crop.id,{[key]:e.target.value})}/></FormField>)}
-              </div><div className="grid gap-3 md:grid-cols-2"><FormField id={`price-basis-${crop.id}`} label="Precio por"><select id={`price-basis-${crop.id}`} className={input} value={crop.priceBasis} onChange={e=>updateCrop(crop.id,{priceBasis:e.target.value as CropEntry['priceBasis']})}><option value="unidad">Unidad</option><option value="kg">Kilogramo</option></select></FormField><FormField id={`price-q-${crop.id}`} label="Precio de venta (Q)"><input id={`price-q-${crop.id}`} className={input} type="number" min="0" step="any" value={crop.priceQ} onChange={e=>updateCrop(crop.id,{priceQ:e.target.value})}/></FormField></div>
-              <div className="grid gap-3 md:grid-cols-1"><div className="rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800"><div className="text-slate-500">Total de venta (Q)</div><strong className="text-lg text-slate-900 dark:text-white">{currencyTotal(crop,'priceQ')}</strong></div></div></>}
+              {crop.production && <div className="space-y-4 rounded-xl bg-slate-50/70 p-4 dark:bg-slate-800/40">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {([['perPlantUnits','Planta (unidades)'],['perPlantKg','Planta (kg)']] as const).map(([key,name]) =>
+                    <FormField key={key} id={`${key}-${crop.id}`} label={name}><input id={`${key}-${crop.id}`} className={input} type="number" min="0" step="any" value={crop[key]} onChange={e=>updateCrop(crop.id,{[key]:e.target.value})}/></FormField>)}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <FormField id={`price-basis-${crop.id}`} label="Precio por"><select id={`price-basis-${crop.id}`} className={input} value={crop.priceBasis} onChange={e=>updateCrop(crop.id,{priceBasis:e.target.value as CropEntry['priceBasis']})}><option value="unidad">Unidad</option><option value="kg">Kilogramo</option></select></FormField>
+                  <FormField id={`price-q-${crop.id}`} label={`Precio (Q/${crop.priceBasis === 'kg' ? 'kg' : 'unidad'})`}><input id={`price-q-${crop.id}`} className={input} type="number" min="0" step="any" value={crop.priceQ} onChange={e=>updateCrop(crop.id,{priceQ:e.target.value})}/></FormField>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3 dark:border-slate-700">
+                  <div className="text-xs text-slate-500 dark:text-slate-400">Producción estimada: {productionEstimate(crop).units ?? '—'} unidades · {productionEstimate(crop).kg ?? '—'} kg</div>
+                  <div className="text-sm text-slate-700 dark:text-slate-200">Venta estimada: <strong className="text-base text-slate-900 dark:text-white">Q {currencyTotal(crop)}</strong></div>
+                </div>
+              </div>}
             </div>
           </details>
         </article>)}
       </section>}
 
-      {step === 2 && <section className={`${card} space-y-5`} aria-label="Recomendaciones y observaciones">
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Recomendaciones y compromisos</h2>
-        <FormField id="visit-recommendations" label="Recomendación general"><textarea id="visit-recommendations" className={area} value={recommendation} onChange={e=>setRecommendation(e.target.value)} /></FormField>
-        <div className="grid gap-4 md:grid-cols-2">
-          <FormField id="visit-treatment-type" label="Tipo de insumo recomendado"><select id="visit-treatment-type" value={treatmentGroup} className={input} onChange={e=>{setTreatmentGroup(e.target.value);setTreatment('')}}><option value="orgánico">Insecticida orgánico</option><option value="abono">Abono orgánico</option><option value="químico">Producto químico</option></select></FormField>
-          <SearchableSelect id="visit-treatment" label="Insumo" value={treatment} onChange={setTreatment} options={catalogOptions(treatmentGroup === 'orgánico' ? organicInsecticides : treatmentGroup === 'abono' ? fertilizers : chemicalInsecticides)} />
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold text-slate-900 dark:text-white">Compromisos</h3><Button type="button" size="sm" variant="secondary" onClick={()=>setCommitments(list=>[...list,newCommitment()])}>+ Agregar compromiso</Button></div>
-        {commitments.map((c,i) => <div key={c.id} className="grid gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-800 md:grid-cols-[minmax(0,1fr)_135px_250px_auto] md:items-end">
-          <FormField id={`commitment-${c.id}`} label={`Compromiso ${i+1}`}><input id={`commitment-${c.id}`} className={input} value={c.text} onChange={e=>updateCommitment(c.id,{text:e.target.value})} /></FormField>
-          <FormField id={`owner-${c.id}`} label="Responsable"><select id={`owner-${c.id}`} className={input} value={c.category} onChange={e=>updateCommitment(c.id,{category:e.target.value})}><option value="Familia">Familia</option><option value="ONG">ONG</option></select></FormField>
-          <div className="space-y-2">
-            <FormField id={`due-mode-${c.id}`} label="Revisión">
-              <select id={`due-mode-${c.id}`} className={input} value={c.nextVisit ? 'proxima' : 'fecha'}
-                onChange={e => updateCommitment(c.id, { nextVisit: e.target.value === 'proxima', due: e.target.value === 'proxima' ? '' : c.due })}>
-                <option value="proxima">Próxima visita</option>
-                <option value="fecha">Fecha específica</option>
-              </select>
-            </FormField>
-            {!c.nextVisit && <input id={`due-${c.id}`} aria-label="Fecha de revisión" type="date" min={today} className={input} value={c.due} onChange={e=>updateCommitment(c.id,{due:e.target.value})}/>}
+      {step === 2 && <section className="space-y-4" aria-label="Compromisos y observaciones">
+        <div className={`${card} space-y-4`}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Compromisos</h2>
+            <Button type="button" size="sm" variant="secondary" onClick={()=>setCommitments(list=>[...list,newCommitment()])}>+ Agregar compromiso</Button>
           </div>
-          <Button type="button" variant="secondary" size="sm" onClick={()=>setCommitments(list=>list.filter(item=>item.id!==c.id))}>Quitar</Button>
-        </div>)}
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Observaciones técnicas</h2>
-        <FormField id="visit-observations" label="Observaciones"><textarea id="visit-observations" className={area} value={observations} onChange={e=>setObservations(e.target.value)} /></FormField>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700"><h3 className="mb-3 font-medium text-slate-900 dark:text-white">Audio técnico</h3><Button type="button" variant="secondary" disabled>Grabar audio</Button></div>
-          <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700"><h3 className="mb-3 font-medium text-slate-900 dark:text-white">Audio para la familia</h3><Button type="button" variant="secondary" disabled>Grabar audio</Button></div>
+          {commitments.length === 0 && <p className="rounded-xl border border-dashed border-slate-200 p-4 text-sm text-slate-500 dark:border-slate-700">Sin compromisos</p>}
+          <div className="space-y-3">
+            {commitments.map((c,i) => <div key={c.id} className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 dark:border-slate-700 dark:bg-slate-800/30">
+              <div className="mb-3 flex items-center justify-between gap-2"><h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Compromiso {i+1}</h3><Button type="button" variant="secondary" size="sm" onClick={()=>setCommitments(list=>list.filter(item=>item.id!==c.id))}>Quitar</Button></div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="md:col-span-2"><FormField id={`commitment-${c.id}`} label="Descripción"><textarea id={`commitment-${c.id}`} rows={2} className={`${area} min-h-20`} value={c.text} onChange={e=>updateCommitment(c.id,{text:e.target.value})} /></FormField></div>
+                <FormField id={`owner-${c.id}`} label="Responsable"><select id={`owner-${c.id}`} className={input} value={c.category} onChange={e=>updateCommitment(c.id,{category:e.target.value})}><option value="Familia">Familia</option><option value="ONG">ONG</option></select></FormField>
+                <FormField id={`due-mode-${c.id}`} label="Revisión"><select id={`due-mode-${c.id}`} className={input} value={c.nextVisit ? 'proxima' : 'fecha'} onChange={e=>updateCommitment(c.id,{nextVisit:e.target.value==='proxima',due:e.target.value==='proxima'?'':c.due})}><option value="proxima">Próxima visita</option><option value="fecha">Fecha específica</option></select></FormField>
+                {!c.nextVisit && <div className="md:col-span-2"><FormField id={`due-${c.id}`} label="Fecha de revisión"><input id={`due-${c.id}`} type="date" min={today} className={input} value={c.due} onChange={e=>updateCommitment(c.id,{due:e.target.value})}/></FormField></div>}
+              </div>
+            </div>)}
+          </div>
         </div>
-        <VisitEvidencePicker photos={photos} onChange={setPhotos} disabled={saving || Boolean(saved)} />
-        <div className="flex flex-wrap items-center gap-3 rounded-xl bg-slate-50 p-4 text-sm dark:bg-slate-800/40"><strong>{selectedFamily?.nombreReferencia ?? 'Sin familia'}</strong><span>{date}</span><span>{cropsState.length} cultivo(s)</span><span>{commitments.length} compromiso(s)</span><span>{photos.length} foto(s)</span></div>
+        <div className={`${card} space-y-4`}>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Observaciones</h2>
+          <FormField id="visit-observations" label="Observaciones técnicas"><textarea id="visit-observations" rows={5} className={`${area} min-h-32`} value={observations} onChange={e=>setObservations(e.target.value)} /></FormField>
+          <VisitEvidencePicker photos={photos} onChange={setPhotos} disabled={saving || Boolean(saved)} />
+        </div>
       </section>}
       {saved && <div role="status" className="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-200">
         <strong>{saved.status === 'synced' ? 'Visita guardada en el servidor.' : 'Visita guardada en este dispositivo.'}</strong>

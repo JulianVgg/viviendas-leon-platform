@@ -154,7 +154,7 @@ export default function ScheduleVisitDialog({ date, onClose, onSaved }: {
         </FormField>
         <FormField id="schedule-shift" label="Horario estimado" required>
           <select id="schedule-shift" value={timeSlot} onChange={e => setTimeSlot(e.target.value as VisitTimeSlot)} disabled={saving || Boolean(success)} className={formControlClassName}>
-            <option value="MANANA">Mañana</option><option value="TARDE">Tarde</option>
+            <option value="MANANA">Turno mañana</option><option value="TARDE">Turno tarde</option>
           </select>
         </FormField>
       </div>

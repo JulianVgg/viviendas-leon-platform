@@ -90,6 +90,8 @@ export function canWritePrograms(usuario: PermissionUser): boolean {
 }
 
 export function canViewPath(usuario: PermissionUser, path: string): boolean {
+  // La captura técnica queda reservada a personal operativo, incluso para Dirección.
+  if (path === '/visitas/nueva' && esSupervisorCalendario(usuario)) return false
   if (isDireccionGeneral(usuario)) return true
   if (path === '/calendario') return esSupervisorCalendario(usuario)
   // Bandeja personal disponible para cualquier usuario autenticado.

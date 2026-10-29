@@ -588,6 +588,7 @@ model SeguimientoTecnico {
 model Capacitacion {
   id                Int       @id @default(autoincrement())
   comunidadId       Int?      @map("comunidad_id")
+  usuarioResponsableId Int? @map("usuario_responsable_id")
   tema              String
   descripcion       String?
   fecha             DateTime  @db.Date
@@ -598,6 +599,7 @@ model Capacitacion {
   observaciones     String?
 
   comunidad Comunidad? @relation(fields: [comunidadId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  usuarioResponsable Usuario? @relation("CapacitacionesAsignadas", fields: [usuarioResponsableId], references: [id], onDelete: SetNull)
 
   participantes ParticipacionCapacitacion[]
   evidencias    CapacitacionEvidencia[]
@@ -605,6 +607,7 @@ model Capacitacion {
 
   @@index([comunidadId])
   @@index([fecha])
+  @@index([usuarioResponsableId])
   @@map("capacitacion")
 }
 
@@ -807,6 +810,7 @@ model Usuario {
   eventosResponsable EventoInstitucional[] @relation("EventoResponsable")
   eventosCreados EventoInstitucional[] @relation("EventoCreador")
   eventosParticipante EventoInstitucionalParticipante[]
+  capacitacionesAsignadas Capacitacion[] @relation("CapacitacionesAsignadas")
 
   @@map("usuario")
 }

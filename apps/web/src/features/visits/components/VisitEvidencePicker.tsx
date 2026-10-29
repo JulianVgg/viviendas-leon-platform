@@ -83,6 +83,5 @@ export default function VisitEvidencePicker({ photos, onChange, disabled }: { ph
         <div className="flex items-center justify-between gap-1 p-2"><span className="truncate text-xs text-slate-600 dark:text-slate-300" title={photo.name}>{photo.name}</span><button type="button" disabled={disabled || busy} className="shrink-0 rounded-lg p-1 text-red-600 hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-brand-500 disabled:opacity-40 dark:text-red-400" aria-label={`Quitar foto ${i + 1}`} onClick={()=>onChange(photos.filter(p=>p.id!==photo.id))}><Trash2 size={16}/></button></div>
       </li>)}
     </ul>}
-    <p className="mt-3 text-xs leading-5 text-slate-500 dark:text-slate-400">Máximo 4 fotos · 2 MB cada una. Consentimiento requerido.</p>
   </section>
 }
