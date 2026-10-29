@@ -42,4 +42,17 @@ export const listCycles = (params?: { familiaId?: number; huertoId?: number }, s
   const query = params?.familiaId ? `?familiaId=${params.familiaId}` : params?.huertoId ? `?huertoId=${params.huertoId}` : ''
   return request<Cycle[]>(query, { signal })
 }
+export type CycleSeguimiento = {
+  id: number; visitaId: number; cicloCultivoId: number
+  fecha: string; usuarioResponsableId: number; responsable: string
+  etapa: string | null; calidad: string | null
+  cantidadPlantasObservadas: number | null; observaciones: string | null
+}
+export type CycleSeguimientosPage = {
+  items: CycleSeguimiento[]
+  pagination: { page: number; limit: number; total: number; totalPages: number }
+}
+export const getCycle = (id: number, signal?: AbortSignal) => request<Cycle>(`/${id}`, { signal })
+export const listCycleSeguimientos = (id: number, page = 1, signal?: AbortSignal) =>
+  request<CycleSeguimientosPage>(`/${id}/seguimientos?page=${page}`, { signal })
 export const createCycle = (input: CycleInput) => request<Cycle>('', { method: 'POST', body: JSON.stringify(input) })

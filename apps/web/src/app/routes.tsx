@@ -11,6 +11,7 @@ import FamilyEditPage from '@/features/families/pages/FamilyEditPage'
 import HuertosPage, { CreateGardenPage } from '@/features/agriculture/pages/HuertosPage'
 import CultivosPage from '@/features/agriculture/pages/CultivosPage'
 import CiclosAgricolasPage from '@/features/agriculture/pages/CiclosAgricolasPage'
+import CicloDetallePage from '@/features/agriculture/pages/CicloDetallePage'
 
 import OfflineTestPage from '@/features/offline/pages/OfflineTestPage'
 import OfflineOperationsTestPage from '@/features/offline/pages/OfflineOperationsTestPage'
@@ -210,6 +211,7 @@ export default function AppRoutes() {
           <Route path="gestion-agricola/huertos" element={<HuertosPage />} />
           <Route path="gestion-agricola/huertos/nuevo" element={<CreateGardenPage />} />
           <Route path="gestion-agricola/ciclos" element={<CiclosAgricolasPage />} />
+          <Route path="gestion-agricola/ciclos/:id" element={<CicloDetallePage />} />
           <Route path="gestion-agricola/cultivos" element={<Navigate to="/administracion/cultivos" replace />} />
           <Route
             path="gestion-agricola/produccion"

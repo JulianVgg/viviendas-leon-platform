@@ -1,0 +1,379 @@
+diff --git a/apps/api/src/modules/agriculture/followup-format.ts b/apps/api/src/modules/agriculture/followup-format.ts
+new file mode 100644
+--- /dev/null
++++ b/apps/api/src/modules/agriculture/followup-format.ts
+@@ -0,0 +1,25 @@
++// AGR-04: preserva registros previos donde solo se almacenaba la cantidad de plantas
++// en EvaluacionCultivo.observaciones, sin migraciones ni alteracion de visitas historicas.
++const plantsPrefix = /^Plantas observadas: (\d+)\.(?:\r?\n|$)/u
++
++export function buildEvaluationObservations(plants: unknown, observation: unknown): string | null {
++  const count = typeof plants === 'number' && Number.isSafeInteger(plants) && plants >= 0
++    ? `Plantas observadas: ${plants}.` : ''
++  const note = typeof observation === 'string' ? observation.trim() : ''
++  return [count, note].filter(Boolean).join('\n') || null
++}
++
++export function parseEvaluationObservations(value: string | null): {
++  cantidadPlantasObservadas: number | null
++  observaciones: string | null
++} {
++  if (!value) return { cantidadPlantasObservadas: null, observaciones: null }
++  const match = plantsPrefix.exec(value)
++  if (!match) return { cantidadPlantasObservadas: null, observaciones: value.trim() || null }
++  const count = Number(match[1])
++  const notes = value.slice(match[0].length).trim()
++  return {
++    cantidadPlantasObservadas: Number.isSafeInteger(count) ? count : null,
++    observaciones: notes || null,
++  }
++}
+diff --git a/apps/web/src/features/visits/pages/VisitRegisterPage.tsx b/apps/web/src/features/visits/pages/VisitRegisterPage.tsx
+--- a/apps/web/src/features/visits/pages/VisitRegisterPage.tsx
++++ b/apps/web/src/features/visits/pages/VisitRegisterPage.tsx
+@@ -23,4 +23,5 @@
+   id: string; cicloCultivoId: number | null; name: string; stage: string; plants: string; quality: string
+   findings: Finding[]; production: boolean; perPlantUnits: string; perPlantKg: string
+   units: string; kg: string; priceQ: string; priceBasis: 'unidad' | 'kg'
++  observacionesCultivo: string
+ }
+@@ -32,3 +33,3 @@
+ const todayLocal = todayInGuatemala
+-const newCrop = (): CropEntry => ({ id: crypto.randomUUID(), cicloCultivoId: null, name: '', stage: '', plants: '', quality: '', findings: [], production: false, perPlantUnits: '', perPlantKg: '', units: '', kg: '', priceQ: '', priceBasis: 'unidad' })
++const newCrop = (): CropEntry => ({ id: crypto.randomUUID(), cicloCultivoId: null, name: '', stage: '', plants: '', quality: '', findings: [], production: false, perPlantUnits: '', perPlantKg: '', units: '', kg: '', priceQ: '', priceBasis: 'unidad', observacionesCultivo: '' })
+ const newCommitment = (): Commitment => ({ id: crypto.randomUUID(), text: '', due: '', nextVisit: true, category: 'Familia' })
+@@ -233,7 +234,11 @@
+         cropsState.some(c => c.plants.trim() && !Number.isSafeInteger(Number(c.plants)))) {
+       setError('Revisa las cantidades y precios; deben ser números positivos.'); setStep(1); return
+     }
++    if (cropsState.some(c => c.observacionesCultivo.length > 2000)) {
++      setError('Las observaciones del cultivo no pueden superar 2000 caracteres.'); setStep(1); return
++    }
+     const cropsCapture: CropCapture[] = cropsState.map(c => ({
+       ...(c.cicloCultivoId ? { cicloCultivoId: c.cicloCultivoId } : {}),
+       name: c.name, stage: c.stage, quality: c.quality, plants: numberOrNull(c.plants),
++      ...(c.observacionesCultivo.trim() ? { observacionesCultivo: c.observacionesCultivo.trim() } : {}),
+       findings: c.findings.map(f => ({ type: f.type, name: f.name, damage: f.damage })),
+@@ -362,5 +367,6 @@
+               <select id={`crop-cycle-${crop.id}`} className={input} value={crop.cicloCultivoId ?? ''} onChange={e => {
+                 const found = availableCycles.find(item => item.id === Number(e.target.value))
+                 if (found && cropsState.some(item => item.id !== crop.id && item.cicloCultivoId === found.id)) return
+-                updateCrop(crop.id, { cicloCultivoId: found?.id ?? null, name: found?.cultivo.nombre ?? '' })
++                updateCrop(crop.id, { cicloCultivoId: found?.id ?? null, name: found?.cultivo.nombre ?? '',
++                  observacionesCultivo: found?.id === crop.cicloCultivoId ? crop.observacionesCultivo : '' })
+               }}><option value="">Seleccionar siembra</option>
+@@ -370,5 +376,11 @@
+             <FormField label="Etapa" id={`crop-stage-${crop.id}`}><select id={`crop-stage-${crop.id}`} className={input} value={crop.stage} onChange={e => updateCrop(crop.id,{stage:e.target.value})}><Options items={stages}/></select></FormField>
+-            <FormField label="Cantidad de plantas" id={`crop-plants-${crop.id}`}><input id={`crop-plants-${crop.id}`} className={input} type="number" min="0" step="1" value={crop.plants} onChange={e=>updateCrop(crop.id,{plants:e.target.value})}/></FormField>
++            <FormField label="Plantas observadas" id={`crop-plants-${crop.id}`}><input id={`crop-plants-${crop.id}`} className={input} type="number" min="0" step="1" value={crop.plants} onChange={e=>updateCrop(crop.id,{plants:e.target.value})}/></FormField>
+             <FormField label="Calidad" id={`crop-quality-${crop.id}`}><select id={`crop-quality-${crop.id}`} className={input} value={crop.quality} onChange={e=>updateCrop(crop.id,{quality:e.target.value})}><Options items={qualities}/></select></FormField>
+           </div>
++          <div className="mt-4">
++            <FormField label="Observaciones del cultivo" id={`crop-observations-${crop.id}`}>
++              <textarea id={`crop-observations-${crop.id}`} className={area} maxLength={2000}
++                value={crop.observacionesCultivo} onChange={e => updateCrop(crop.id, { observacionesCultivo: e.target.value })} />
++            </FormField>
++          </div>
+           <details className="mt-5 rounded-xl border border-slate-200 p-4 dark:border-slate-700"><summary className="cursor-pointer font-medium text-slate-900 dark:text-white">¿Detectaste plagas o enfermedades? <span className="text-xs font-normal text-slate-500">({crop.findings.length} hallazgos)</span></summary>
+diff --git a/apps/web/src/features/visits/services/visitService.ts b/apps/web/src/features/visits/services/visitService.ts
+--- a/apps/web/src/features/visits/services/visitService.ts
++++ b/apps/web/src/features/visits/services/visitService.ts
+@@ -21,5 +21,6 @@
+ export type CropCapture = {
+   // Optional for backwards compatibility with unsynchronised VIS-03/VIS-04 captures.
+   cicloCultivoId?: number
++  observacionesCultivo?: string
+   name: string; stage: string; quality: string; plants: number | null
+   findings: { type: 'plaga' | 'enfermedad'; name: string; damage: string }[]
+diff --git a/apps/api/src/modules/visits/visits.routes.ts b/apps/api/src/modules/visits/visits.routes.ts
+--- a/apps/api/src/modules/visits/visits.routes.ts
++++ b/apps/api/src/modules/visits/visits.routes.ts
+@@ -13,4 +13,5 @@
+ import { sincronizarAvisosSeguimiento } from '../notifications/followup-alerts.service.js'
+ import { resolverAvisosVisitaVencida } from '../notifications/overdue-visits.worker.js'
+ import { actualizarRecordatorios, cancelarRecordatorios, configGuardada, configParaPrisma, parseReglas, reglasTrasCambioFecha, type ReglaRecordatorio } from '../notifications/reminders.service.js'
++import { buildEvaluationObservations } from '../agriculture/followup-format.js'
+ 
+@@ -83,3 +84,7 @@
+     if (!clean(c.name, 80) || !Array.isArray(c.findings) || c.findings.length > 20) return null
+     if (c.cicloCultivoId !== undefined && (!Number.isSafeInteger(c.cicloCultivoId) || Number(c.cicloCultivoId) <= 0 || Number(c.cicloCultivoId) > 2147483647)) return null
++    // Opcional: permitir reintentos de capturas anteriores sin este campo.
++    if (c.observacionesCultivo !== undefined && (
++      typeof c.observacionesCultivo !== 'string' || c.observacionesCultivo.length > 2000 ||
++      /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(c.observacionesCultivo))) return null
+     if (c.findings.some(f => !f || typeof f !== 'object' || !['plaga','enfermedad'].includes((f as Record<string,unknown>).type as string) || !clean((f as Record<string,unknown>).name,100) || !['1','3','5','10','20'].includes(String((f as Record<string,unknown>).damage)))) return null
+@@ -90,4 +95,5 @@
+     crops.push({
+       ...(c.cicloCultivoId !== undefined ? { cicloCultivoId: c.cicloCultivoId } : {}),
++      ...(c.observacionesCultivo !== undefined ? { observacionesCultivo: clean(c.observacionesCultivo, 2000) } : {}),
+       name: clean(c.name,80), stage: clean(c.stage,60), quality: clean(c.quality,60),
+       plants: c.plants ?? null, production: Boolean(c.production),
+@@ -397,5 +403,5 @@
+             await tx.evaluacionCultivo.create({ data: {
+               visitaId, cicloCultivoId: cycleId, etapaCultivoId: stage?.id ?? null,
+               calidadId: quality?.id ?? null,
+-              observaciones: typeof crop.plants === 'number' ? `Plantas observadas: ${crop.plants}.` : null,
++              observaciones: buildEvaluationObservations(crop.plants, crop.observacionesCultivo),
+             } })
+diff --git a/apps/api/src/modules/agriculture/cycles.routes.ts b/apps/api/src/modules/agriculture/cycles.routes.ts
+--- a/apps/api/src/modules/agriculture/cycles.routes.ts
++++ b/apps/api/src/modules/agriculture/cycles.routes.ts
+@@ -4,4 +4,5 @@
+ import { requireAuth } from '../auth/auth.middleware.js'
+ import { requirePermission } from '../auth/require-permission.middleware.js'
+ import { parseCycleId, validateCycleInput } from './cycles.validation.js'
++import { parseEvaluationObservations } from './followup-format.js'
+ 
+@@ -58,4 +59,52 @@
+   } catch (err) { next(err) }
+ })
+ 
++// AGR-04: historial paginado de las evaluaciones de una siembra, no de un nombre de cultivo.
++cyclesRouter.get('/:id/seguimientos', requirePermission('PANTALLA_CICLOS'), async (req, res, next) => {
++  const id = parseCycleId(req.params.id)
++  const rawPage = req.query.page
++  const page = rawPage === undefined ? 1
++    : typeof rawPage === 'string' && /^[1-9]\d{0,5}$/.test(rawPage) ? Number(rawPage) : 0
++  if (!id || !Number.isSafeInteger(page) || page < 1 || page > 100000) {
++    res.status(400).json(issue('VALIDATION_ERROR', 'Selecciona una siembra y página válidas.'))
++    return
++  }
++  try {
++    const prisma = getPrismaClient()
++    const exists = await prisma.cicloCultivo.findUnique({ where: { id }, select: { id: true } })
++    if (!exists) { res.status(404).json(issue('CYCLE_NOT_FOUND', 'La siembra no existe.')); return }
++    const limit = 20
++    const where = { cicloCultivoId: id, visita: { estado: 'REALIZADA' } }
++    const [total, evaluations] = await Promise.all([
++      prisma.evaluacionCultivo.count({ where }),
++      prisma.evaluacionCultivo.findMany({
++        where,
++        select: {
++          id: true, visitaId: true, cicloCultivoId: true, observaciones: true,
++          etapaCultivo: { select: { nombre: true } },
++          calidad: { select: { nombre: true } },
++          visita: { select: { fecha: true, usuarioResponsableId: true,
++            usuarioResponsable: { select: { nombre: true, apellido: true } } } },
++        },
++        orderBy: [{ visita: { fecha: 'desc' } }, { id: 'desc' }],
++        skip: (page - 1) * limit, take: limit,
++      }),
++    ])
++    res.setHeader('Cache-Control', 'no-store')
++    res.json({ data: {
++      items: evaluations.map(record => ({
++        id: record.id, visitaId: record.visitaId, cicloCultivoId: record.cicloCultivoId,
++        fecha: day(record.visita.fecha),
++        usuarioResponsableId: record.visita.usuarioResponsableId,
++        responsable: [record.visita.usuarioResponsable.nombre, record.visita.usuarioResponsable.apellido]
++          .filter(Boolean).join(' ') || `Usuario #${record.visita.usuarioResponsableId}`,
++        etapa: record.etapaCultivo?.nombre ?? null,
++        calidad: record.calidad?.nombre ?? null,
++        ...parseEvaluationObservations(record.observaciones),
++      })),
++      pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
++    } })
++  } catch (err) { next(err) }
++})
++
+ cyclesRouter.post('/', requirePermission('CICLOS_WRITE'), async (req, res, next) => {
+diff --git a/apps/web/src/features/agriculture/pages/CicloDetallePage.tsx b/apps/web/src/features/agriculture/pages/CicloDetallePage.tsx
+new file mode 100644
+--- /dev/null
++++ b/apps/web/src/features/agriculture/pages/CicloDetallePage.tsx
+@@ -0,0 +1,77 @@
++import { useEffect, useState } from 'react'
++import { Link, useParams } from 'react-router'
++import PageMeta from '@/components/common/PageMeta'
++import PageHeader from '@/components/common/PageHeader'
++import Alert from '@/components/ui/Alert'
++import Badge from '@/components/ui/Badge'
++import Button from '@/components/ui/Button'
++import Card, { CardBody } from '@/components/ui/Card'
++import LoadingState from '@/components/ui/LoadingState'
++import { useAuth } from '@/features/auth/AuthProvider'
++import { canViewPath } from '@/features/auth/screenPermissions'
++import { getCycle, listCycleSeguimientos, type Cycle, type CycleSeguimientosPage } from '../services/cyclesService'
++
++const emptyPage = (): CycleSeguimientosPage => ({ items: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 1 } })
++
++export default function CicloDetallePage() {
++  const { id = '' } = useParams()
++  const cycleId = /^[1-9]\d*$/.test(id) ? Number(id) : 0
++  const { usuario } = useAuth()
++  const allowed = Boolean(usuario && canViewPath(usuario, '/gestion-agricola/ciclos'))
++  const [cycle, setCycle] = useState<Cycle | null>(null)
++  const [seguimientos, setSeguimientos] = useState<CycleSeguimientosPage>(emptyPage)
++  const [page, setPage] = useState(1)
++  const [loading, setLoading] = useState(true)
++  const [error, setError] = useState('')
++  const [retry, setRetry] = useState(0)
++
++  useEffect(() => { setPage(1); setCycle(null); setSeguimientos(emptyPage()) }, [cycleId])
++  useEffect(() => {
++    if (!allowed || !cycleId || !Number.isSafeInteger(cycleId)) { setLoading(false); return }
++    const controller = new AbortController()
++    setLoading(true)
++    setError('')
++    Promise.all([getCycle(cycleId, controller.signal), listCycleSeguimientos(cycleId, page, controller.signal)])
++      .then(([record, history]) => { if (!controller.signal.aborted) { setCycle(record); setSeguimientos(history) } })
++      .catch((cause: unknown) => {
++        if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'No se pudo consultar el seguimiento.')
++      })
++      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
++    return () => controller.abort()
++  }, [cycleId, page, retry, allowed])
++
++  if (!allowed) return <Alert variant="error" title="Acceso restringido">No tienes permiso para consultar seguimientos agrícolas.</Alert>
++  if (!cycleId || !Number.isSafeInteger(cycleId)) return <Alert variant="error" title="Ciclo inválido">El identificador de la siembra no es válido.</Alert>
++  return <>
++    <PageMeta title="Historial del ciclo | ViviendasLeón" description="Evolución de una siembra durante las visitas técnicas." />
++    <PageHeader title="Seguimiento del ciclo agrícola" description="Evaluaciones registradas durante visitas técnicas realizadas." actions={<Link to="/gestion-agricola/ciclos" className="text-sm text-brand-600 underline">Volver a ciclos agrícolas</Link>} />
++    {error && <Alert variant="error" title="No se pudo consultar" className="mb-4">{error}<Button type="button" variant="secondary" onClick={() => setRetry(value => value + 1)} className="mt-3">Reintentar</Button></Alert>}
++    {loading && <LoadingState label="Consultando ciclo e historial..." />}
++    {cycle && <div className="space-y-5">
++      <Card><CardBody>
++        <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-semibold">{cycle.cultivo.nombre} · Ciclo #{cycle.id}</h2><Badge>{cycle.estado}</Badge></div>
++        <p className="text-sm">Familia: <Link className="text-brand-600 underline" to={`/familias/${cycle.huerto.familiaId}?tab=gardens`}>{cycle.huerto.familia.nombreReferencia}</Link> · {cycle.huerto.familia.comunidad.nombre}</p>
++        <p className="mt-1 text-sm">Huerto: {cycle.huerto.nombre || `Huerto #${cycle.huertoId}`}</p>
++        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Siembra: {cycle.fechaSiembra || 'Sin fecha'} · Trasplante: {cycle.fechaTrasplante || 'Sin fecha'} · Plantas iniciales: {cycle.cantidadPlantas ?? 'No registradas'}</p>
++        {cycle.observaciones && <p className="mt-2 whitespace-pre-wrap text-sm">Observaciones iniciales: {cycle.observaciones}</p>}
++      </CardBody></Card>
++      <Card><CardBody>
++        <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-lg font-semibold">Historial de evaluaciones</h2><p className="text-sm text-slate-500">{seguimientos.pagination.total} evaluaciones registradas</p></div></div>
++        {!loading && !error && seguimientos.items.length === 0 && <p className="text-sm text-slate-500">Este ciclo todavía no tiene evaluaciones registradas.</p>}
++        <ol className="space-y-3">{seguimientos.items.map(item => <li key={item.id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
++          <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold">Visita #{item.visitaId} · {item.fecha}</h3><span className="text-xs text-slate-500">Evaluación #{item.id}</span></div>
++          <p className="mt-2 text-sm">Responsable: {item.responsable}</p>
++          <p className="mt-1 text-sm">Etapa: {item.etapa || 'No registrada'} · Calidad: {item.calidad || 'No registrada'}</p>
++          <p className="mt-1 text-sm">Plantas observadas: {item.cantidadPlantasObservadas ?? 'No registradas'}</p>
++          <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">{item.observaciones || 'Sin observaciones específicas registradas.'}</p>
++          {usuario && canViewPath(usuario, '/visitas/historial') && <Link to="/visitas/historial" className="mt-2 inline-block text-sm text-brand-600 underline">Consultar historial de visitas</Link>}
++        </li>)}</ol>
++        {seguimientos.pagination.totalPages > 1 && <div className="mt-5 flex items-center justify-between gap-3">
++          <Button type="button" variant="secondary" disabled={loading || page <= 1} onClick={() => setPage(value => Math.max(1, value - 1))}>Anterior</Button>
++          <span className="text-sm">Página {seguimientos.pagination.page} de {seguimientos.pagination.totalPages}</span>
++          <Button type="button" variant="secondary" disabled={loading || page >= seguimientos.pagination.totalPages} onClick={() => setPage(value => value + 1)}>Siguiente</Button>
++        </div>}
++      </CardBody></Card>
++    </div>}
++  </>
++}
+diff --git a/apps/web/src/features/agriculture/services/cyclesService.ts b/apps/web/src/features/agriculture/services/cyclesService.ts
+--- a/apps/web/src/features/agriculture/services/cyclesService.ts
++++ b/apps/web/src/features/agriculture/services/cyclesService.ts
+@@ -42,4 +42,17 @@
+   const query = params?.familiaId ? `?familiaId=${params.familiaId}` : params?.huertoId ? `?huertoId=${params.huertoId}` : ''
+   return request<Cycle[]>(query, { signal })
+ }
++export type CycleSeguimiento = {
++  id: number; visitaId: number; cicloCultivoId: number
++  fecha: string; usuarioResponsableId: number; responsable: string
++  etapa: string | null; calidad: string | null
++  cantidadPlantasObservadas: number | null; observaciones: string | null
++}
++export type CycleSeguimientosPage = {
++  items: CycleSeguimiento[]
++  pagination: { page: number; limit: number; total: number; totalPages: number }
++}
++export const getCycle = (id: number, signal?: AbortSignal) => request<Cycle>(`/${id}`, { signal })
++export const listCycleSeguimientos = (id: number, page = 1, signal?: AbortSignal) =>
++  request<CycleSeguimientosPage>(`/${id}/seguimientos?page=${page}`, { signal })
+ export const createCycle = (input: CycleInput) => request<Cycle>('', { method: 'POST', body: JSON.stringify(input) })
+diff --git a/apps/web/src/app/routes.tsx b/apps/web/src/app/routes.tsx
+--- a/apps/web/src/app/routes.tsx
++++ b/apps/web/src/app/routes.tsx
+@@ -12,4 +12,5 @@
+ import CultivosPage from '@/features/agriculture/pages/CultivosPage'
+ import CiclosAgricolasPage from '@/features/agriculture/pages/CiclosAgricolasPage'
++import CicloDetallePage from '@/features/agriculture/pages/CicloDetallePage'
+ 
+ import OfflineTestPage from '@/features/offline/pages/OfflineTestPage'
+@@ -210,4 +211,5 @@
+           <Route path="gestion-agricola/huertos" element={<HuertosPage />} />
+           <Route path="gestion-agricola/huertos/nuevo" element={<CreateGardenPage />} />
+           <Route path="gestion-agricola/ciclos" element={<CiclosAgricolasPage />} />
++          <Route path="gestion-agricola/ciclos/:id" element={<CicloDetallePage />} />
+           <Route path="gestion-agricola/cultivos" element={<Navigate to="/administracion/cultivos" replace />} />
+diff --git a/apps/web/src/features/agriculture/components/FamilyGardensSection.tsx b/apps/web/src/features/agriculture/components/FamilyGardensSection.tsx
+--- a/apps/web/src/features/agriculture/components/FamilyGardensSection.tsx
++++ b/apps/web/src/features/agriculture/components/FamilyGardensSection.tsx
+@@ -50,4 +50,5 @@
+       <div><p className="font-medium text-slate-900 dark:text-white">{cycle.cultivo.nombre} <span className="text-xs text-slate-500">#{cycle.id}</span></p>
+         <p className="text-xs text-slate-500">Siembra: {cycle.fechaSiembra || 'No indicada'} · Trasplante: {cycle.fechaTrasplante || 'No indicado'}</p>
+         <p className="text-xs text-slate-500">Cantidad inicial: {cycle.cantidadPlantas ?? 'No indicada'} plantas</p>
++        <Link to={`/gestion-agricola/ciclos/${cycle.id}`} className="mt-1 inline-block text-xs font-semibold text-brand-600 underline">Ver seguimiento</Link>
+       </div><Badge>{cycle.estado}</Badge>
+diff --git a/apps/web/src/features/agriculture/pages/CiclosAgricolasPage.tsx b/apps/web/src/features/agriculture/pages/CiclosAgricolasPage.tsx
+--- a/apps/web/src/features/agriculture/pages/CiclosAgricolasPage.tsx
++++ b/apps/web/src/features/agriculture/pages/CiclosAgricolasPage.tsx
+@@ -59,4 +59,5 @@
+         <p className="mt-2 text-xs text-slate-500">Siembra: {cycle.fechaSiembra ?? 'No registrada'} · Trasplante: {cycle.fechaTrasplante ?? 'No registrado'}</p>
+         <p className="mt-1 text-xs text-slate-500">Plantas iniciales: {cycle.cantidadPlantas ?? 'No indicado'}</p>
+         <Link to={`/familias/${cycle.huerto.familiaId}?tab=gardens`} className="mt-3 inline-block text-sm font-medium text-brand-600 underline">Abrir expediente</Link>
++        <Link to={`/gestion-agricola/ciclos/${cycle.id}`} className="ml-3 inline-block text-sm font-medium text-brand-600 underline">Ver seguimiento</Link>
+       </article>)}</div>}
+diff --git a/apps/web/src/features/auth/screenPermissions.ts b/apps/web/src/features/auth/screenPermissions.ts
+--- a/apps/web/src/features/auth/screenPermissions.ts
++++ b/apps/web/src/features/auth/screenPermissions.ts
+@@ -58,3 +58,4 @@
+ export function permissionForPath(path: string): string | null {
+   if (SCREEN_PERMISSIONS[path]) return SCREEN_PERMISSIONS[path]
++  if (/^\/gestion-agricola\/ciclos\/[1-9]\d*$/.test(path)) return 'PANTALLA_CICLOS'
+   if (/^\/familias\/[^/]+\/editar$/.test(path)) return 'PANTALLA_FAMILIAS_EDITAR'
+diff --git a/apps/api/tests/agr04-followup-format.test.mjs b/apps/api/tests/agr04-followup-format.test.mjs
+new file mode 100644
+--- /dev/null
++++ b/apps/api/tests/agr04-followup-format.test.mjs
+@@ -0,0 +1,25 @@
++import assert from 'node:assert/strict'
++import test from 'node:test'
++import { buildEvaluationObservations, parseEvaluationObservations } from '../dist/modules/agriculture/followup-format.js'
++
++test('AGR-04: conserva cantidad observada y observaciones especificas', () => {
++  const stored = buildEvaluationObservations(43, 'Crecimiento adecuado.\nDos hojas amarillentas.')
++  assert.equal(stored, 'Plantas observadas: 43.\nCrecimiento adecuado.\nDos hojas amarillentas.')
++  assert.deepEqual(parseEvaluationObservations(stored), {
++    cantidadPlantasObservadas: 43,
++    observaciones: 'Crecimiento adecuado.\nDos hojas amarillentas.',
++  })
++})
++
++test('AGR-04: compatible con evaluaciones existentes y observaciones opcionales', () => {
++  assert.deepEqual(parseEvaluationObservations('Plantas observadas: 12.'), {
++    cantidadPlantasObservadas: 12, observaciones: null,
++  })
++  assert.deepEqual(parseEvaluationObservations(buildEvaluationObservations(null, 'Floracion inicial')), {
++    cantidadPlantasObservadas: null, observaciones: 'Floracion inicial',
++  })
++  assert.deepEqual(parseEvaluationObservations(null), {
++    cantidadPlantasObservadas: null, observaciones: null,
++  })
++  assert.equal(buildEvaluationObservations(null, undefined), null)
++})
+diff --git a/docs/agriculture/AGR-04-validacion-parche-integral.md b/docs/agriculture/AGR-04-validacion-parche-integral.md
+new file mode 100644
+--- /dev/null
++++ b/docs/agriculture/AGR-04-validacion-parche-integral.md
+@@ -0,0 +1,21 @@
++# AGR-04 — Parche integral compatible con `main` 74aeeeeb
++
++## Alcance
++- El campo opcional `observacionesCultivo` se registra en la ficha del ciclo seleccionado durante el segundo paso de `Registrar visita`.
++- Se conserva el flujo de tres pasos, la seleccion de siembras activas, la cola offline `visits.create.v1`, la idempotencia por `operationId` y el flujo de compromisos y produccion sin cambios.
++- La API valida el campo opcional (hasta 2000 caracteres), no modifica el `operationId` y conserva el valor al normalizar la captura. Los historicos anteriores sin el campo siguen siendo validos.
++- Para visitas realizadas con `cicloCultivoId`, `EvaluacionCultivo.observaciones` conserva tanto la cantidad de plantas observadas como la observacion propia del cultivo. No se cambian migraciones ni esquema SQL.
++- `GET /api/v1/ciclos-cultivo/:id/seguimientos?page=1` retorna evaluaciones paginadas (20 por pagina), fecha de visita, responsable, etapa, calidad y observaciones del ciclo.
++- El expediente familiar y la lista general enlazan al historial del ciclo.
++
++## Pruebas antes de integrar
++1. En una base **de desarrollo**, ejecutar `npm ci`, `npm run build`, `node --test apps/api/tests/agr04-followup-format.test.mjs` y suites de visitas y sincronizacion.
++2. Registrar familia, huerto activo y ciclo. Crear una visita REALIZADA, seleccionar el ciclo, ingresar plantas y una observacion. Consultar `GET /api/v1/ciclos-cultivo/{id}/seguimientos` y abrir `gestion-agricola/ciclos/{id}`. Debe mostrar ciclo, fecha, responsable y observacion.
++3. Registrar una segunda visita en otra fecha y verificar que ambas evaluaciones se consultan ordenadas, sin sobrescribir la primera.
++4. Desconectar el dispositivo, registrar una visita con observaciones por cultivo, recuperar internet y sincronizar. Reenviar el mismo `operationId`: no debe duplicar visita ni evaluacion.
++5. Registrar dos ciclos del mismo cultivo en un huerto: el historial debe mostrar solamente los registros del ID seleccionado.
++6. Probar una captura antigua sin `cicloCultivoId` ni `observacionesCultivo`; debe seguir guardandose en `visita_captura` sin relacionar automaticamente un ciclo.
++7. Probar acceso sin `PANTALLA_CICLOS`, IDs inexistentes, paginacion incorrecta y guardado con observaciones demasiado extensas.
++8. Revisar junto a Julian cambios simultaneos de `VisitRegisterPage.tsx`, `visitService.ts`, `routes.tsx` y `screenPermissions.ts` antes de fusionar.
++
++**No ejecutar en produccion ni en `main` antes de comprobar los resultados.** Este parche esta basado en el commit indicado y no incluye modificaciones sobre el repositorio remoto.

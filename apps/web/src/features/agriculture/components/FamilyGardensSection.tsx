@@ -50,6 +50,7 @@ export default function FamilyGardensSection({ familyId }: { familyId: number })
       <div><p className="font-medium text-slate-900 dark:text-white">{cycle.cultivo.nombre} <span className="text-xs text-slate-500">#{cycle.id}</span></p>
         <p className="text-xs text-slate-500">Siembra: {cycle.fechaSiembra || 'No indicada'} · Trasplante: {cycle.fechaTrasplante || 'No indicado'}</p>
         <p className="text-xs text-slate-500">Cantidad inicial: {cycle.cantidadPlantas ?? 'No indicada'} plantas</p>
+        <Link to={`/gestion-agricola/ciclos/${cycle.id}`} className="mt-1 inline-block text-xs font-semibold text-brand-600 underline">Ver seguimiento</Link>
       </div><Badge>{cycle.estado}</Badge>
     </li>
     return <div className="space-y-3 border-t border-slate-100 pt-3 dark:border-slate-800">
