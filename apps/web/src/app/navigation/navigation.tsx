@@ -103,7 +103,6 @@ export const navigationGroups: { id: string; name: string; items: NavigationItem
         { id: 'training-register', name: 'Registrar capacitación', path: '/actividades/capacitaciones/registrar', icon: icons.register },
         { id: 'training-history', name: 'Historial de capacitaciones', path: '/actividades/capacitaciones/historial', icon: icons.history },
       ] },
-      { id: 'volunteering', name: 'Voluntariado', path: '/voluntariado', icon: icons.users, roles: ['coordination'] },
     ],
   },
   {
@@ -147,7 +146,6 @@ export function navigationForAccount(usuario: PermissionUser) {
         const children = item.children.filter((child) => canViewPath(usuario, child.path) && !(esTecnicoCampo(usuario) && child.id === 'visits-agenda'))
         const puedeVerGeneral = canViewPath(usuario, item.path)
         if (!children.length && !puedeVerGeneral) return []
-        // Sin permiso de la vista general, tampoco se ofrece el enlace "Vista general".
         return [{ ...item, path: puedeVerGeneral ? item.path : '', children }]
       }),
     }))

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { Plus, RefreshCcw, UserRound } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
 
@@ -201,9 +202,9 @@ export default function UsuariosPage() {
         )}
       </section>
 
-      {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="presentation">
-          <section role="dialog" aria-modal="true" aria-labelledby="usuario-dialog-title" className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900">
+      {modal && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4" role="presentation">
+          <section role="dialog" aria-modal="true" aria-labelledby="usuario-dialog-title" className="w-full max-w-lg max-h-[90dvh] overflow-y-auto rounded-2xl border border-gray-200 bg-white p-6 text-gray-900 shadow-2xl dark:border-gray-800 dark:bg-gray-900 dark:text-white">
             <h2 id="usuario-dialog-title" className="text-xl font-semibold">{editandoId ? 'Editar usuario' : 'Nuevo usuario'}</h2>
             <form onSubmit={(e) => void guardar(e)} className="mt-5 space-y-3">
               <label htmlFor="usuario-nombre" className="block text-sm font-medium">Nombre</label>
@@ -226,7 +227,7 @@ export default function UsuariosPage() {
               </div>
             </form>
           </section>
-        </div>
+        </div>, document.body
       )}
     </div>
   )

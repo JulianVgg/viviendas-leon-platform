@@ -11,6 +11,7 @@ import { useAuth } from '@/features/auth/AuthProvider'
 import { esSupervisorCalendario } from '@/features/auth/calendarAccess'
 import InstitutionalEventDialog from '../components/InstitutionalEventDialog'
 import { eventoHaPasado } from '../services/eventHistory'
+import { todayInGuatemala } from '@/features/visits/services/visitService'
 import {
   eventColor, eventDisplayTitle, loadCalendarView, loadParticipants, loadSupervisionVisitDetail, removeEvent, saveEvent,
   type CalendarEvent, type CalendarEventInput, type CalendarPerson, type CalendarTechnicalVisit, type CalendarTraining,
@@ -22,7 +23,7 @@ const weekNames = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB']
 function dayKey(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
-const todayKey = () => dayKey(new Date())
+const todayKey = () => todayInGuatemala()
 const readableDate = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('es-GT', {
   day: 'numeric', month: 'long', year: 'numeric',
 })
@@ -148,7 +149,7 @@ export default function InstitutionalCalendarPage() {
   }, [filtradas, monthCells])
 
   const createEvent = (date = todayKey()) => {
-    if (!editable) return
+    if (!editable || date < todayKey()) return
     setSelected(null)
     setSelectedDate(date)
     setDayList(null)
@@ -265,8 +266,8 @@ export default function InstitutionalCalendarPage() {
                   >
                     <button
                       type="button"
-                      onClick={() => editable ? createEvent(cell.key) : setDayList(cell.key)}
-                      title={editable ? 'Crear evento este día' : 'Consultar actividades del día'}
+                      onClick={() => editable && cell.key >= todayKey() ? createEvent(cell.key) : setDayList(cell.key)}
+                      title={editable && cell.key >= todayKey() ? 'Crear evento este día' : 'Consultar actividades del día'}
                       className={`mb-2 ml-auto flex size-7 items-center justify-center rounded-full text-xs font-medium ${cell.key === todayKey() ? 'bg-brand-500 text-white' : cell.inMonth ? 'text-gray-800 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800' : 'text-gray-400'}`}
                     >
                       {cell.number}

@@ -3,11 +3,21 @@ import express, { Router } from 'express'
 import { getPrismaClient } from '../../config/prisma.js'
 import { requireAuth } from '../auth/auth.middleware.js'
 import { getAuthenticatedUser } from '../auth/auth.service.js'
+import { puedeEditarPerfilCompleto } from './profile.permissions.js'
 
 export const profileExtrasRouter = Router()
 
 // Todas las operaciones requieren una sesión válida.
 profileExtrasRouter.use(requireAuth)
+
+async function permitirEdicionCompleta(req: import('express').Request, res: import('express').Response): Promise<boolean> {
+  const usuario = await getAuthenticatedUser(req.session.userId!)
+  if (!usuario || !puedeEditarPerfilCompleto(usuario.roles)) {
+    res.status(403).json({ error: { message: 'No tienes permiso para cambiar esos datos.' } })
+    return false
+  }
+  return true
+}
 
 // =====================================================
 // EDITAR DIRECCIÓN DEL USUARIO
@@ -15,6 +25,7 @@ profileExtrasRouter.use(requireAuth)
 
 profileExtrasRouter.patch('/direccion', async (req, res, next) => {
   try {
+    if (!await permitirEdicionCompleta(req, res)) return
     const datos: unknown = req.body
 
     if (
@@ -132,6 +143,7 @@ profileExtrasRouter.put(
   }),
   async (req, res, next) => {
     try {
+      if (!await permitirEdicionCompleta(req, res)) return
       const archivo: unknown = req.body
       const mimeType = req.headers['content-type']
         ?.split(';')[0]
@@ -214,6 +226,7 @@ profileExtrasRouter.put(
 
 profileExtrasRouter.delete('/foto', async (req, res, next) => {
   try {
+    if (!await permitirEdicionCompleta(req, res)) return
     await getPrismaClient().usuarioFotoPerfil.deleteMany({
       where: { usuarioId: req.session.userId! },
     })

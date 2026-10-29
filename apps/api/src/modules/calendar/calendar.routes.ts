@@ -7,6 +7,7 @@ import { crearNotificacionesDeActividad, type AvisoActividad } from '../notifica
 import { actualizarRecordatorios, cancelarRecordatorios, configGuardada, configParaPrisma, parseReglas } from '../notifications/reminders.service.js'
 import { descripcionAvisoCalendario, eventoTieneCambios, planificarCambioCalendario, type EventoResumen, type TipoAvisoCalendario } from '../notifications/notifications.activity.js'
 import { eventoYaFinalizo } from './event-history.js'
+import { fechaAnteriorAHoy } from './guatemala-date.js'
 
 export const calendarRouter = Router()
 calendarRouter.use(requireAuth)
@@ -248,6 +249,7 @@ calendarRouter.post('/', async (req: Request, res: Response) => {
   if (req.get('X-Requested-With') !== 'XMLHttpRequest') { res.status(403).json({ error: 'Solicitud no autorizada.' }); return }
   const data = parseEvent(req.body)
   if (!data) { res.status(400).json({ error: 'Revisa los datos del evento.' }); return }
+  if (fechaAnteriorAHoy(data.date)) { res.status(422).json({ error: 'La fecha no puede ser anterior a hoy.' }); return }
   const operationId = req.get('X-Operation-Id')?.toLowerCase() ?? null
   if (operationId !== null && !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(operationId)) {
     res.status(400).json({ error: 'X-Operation-Id debe ser un UUID v4.' }); return
@@ -323,6 +325,7 @@ calendarRouter.put('/:id', async (req: Request, res: Response) => {
   const id = Number(req.params.id)
   const data = parseEvent(req.body)
   if (!Number.isSafeInteger(id) || id < 1 || !data) { res.status(400).json({ error: 'Evento o datos inválidos.' }); return }
+  if (fechaAnteriorAHoy(data.date)) { res.status(422).json({ error: 'La fecha no puede ser anterior a hoy.' }); return }
   try {
     const prisma = getPrismaClient()
     if (!await usersValid(data.participantesIds)) {

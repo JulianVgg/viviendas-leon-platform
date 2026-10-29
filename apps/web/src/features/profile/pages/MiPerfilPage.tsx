@@ -11,9 +11,12 @@ import {
 } from 'lucide-react'
 
 import { useAuth } from '@/features/auth/AuthProvider'
+import { esSupervisorCalendario } from '@/features/auth/calendarAccess'
+import { DEPARTAMENTOS_GUATEMALA } from '../services/geografiaGuatemala'
 
 export default function MiPerfilPage() {
   const { usuario, verificarSesion } = useAuth()
+  const puedeEditarDatos = !!usuario && esSupervisorCalendario(usuario)
 
   // Modal de información personal y fotografía.
   const modalPerfilRef = useRef<HTMLDialogElement>(null)
@@ -130,7 +133,7 @@ export default function MiPerfilPage() {
     if (guardandoPerfil) return
     setErrorPerfil('')
 
-    if (!nombre.trim() || !correo.trim()) {
+    if (puedeEditarDatos && (!nombre.trim() || !correo.trim())) {
       setErrorPerfil('El nombre y el correo son obligatorios.')
       return
     }
@@ -142,12 +145,9 @@ export default function MiPerfilPage() {
         method: 'PATCH',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nombre: nombre.trim(),
-          apellido: apellido.trim(),
-          correo: correo.trim(),
-          telefono: telefono.trim(),
-        }),
+        body: JSON.stringify(puedeEditarDatos ? {
+          nombre: nombre.trim(), apellido: apellido.trim(), correo: correo.trim(), telefono: telefono.trim(),
+        } : { telefono: telefono.trim() }),
       })
 
       if (!respuesta.ok) {
@@ -157,7 +157,7 @@ export default function MiPerfilPage() {
       }
       datosGuardados = true
 
-      if (fotoArchivo || quitarFoto) {
+      if (puedeEditarDatos && (fotoArchivo || quitarFoto)) {
         const respuestaFoto = fotoArchivo
           ? await fetch('/api/v1/perfil/foto', {
               method: 'PUT',
@@ -208,10 +208,22 @@ export default function MiPerfilPage() {
   const [editandoDireccion, setEditandoDireccion] = useState(false)
   const [departamento, setDepartamento] = useState('')
   const [municipio, setMunicipio] = useState('')
+  const [municipiosDisponibles, setMunicipiosDisponibles] = useState<string[]>([])
   const [direccion, setDireccion] = useState('')
   const [guardandoDireccion, setGuardandoDireccion] = useState(false)
   const [errorDireccion, setErrorDireccion] = useState('')
   const [direccionActualizada, setDireccionActualizada] = useState(false)
+
+  useEffect(() => {
+    if (!editandoDireccion) return
+    const controller = new AbortController()
+    void fetch('/api/v1/municipios', { credentials: 'same-origin', signal: controller.signal })
+      .then(async response => response.ok ? response.json() : null)
+      .then((data: { data?: { nombre: string }[] } | null) => {
+        if (!controller.signal.aborted) setMunicipiosDisponibles((data?.data ?? []).map(item => item.nombre))
+      }).catch(() => {})
+    return () => controller.abort()
+  }, [editandoDireccion])
 
   function abrirEditorDireccion() {
     if (!usuario) return
@@ -405,21 +417,20 @@ export default function MiPerfilPage() {
         </h1>
 
         <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-          Consulta tu información personal y administra
-          la seguridad de tu cuenta.
+          Consulta tu perfil y tus datos de contacto.
         </p>
       </div>
 
       {/* Tarjeta principal */}
       <section className={cardClass}>
         <div className="flex items-center gap-4">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-50 text-brand-600 dark:bg-brand-500/10">
-            {fotoUrl ? (
-              <img src={fotoUrl} alt="Fotografía de perfil" className="h-full w-full object-cover" />
-            ) : (
-              <UserRound size={30} aria-hidden="true" />
-            )}
-          </div>
+          <button type="button" onClick={abrirEditorPerfil} disabled={!puedeEditarDatos}
+            title={puedeEditarDatos ? 'Cambiar fotografía' : 'Fotografía de perfil'}
+            aria-label={puedeEditarDatos ? 'Editar fotografía de perfil' : 'Fotografía de perfil'}
+            className="group relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-50 text-brand-600 disabled:cursor-default dark:bg-brand-500/10">
+            {fotoUrl ? <img src={fotoUrl} alt="" className="h-full w-full object-cover" /> : <UserRound size={30} aria-hidden="true" />}
+            {puedeEditarDatos && <span className="absolute inset-0 flex items-center justify-center bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"><Camera size={23} /></span>}
+          </button>
 
           <div className="min-w-0">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -498,7 +509,7 @@ export default function MiPerfilPage() {
                 Editar información personal
               </h2>
               <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                Actualiza tus datos personales.
+                Editar datos personales
               </p>
             </div>
             <button
@@ -513,7 +524,7 @@ export default function MiPerfilPage() {
           </div>
 
           <form onSubmit={(event) => void guardarPerfil(event)}>
-            <div className="mb-6 rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+            {puedeEditarDatos && <div className="mb-6 rounded-xl border border-gray-200 p-4 dark:border-gray-700">
               <div className="flex flex-wrap items-center gap-4">
                 <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-50 text-brand-600 dark:bg-brand-500/10">
                   {fotoPreviewUrl || (!quitarFoto && fotoUrl) ? (
@@ -538,7 +549,7 @@ export default function MiPerfilPage() {
                     disabled={guardandoPerfil}
                     className="block w-full text-sm text-gray-700 file:mr-3 file:rounded-lg file:border-0 file:bg-brand-50 file:px-3 file:py-2 file:font-medium file:text-brand-700 hover:file:bg-brand-100 dark:text-gray-200"
                   />
-                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">JPG o PNG. Máximo 2 MB.</p>
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">JPG o PNG · 2 MB máx.</p>
                   {(fotoUrl || fotoArchivo || quitarFoto) && (
                     <button
                       type="button"
@@ -560,7 +571,7 @@ export default function MiPerfilPage() {
                   )}
                 </div>
               </div>
-            </div>
+            </div>}
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <div>
                 <label htmlFor="perfil-nombre" className="mb-2 block text-sm font-medium dark:text-white">
@@ -570,6 +581,7 @@ export default function MiPerfilPage() {
                   id="perfil-nombre"
                   autoFocus
                   className={inputClass}
+                  disabled={!puedeEditarDatos}
                   maxLength={100}
                   required
                   value={nombre}
@@ -583,6 +595,7 @@ export default function MiPerfilPage() {
                 <input
                   id="perfil-apellido"
                   className={inputClass}
+                  disabled={!puedeEditarDatos}
                   maxLength={100}
                   value={apellido}
                   onChange={(event) => setApellido(event.target.value)}
@@ -596,6 +609,7 @@ export default function MiPerfilPage() {
                   id="perfil-correo"
                   type="email"
                   className={inputClass}
+                  disabled={!puedeEditarDatos}
                   maxLength={254}
                   required
                   value={correo}
@@ -618,7 +632,7 @@ export default function MiPerfilPage() {
             </div>
 
             <p className="mt-5 text-sm text-gray-500 dark:text-gray-400">
-              El rol y el estado de tu cuenta no se pueden modificar aquí.
+              {puedeEditarDatos ? 'El rol y el estado se administran desde Usuarios.' : 'Solo puedes actualizar tu teléfono.'}
             </p>
 
             {errorPerfil && (
@@ -655,13 +669,13 @@ export default function MiPerfilPage() {
             <MapPin className="text-brand-600" size={22} />
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Dirección</h2>
           </div>
-          <button
+          {puedeEditarDatos && <button
             type="button"
             onClick={abrirEditorDireccion}
             className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-white dark:hover:bg-gray-800"
           >
             <Pencil size={16} /> Editar
-          </button>
+          </button>}
         </div>
 
         {direccionActualizada && (
@@ -708,9 +722,7 @@ export default function MiPerfilPage() {
               <h2 id="titulo-editar-direccion" className="text-xl font-bold text-gray-900 dark:text-white">
                 Editar dirección
               </h2>
-              <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                Actualiza tu departamento, municipio y dirección.
-              </p>
+
             </div>
             <button
               type="button"
@@ -729,26 +741,23 @@ export default function MiPerfilPage() {
                 <label htmlFor="perfil-departamento" className="mb-2 block text-sm font-medium dark:text-white">
                   Departamento
                 </label>
-                <input
-                  id="perfil-departamento"
-                  autoFocus
-                  className={inputClass}
-                  maxLength={100}
-                  value={departamento}
-                  onChange={(event) => setDepartamento(event.target.value)}
-                />
+                <select id="perfil-departamento" autoFocus className={inputClass} value={departamento}
+                  onChange={event => { setDepartamento(event.target.value); setMunicipio('') }}>
+                  <option value="">Seleccionar departamento</option>
+                  {DEPARTAMENTOS_GUATEMALA.map(nombre => <option key={nombre} value={nombre}>{nombre}</option>)}
+                </select>
               </div>
               <div>
                 <label htmlFor="perfil-municipio" className="mb-2 block text-sm font-medium dark:text-white">
                   Municipio
                 </label>
-                <input
-                  id="perfil-municipio"
-                  className={inputClass}
-                  maxLength={100}
-                  value={municipio}
-                  onChange={(event) => setMunicipio(event.target.value)}
-                />
+                <select id="perfil-municipio" className={inputClass} value={municipio}
+                  onChange={event => setMunicipio(event.target.value)}>
+                  <option value="">Seleccionar municipio</option>
+                  {municipio && !municipiosDisponibles.includes(municipio) &&
+                    <option value={municipio}>{municipio}</option>}
+                  {municipiosDisponibles.map(nombre => <option key={nombre} value={nombre}>{nombre}</option>)}
+                </select>
               </div>
               <div className="sm:col-span-2">
                 <label htmlFor="perfil-direccion" className="mb-2 block text-sm font-medium dark:text-white">
