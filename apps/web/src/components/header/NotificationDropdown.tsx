@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Bell, CheckCheck, LoaderCircle, X } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import { useAuth } from '@/features/auth/AuthProvider'
@@ -10,8 +11,11 @@ import {
 } from '@/features/notifications/services/notificationsService'
 import { obtenerDestinoSeguro } from '@/features/notifications/utils/notificationUtils'
 import { eventoDeNotificacion } from '@/features/notifications/services/invitationsService'
+import { detectarAvisoNuevo } from '@/features/notifications/utils/notificationToastRules'
 
 const CONSULTA_CADA_MS = 60_000
+const AVISO_CADA_MS = 10_000
+const DURACION_AVISO_MS = 5_000
 
 export default function NotificationDropdown() {
   const navigate = useNavigate()
@@ -23,6 +27,8 @@ export default function NotificationDropdown() {
   const [error, setError] = useState('')
   const [procesandoId, setProcesandoId] = useState<number | null>(null)
   const [marcandoTodas, setMarcandoTodas] = useState(false)
+  const [avisoEmergente, setAvisoEmergente] = useState<Notificacion | null>(null)
+  const ultimoAvisoId = useRef<number | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
 
@@ -69,6 +75,47 @@ export default function NotificationDropdown() {
       window.removeEventListener(NOTIFICACIONES_ACTUALIZADAS, consultar)
     }
   }, [usuario?.id, cargarContador]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Avisos durante la sesión: referencia inicial silenciosa y comprobación cada 10 s.
+  // No pide permiso push ni repite notificaciones que ya existían al iniciar sesión.
+  useEffect(() => {
+    ultimoAvisoId.current = null
+    setAvisoEmergente(null)
+    if (!usuario) return
+    const controller = new AbortController()
+    let consultando = false
+    const revisar = async () => {
+      if (document.visibilityState !== 'visible' || consultando || controller.signal.aborted) return
+      consultando = true
+      try {
+        const resultado = await obtenerNotificaciones({ limite: 20, estado: 'no_leidas', signal: controller.signal })
+        if (controller.signal.aborted) return
+        const estado = detectarAvisoNuevo(ultimoAvisoId.current, resultado.notificaciones)
+        ultimoAvisoId.current = estado.ultimoId
+        setNoLeidas(resultado.noLeidas)
+        if (estado.nuevo) setAvisoEmergente(estado.nuevo)
+      } catch { /* La pérdida de conexión no genera avisos falsos. */ }
+      finally { consultando = false }
+    }
+    void revisar()
+    const timer = window.setInterval(() => void revisar(), AVISO_CADA_MS)
+    window.addEventListener('focus', revisar)
+    document.addEventListener('visibilitychange', revisar)
+    window.addEventListener(NOTIFICACIONES_ACTUALIZADAS, revisar)
+    return () => {
+      controller.abort()
+      window.clearInterval(timer)
+      window.removeEventListener('focus', revisar)
+      document.removeEventListener('visibilitychange', revisar)
+      window.removeEventListener(NOTIFICACIONES_ACTUALIZADAS, revisar)
+    }
+  }, [usuario?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!avisoEmergente) return
+    const timer = window.setTimeout(() => setAvisoEmergente(null), DURACION_AVISO_MS)
+    return () => window.clearTimeout(timer)
+  }, [avisoEmergente])
 
   useEffect(() => {
     if (!open) return
@@ -129,7 +176,7 @@ export default function NotificationDropdown() {
     }
   }
 
-  return <div ref={dropdownRef} className="relative" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false) }}>
+  return <><div ref={dropdownRef} className="relative" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false) }}>
     <button
       ref={buttonRef}
       type="button"
@@ -158,4 +205,19 @@ export default function NotificationDropdown() {
       <button type="button" className="layout-focus mt-3 w-full rounded-lg border border-gray-200 px-3 py-2.5 text-center text-sm font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800" onClick={() => { setOpen(false); navigate('/notificaciones') }}>Ver todas las notificaciones</button>
     </section>}
   </div>
+  {avisoEmergente && createPortal(
+    <div role="status" aria-live="polite" className="notification-live-toast fixed bottom-5 right-3 z-[100001] w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900">
+      <div className="flex items-start gap-2 p-3">
+        <button type="button" onClick={() => { setAvisoEmergente(null); setOpen(false); navigate('/notificaciones') }}
+          className="layout-focus flex min-w-0 flex-1 items-start gap-3 rounded-lg p-1 text-left hover:bg-gray-50 dark:hover:bg-gray-800"
+          aria-label={`Abrir notificaciones: ${avisoEmergente.titulo}`}>
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300"><Bell size={19}/></span>
+          <span className="min-w-0"><span className="block truncate text-sm font-semibold text-gray-900 dark:text-white">{avisoEmergente.titulo}</span>
+            <span className="mt-1 line-clamp-2 block text-xs text-gray-600 dark:text-gray-300">{avisoEmergente.mensaje}</span></span>
+        </button>
+        <button type="button" aria-label="Descartar aviso" onClick={() => setAvisoEmergente(null)} className="layout-focus rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800"><X size={17}/></button>
+      </div>
+      <div className="h-1 bg-brand-100 dark:bg-gray-800" aria-hidden="true"><div className="notification-live-toast-progress h-full bg-brand-500"/></div>
+    </div>, document.body)}
+  </>
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight, Plus, List, CalendarDays } from 'lucide-react'
+import { useSearchParams } from 'react-router'
 
 import PageMeta from '@/components/common/PageMeta'
 import PageHeader from '@/components/common/PageHeader'
@@ -58,6 +59,8 @@ function itemColor(item: CalendarItem): string {
 
 export default function InstitutionalCalendarPage() {
   const { usuario } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const alertVisitId = searchParams.get('visitId')
   const editable = Boolean(usuario && esSupervisorCalendario(usuario))
   const [month, setMonth] = useState(() => {
     const today = new Date()
@@ -108,6 +111,30 @@ export default function InstitutionalCalendarPage() {
       }
     }
   }
+
+  // MON-06: una alerta de supervisión abre el detalle en este calendario, sin editar la visita.
+  useEffect(() => {
+    if (!alertVisitId) return
+    if (!/^[1-9]\d{0,8}$/.test(alertVisitId) || !editable) {
+      setDetailError('La visita no está disponible para esta cuenta.')
+      setSearchParams(prev => { const next = new URLSearchParams(prev); next.delete('visitId'); return next }, { replace: true })
+      return
+    }
+    const controller = new AbortController()
+    const id = Number(alertVisitId)
+    setDetailError('')
+    setLoadingVisitId(id)
+    void loadSupervisionVisitDetail(id, controller.signal)
+      .then(detalle => { if (!controller.signal.aborted) setFullVisit(detalle) })
+      .catch(() => { if (!controller.signal.aborted) setDetailError('No se pudo consultar la visita.') })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setLoadingVisitId(null)
+          setSearchParams(prev => { const next = new URLSearchParams(prev); next.delete('visitId'); return next }, { replace: true })
+        }
+      })
+    return () => controller.abort()
+  }, [alertVisitId, editable, setSearchParams])
 
   const monthCells = useMemo(() => {
     const offset = new Date(month.getFullYear(), month.getMonth(), 1).getDay()

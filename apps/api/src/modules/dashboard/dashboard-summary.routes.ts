@@ -8,6 +8,7 @@ import { obtenerDetalleIndicador, TIPOS_DETALLE } from './dashboard-detail.servi
 import { obtenerIndicadoresVisitasCapacitaciones } from './visits-training.service.js'
 import { obtenerIndicadoresAgricolas } from './agriculture-production.service.js'
 import { validarFiltrosMon05 } from './mon05-filters.js'
+import { obtenerResumenAlertasMon06, obtenerDetalleAlertasMon06 } from './mon06-alerts.service.js'
 import { getPrismaClient } from '../../config/prisma.js'
 
 function filtrosPara(req: import('express').Request, res: import('express').Response, institucional: boolean) {
@@ -142,5 +143,47 @@ dashboardSummaryRouter.get('/filtros', async (req, res) => {
   } catch (error) {
     console.error('[MON-05] Error consultando filtros:', error)
     res.status(503).json({ error: 'No fue posible consultar los filtros.' })
+  }
+})
+
+// MON-06 — alertas operativas de visitas y compromisos, con alcance por rol.
+dashboardSummaryRouter.get('/alertas', async (req, res) => {
+  try {
+    const usuario = await getAuthenticatedUser(req.session.userId!)
+    if (!usuario) { res.status(401).json({ error: 'Sesión inválida.' }); return }
+    const filtros = filtrosPara(req, res, puedeEditarPerfilCompleto(usuario.roles))
+    if (!filtros) return
+    const datos = await obtenerResumenAlertasMon06(usuario, filtros)
+    if (!datos) { res.status(403).json({ error: 'No autorizado.' }); return }
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.json(datos)
+  } catch (error) {
+    console.error('[MON-06] Error consultando alertas:', error)
+    res.status(503).json({ error: 'No fue posible consultar las alertas.' })
+  }
+})
+
+dashboardSummaryRouter.get('/alertas/detalle', async (req, res) => {
+  const tipo = String(req.query.tipo ?? '')
+  const situacion = String(req.query.situacion ?? 'todas')
+  const pagina = Number(req.query.pagina ?? 1)
+  const limite = Number(req.query.limite ?? 10)
+  if (!['visitas', 'compromisos'].includes(tipo) || !['todas', 'vencidas'].includes(situacion) ||
+      !Number.isInteger(pagina) || pagina < 1 || pagina > 100000 || limite !== 10) {
+    res.status(400).json({ error: 'Filtros inválidos.' }); return
+  }
+  try {
+    const usuario = await getAuthenticatedUser(req.session.userId!)
+    if (!usuario) { res.status(401).json({ error: 'Sesión inválida.' }); return }
+    const filtros = filtrosPara(req, res, puedeEditarPerfilCompleto(usuario.roles))
+    if (!filtros) return
+    const datos = await obtenerDetalleAlertasMon06(usuario, tipo as 'visitas' | 'compromisos',
+      situacion as 'todas' | 'vencidas', pagina, limite, filtros)
+    if (!datos) { res.status(403).json({ error: 'No autorizado.' }); return }
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.json(datos)
+  } catch (error) {
+    console.error('[MON-06] Error consultando alertas detalladas:', error)
+    res.status(503).json({ error: 'No fue posible consultar las alertas.' })
   }
 })
