@@ -265,6 +265,33 @@
 }
 .dialog-enter[open] { animation: dialog-enter 180ms ease-out both; }
 
+/* Detalle de indicadores: misma entrada suave del modal de visitas. */
+.indicator-detail-backdrop::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, .45);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: indicator-detail-backdrop-enter 240ms ease-out both;
+}
+.indicator-detail-enter {
+  position: relative;
+  animation: indicator-detail-show 260ms cubic-bezier(.2, .8, .25, 1) both;
+  transform-origin: center;
+}
+@keyframes indicator-detail-show {
+  from { opacity: 0; transform: translateY(18px) scale(.965); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes indicator-detail-backdrop-enter {
+  from { opacity: 0; backdrop-filter: blur(0); }
+  to { opacity: 1; backdrop-filter: blur(6px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .indicator-detail-backdrop::before, .indicator-detail-enter { animation: none; }
+}
+
 /* Barra de desplazamiento de TailAdmin ajustada para Firefox. */
 .custom-scrollbar { scrollbar-width: thin; scrollbar-color: var(--color-gray-200) transparent; }
 .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }

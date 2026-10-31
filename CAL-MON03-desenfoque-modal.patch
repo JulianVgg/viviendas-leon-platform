@@ -1,0 +1,25 @@
+diff --git a/apps/web/src/features/dashboard/pages/IndicadorDetalleDialog.tsx b/apps/web/src/features/dashboard/pages/IndicadorDetalleDialog.tsx
+--- a/apps/web/src/features/dashboard/pages/IndicadorDetalleDialog.tsx
++++ b/apps/web/src/features/dashboard/pages/IndicadorDetalleDialog.tsx
+@@ -1,4 +1,5 @@
+ import { useEffect, useRef, useState } from 'react'
++import { createPortal } from 'react-dom'
+ import { CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react'
+ import { consultarDetalleIndicador, type DetalleIndicador, type TipoDetalleIndicador } from '../services/dashboardSummaryService'
+ 
+@@ -35,7 +36,7 @@
+       .finally(()=>{if(!controller.signal.aborted) setCargando(false)})
+     return ()=>controller.abort()
+   },[tipo,meses,pagina,intento])
+-  return <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-gray-950/55 p-3 backdrop-blur-[3px] sm:p-6" onMouseDown={event=>{if(event.target===event.currentTarget) cerrar()}}>
++  return createPortal(<div className="fixed inset-0 z-[100000] flex items-center justify-center bg-slate-950/45 p-3 backdrop-blur-sm sm:p-6" onMouseDown={event=>{if(event.target===event.currentTarget) cerrar()}}>
+     <section role="dialog" aria-modal="true" aria-labelledby="detalle-indicador-titulo" className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-gray-900">
+       <header className="flex items-center justify-between border-b border-gray-100 p-5 dark:border-gray-800">
+         <div><h2 id="detalle-indicador-titulo" className="text-lg font-semibold text-gray-900 dark:text-white">{titulos[tipo]}</h2>
+@@ -60,5 +61,5 @@
+         </div>
+       </footer>
+     </section>
+-  </div>
++  </div>, document.body)
+ }
