@@ -1,3 +1,4 @@
+import type { FiltrosDashboard } from '../lib/dashboardFilters'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CalendarDays, ChevronLeft, ChevronRight, X } from 'lucide-react'
@@ -9,8 +10,8 @@ const titulos: Record<TipoDetalleIndicador,string> = {
 }
 const fechaGT = (fecha?:string) => fecha ? fecha.split('-').reverse().join('/') : null
 
-export default function IndicadorDetalleDialog({ tipo, meses, cerrar }: {
-  tipo: TipoDetalleIndicador; meses: 3|6|12; cerrar: () => void
+export default function IndicadorDetalleDialog({ tipo, meses, filtros, cerrar }: {
+  tipo: TipoDetalleIndicador; meses: 3|6|12; filtros?: FiltrosDashboard; cerrar: () => void
 }) {
   const [pagina,setPagina] = useState(1)
   const [detalle,setDetalle] = useState<DetalleIndicador|null>(null)
@@ -30,12 +31,12 @@ export default function IndicadorDetalleDialog({ tipo, meses, cerrar }: {
   useEffect(()=>{
     const controller=new AbortController()
     setCargando(true);setError('')
-    void consultarDetalleIndicador(tipo,meses,pagina,controller.signal).then(datos=>{
+    void consultarDetalleIndicador(tipo,meses,pagina,controller.signal,filtros).then(datos=>{
       if(!controller.signal.aborted) setDetalle(datos)
     }).catch(()=>{if(!controller.signal.aborted) setError('No se pudo cargar el listado.')})
       .finally(()=>{if(!controller.signal.aborted) setCargando(false)})
     return ()=>controller.abort()
-  },[tipo,meses,pagina,intento])
+  },[tipo,meses,pagina,intento,filtros?.comunidadId,filtros?.responsableId])
   return createPortal(<div className="indicator-detail-backdrop fixed inset-0 z-[100000] flex items-center justify-center p-3 sm:p-6" onMouseDown={event=>{if(event.target===event.currentTarget) cerrar()}}>
     <section role="dialog" aria-modal="true" aria-labelledby="detalle-indicador-titulo" className="indicator-detail-enter flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-gray-900">
       <header className="flex items-center justify-between border-b border-gray-100 p-5 dark:border-gray-800">
