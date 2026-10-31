@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router'
 import AppLayout from '@/app/layout/AppLayout'
 import DashboardPage from '@/app/pages/DashboardPage'
 import MiAgendaPage from '@/features/dashboard/pages/MiAgendaPage'
+import IndicadoresFamiliasPage from '@/features/dashboard/pages/IndicadoresFamiliasPage'
 import ModulePage from '@/components/common/ModulePage'
 
 import FamilyListPage from '@/features/families/pages/FamilyListPage'
@@ -297,11 +298,7 @@ export default function AppRoutes() {
 
           <Route
             path="reportes/indicadores"
-            element={module(
-              'Indicadores',
-              'Vista base para indicadores de seguimiento.',
-              ['Indicador', 'Periodo', 'Valor'],
-            )}
+            element={<IndicadoresFamiliasPage />}
           />
 
           <Route

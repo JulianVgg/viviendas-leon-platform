@@ -12,6 +12,7 @@ export type CalendarTechnicalVisit = {
   id: number
   fecha: string
   estado: 'PROGRAMADA' | 'REALIZADA'
+  horaInicio: string | null; horaFin: string | null
   familia: string
   comunidad: string
   responsable: string
@@ -23,6 +24,7 @@ export type CalendarTraining = {
   tema: string
   fecha: string
   estado: string
+  horaInicio: string | null; horaFin: string | null
   comunidad: string
   facilitador: string
 }
@@ -37,7 +39,7 @@ export type CalendarEvent = {
 // La API asigna responsableId automáticamente al creador y conserva el original al editar.
 export type CalendarEventInput = {
   titulo: string; categoria: InstitutionalCategory; descripcion: string
-  fechaInicio: string; participantesIds: number[]; recordatorios: ConfigRecordatorios
+  fechaInicio: string; todoElDia: boolean; horaInicio: string | null; horaFin: string | null; participantesIds: number[]; recordatorios: ConfigRecordatorios
 }
 
 export const eventTypes: { id: InstitutionalCategory; text: string; className: string }[] = [
