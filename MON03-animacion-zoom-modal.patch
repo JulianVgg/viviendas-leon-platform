@@ -1,0 +1,53 @@
+diff --git a/apps/web/src/features/dashboard/pages/IndicadorDetalleDialog.tsx b/apps/web/src/features/dashboard/pages/IndicadorDetalleDialog.tsx
+index eef04d6..8287f5b 100644
+--- a/apps/web/src/features/dashboard/pages/IndicadorDetalleDialog.tsx
++++ b/apps/web/src/features/dashboard/pages/IndicadorDetalleDialog.tsx
+@@ -36,8 +36,8 @@ export default function IndicadorDetalleDialog({ tipo, meses, cerrar }: {
+       .finally(()=>{if(!controller.signal.aborted) setCargando(false)})
+     return ()=>controller.abort()
+   },[tipo,meses,pagina,intento])
+-  return createPortal(<div className="fixed inset-0 z-[100000] flex items-center justify-center bg-slate-950/45 p-3 backdrop-blur-sm sm:p-6" onMouseDown={event=>{if(event.target===event.currentTarget) cerrar()}}>
+-    <section role="dialog" aria-modal="true" aria-labelledby="detalle-indicador-titulo" className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-gray-900">
++  return createPortal(<div className="indicator-detail-backdrop fixed inset-0 z-[100000] flex items-center justify-center p-3 sm:p-6" onMouseDown={event=>{if(event.target===event.currentTarget) cerrar()}}>
++    <section role="dialog" aria-modal="true" aria-labelledby="detalle-indicador-titulo" className="indicator-detail-enter flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-gray-900">
+       <header className="flex items-center justify-between border-b border-gray-100 p-5 dark:border-gray-800">
+         <div><h2 id="detalle-indicador-titulo" className="text-lg font-semibold text-gray-900 dark:text-white">{titulos[tipo]}</h2>
+ </div>
+diff --git a/apps/web/src/index.css b/apps/web/src/index.css
+index 6d20fdc..d8ff8e2 100644
+--- a/apps/web/src/index.css
++++ b/apps/web/src/index.css
+@@ -265,6 +265,33 @@
+ }
+ .dialog-enter[open] { animation: dialog-enter 180ms ease-out both; }
+ 
++/* Detalle de indicadores: misma entrada suave del modal de visitas. */
++.indicator-detail-backdrop::before {
++  content: '';
++  position: absolute;
++  inset: 0;
++  background: rgba(15, 23, 42, .45);
++  backdrop-filter: blur(6px);
++  -webkit-backdrop-filter: blur(6px);
++  animation: indicator-detail-backdrop-enter 240ms ease-out both;
++}
++.indicator-detail-enter {
++  position: relative;
++  animation: indicator-detail-show 260ms cubic-bezier(.2, .8, .25, 1) both;
++  transform-origin: center;
++}
++@keyframes indicator-detail-show {
++  from { opacity: 0; transform: translateY(18px) scale(.965); }
++  to { opacity: 1; transform: translateY(0) scale(1); }
++}
++@keyframes indicator-detail-backdrop-enter {
++  from { opacity: 0; backdrop-filter: blur(0); }
++  to { opacity: 1; backdrop-filter: blur(6px); }
++}
++@media (prefers-reduced-motion: reduce) {
++  .indicator-detail-backdrop::before, .indicator-detail-enter { animation: none; }
++}
++
+ /* Barra de desplazamiento de TailAdmin ajustada para Firefox. */
+ .custom-scrollbar { scrollbar-width: thin; scrollbar-color: var(--color-gray-200) transparent; }
+ .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }

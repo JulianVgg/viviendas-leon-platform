@@ -2,21 +2,21 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { AlertCircle, CalendarDays, ChartNoAxesCombined, CheckCircle2, GraduationCap, Leaf, RefreshCw, Sprout, UsersRound } from 'lucide-react'
 import PageMeta from '@/components/common/PageMeta'
-import { consultarDashboard, consultarFamiliasProgramas, type ResumenDashboard, type ResumenFamiliasProgramas } from '@/features/dashboard/services/dashboardSummaryService'
+import { consultarDashboard, consultarFamiliasProgramas, consultarIndicadoresVisitasCapacitaciones, type ResumenDashboard, type ResumenFamiliasProgramas, type IndicadoresVisitasCapacitaciones, type TipoDetalleIndicador } from '@/features/dashboard/services/dashboardSummaryService'
 import FamiliasProgramasPanel from '@/features/dashboard/pages/FamiliasProgramasPanel'
+import VisitasCapacitacionesPanel from '@/features/dashboard/pages/VisitasCapacitacionesPanel'
+import IndicadorDetalleDialog from '@/features/dashboard/pages/IndicadorDetalleDialog'
 
 const tarjeta = 'rounded-2xl border border-gray-200 bg-white p-5 shadow-theme-xs transition-[box-shadow,transform] duration-300 hover:-translate-y-0.5 hover:shadow-lg dark:border-gray-800 dark:bg-gray-900'
 type Icono = typeof UsersRound
 
-function Indicador({ etiqueta, valor, icono: Icono, detalle }: { etiqueta: string; valor: number; icono: Icono; detalle?: string }) {
-  return <article className={tarjeta}>
-    <div className="flex items-start justify-between gap-3">
-      <span className="flex size-11 items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-300"><Icono size={20} strokeWidth={1.7}/></span>
-      {detalle && <span className="text-xs text-gray-400">{detalle}</span>}
-    </div>
-    <p className="mt-5 text-3xl font-semibold tracking-tight tabular-nums text-gray-900 dark:text-white">{valor.toLocaleString('es-GT')}</p>
-    <h2 className="mt-2 text-sm text-gray-500 dark:text-gray-400">{etiqueta}</h2>
-  </article>
+function Indicador({ etiqueta, valor, icono: Icono, onClick }: { etiqueta: string; valor: number; icono: Icono; onClick: () => void }) {
+  return <button type="button" onClick={onClick} aria-label={`Ver detalle de ${etiqueta}`}
+    className={`${tarjeta} w-full cursor-pointer text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500`}>
+    <span className="flex size-11 items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-300"><Icono size={20} strokeWidth={1.7}/></span>
+    <span className="mt-5 block text-3xl font-semibold tracking-tight tabular-nums text-gray-900 dark:text-white">{valor.toLocaleString('es-GT')}</span>
+    <span className="mt-2 block text-sm text-gray-500 dark:text-gray-400">{etiqueta}</span>
+  </button>
 }
 
 function GraficaActividad({ datos }: { datos: ResumenDashboard['actividadMensual'] }) {
@@ -66,6 +66,10 @@ export default function DashboardPage() {
   const [familiasProgramas, setFamiliasProgramas] = useState<ResumenFamiliasProgramas | null>(null)
   const [errorFamilias, setErrorFamilias] = useState('')
   const [error, setError] = useState('')
+  const [indicadoresOperativos, setIndicadoresOperativos] = useState<IndicadoresVisitasCapacitaciones | null>(null)
+  const [errorOperativos, setErrorOperativos] = useState('')
+  const [detalleAbierto, setDetalleAbierto] = useState<TipoDetalleIndicador | null>(null)
+  const cerrarDetalle = useCallback(() => setDetalleAbierto(null), [])
   const actualizar = useCallback(() => setActualizacion(v => v + 1), [])
   useEffect(() => {
     const controller = new AbortController()
@@ -91,26 +95,37 @@ export default function DashboardPage() {
     return () => controller.abort()
   }, [resumen?.alcance, actualizacion])
 
+  useEffect(() => {
+    const controller = new AbortController()
+    setErrorOperativos(''); setIndicadoresOperativos(null)
+    void consultarIndicadoresVisitasCapacitaciones(meses, controller.signal).then(data => {
+      if (!controller.signal.aborted) setIndicadoresOperativos(data)
+    }).catch(() => { if (!controller.signal.aborted) setErrorOperativos('No se pudieron cargar las actividades.') })
+    return () => controller.abort()
+  }, [meses, actualizacion])
+
   const institucional = resumen?.alcance === 'INSTITUCIONAL'
-  const indicadores: Array<{ etiqueta: string; valor: number; icono: Icono; detalle?: string }> = []
+  const indicadores: Array<{ etiqueta: string; valor: number; icono: Icono; tipo: TipoDetalleIndicador }> = []
   if (resumen) {
     if (institucional) {
-      indicadores.push({ etiqueta:'Familias beneficiarias', valor: resumen.indicadores.familias ?? 0, icono:UsersRound })
-      indicadores.push({ etiqueta:'Huertos activos', valor:resumen.indicadores.huertosActivos ?? 0, icono:Sprout })
-      indicadores.push({ etiqueta:'Ciclos activos', valor:resumen.indicadores.ciclosActivos ?? 0, icono:Leaf })
+      indicadores.push({ etiqueta:'Familias beneficiarias', valor: resumen.indicadores.familias ?? 0, icono:UsersRound, tipo:'familias' })
+      indicadores.push({ etiqueta:'Huertos activos', valor:resumen.indicadores.huertosActivos ?? 0, icono:Sprout, tipo:'huertos' })
+      indicadores.push({ etiqueta:'Ciclos activos', valor:resumen.indicadores.ciclosActivos ?? 0, icono:Leaf, tipo:'ciclos' })
     }
-    indicadores.push({ etiqueta:'Visitas realizadas', valor:resumen.indicadores.visitasRealizadas, icono:CheckCircle2, detalle:'Período' })
-    indicadores.push({ etiqueta:'Capacitaciones', valor:resumen.indicadores.capacitaciones, icono:GraduationCap, detalle:'Período' })
-    indicadores.push({ etiqueta:'Visitas vencidas', valor:resumen.indicadores.visitasVencidas, icono:AlertCircle })
+    indicadores.push({ etiqueta:'Visitas realizadas', valor:resumen.indicadores.visitasRealizadas, icono:CheckCircle2, tipo:'visitas' })
+    indicadores.push({ etiqueta:'Capacitaciones', valor:resumen.indicadores.capacitaciones, icono:GraduationCap, tipo:'capacitaciones' })
+    indicadores.push({ etiqueta:'Visitas vencidas', valor:resumen.indicadores.visitasVencidas, icono:AlertCircle, tipo:'vencidas' })
   }
   let contenido: ReactNode = null
   if (cargando && !resumen) contenido = <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-sm text-gray-500 dark:border-gray-800 dark:bg-gray-900">Cargando indicadores...</div>
   else if (error) contenido = <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/20">{error} <button type="button" onClick={actualizar} className="ml-2 font-semibold underline">Reintentar</button></div>
   else if (resumen) contenido = <>
     <div className={`grid grid-cols-2 gap-3 md:gap-5 ${institucional ? 'xl:grid-cols-3' : 'lg:grid-cols-3'}`}>
-      {indicadores.map(item => <Indicador key={item.etiqueta} {...item} />)}
+      {indicadores.map(item => <Indicador key={item.etiqueta} etiqueta={item.etiqueta} valor={item.valor} icono={item.icono} onClick={() => setDetalleAbierto(item.tipo)} />)}
     </div>
     <GraficaActividad datos={resumen.actividadMensual}/>
+    {indicadoresOperativos && <VisitasCapacitacionesPanel datos={indicadoresOperativos}/>}
+    {errorOperativos && <p role="alert" className="text-sm text-rose-600">{errorOperativos}</p>}
     {institucional && familiasProgramas && <FamiliasProgramasPanel datos={familiasProgramas} />}
     {institucional && !familiasProgramas && !errorFamilias && <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-500 dark:border-gray-800 dark:bg-gray-900">Cargando participación...</div>}
     {institucional && errorFamilias && <p role="alert" className="text-sm text-rose-600">{errorFamilias}</p>}
@@ -125,5 +140,6 @@ export default function DashboardPage() {
       <div className="flex items-center gap-2"><label htmlFor="dashboard-meses" className="sr-only">Período</label><select id="dashboard-meses" value={meses} onChange={event => setMeses(Number(event.target.value) as 3 | 6 | 12)} className="rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"><option value={3}>3 meses</option><option value={6}>6 meses</option><option value={12}>12 meses</option></select><button type="button" onClick={actualizar} aria-label="Actualizar indicadores" disabled={cargando} className="rounded-lg border border-gray-300 p-2.5 text-gray-600 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300"><RefreshCw size={18}/></button></div>
     </div>
     {contenido}
+    {detalleAbierto && <IndicadorDetalleDialog key={`${detalleAbierto}-${meses}`} tipo={detalleAbierto} meses={meses} cerrar={cerrarDetalle}/>}
   </main>
 }
