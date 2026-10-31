@@ -2,7 +2,6 @@ import type { ReactNode } from 'react'
 import {
   Activity,
   Bell,
-  Bug,
   CalendarDays,
   ContactRound,
   ChartNoAxesColumnIncreasing,
@@ -54,7 +53,6 @@ const icons = {
   gardens: <House size={size} strokeWidth={strokeWidth} />,
   crops: <Leaf size={size} strokeWidth={strokeWidth} />,
   production: <Wheat size={size} strokeWidth={strokeWidth} />,
-  phytosanitary: <Bug size={size} strokeWidth={strokeWidth} />,
   supplies: <Package size={size} strokeWidth={strokeWidth} />,
   visits: <ClipboardCheck size={size} strokeWidth={strokeWidth} />,
   agenda: <CalendarDays size={size} strokeWidth={strokeWidth} /> ,
@@ -95,7 +93,6 @@ export const navigationGroups: { id: string; name: string; items: NavigationItem
         { id: 'gardens', name: 'Huertos', path: '/gestion-agricola/huertos', icon: icons.gardens },
         { id: 'cycles', name: 'Ciclos agrícolas', path: '/gestion-agricola/ciclos', icon: icons.crops },
         { id: 'production', name: 'Producción', path: '/gestion-agricola/produccion', icon: icons.production },
-        { id: 'phytosanitary', name: 'Control fitosanitario', path: '/gestion-agricola/control-fitosanitario', icon: icons.phytosanitary },
         { id: 'supplies', name: 'Insumos', path: '/gestion-agricola/insumos', icon: icons.supplies },
       ] },
       { id: 'visits', name: 'Visitas técnicas', path: '/visitas', icon: icons.visits, roles: ['fieldWorker', 'coordination'], children: [
