@@ -1,3 +1,4 @@
+import { agregarFiltrosDashboard, type FiltrosDashboard } from '../lib/dashboardFilters'
 export type ResumenDashboard = {
   alcance: 'INSTITUCIONAL' | 'PERSONAL'
   periodo: { meses: number; desde: string; hasta: string }
@@ -13,8 +14,8 @@ export type ResumenDashboard = {
   programas: Array<{ id: number; nombre: string; familias: number }>
 }
 
-export async function consultarDashboard(meses: 3 | 6 | 12, signal?: AbortSignal): Promise<ResumenDashboard> {
-  const response = await fetch(`/api/v1/dashboard/resumen?meses=${meses}`, {
+export async function consultarDashboard(meses: 3 | 6 | 12, signal?: AbortSignal, filtros: FiltrosDashboard = {}): Promise<ResumenDashboard> {
+  const response = await fetch(`/api/v1/dashboard/resumen?${agregarFiltrosDashboard(new URLSearchParams({ meses: String(meses) }), filtros)}`, {
     credentials: 'same-origin', cache: 'no-store', signal, headers: { Accept: 'application/json' },
   })
   if (!response.ok) throw new Error(response.status === 401 ? 'Inicia sesión para consultar el dashboard.' : 'No se pudieron cargar los indicadores.')
@@ -30,8 +31,8 @@ export type ResumenFamiliasProgramas = {
   comunidades: Array<{ nombre: string; total: number; conPrograma: number }>
 }
 
-export async function consultarFamiliasProgramas(signal?: AbortSignal): Promise<ResumenFamiliasProgramas> {
-  const response = await fetch('/api/v1/dashboard/resumen/familias-programas', {
+export async function consultarFamiliasProgramas(signal?: AbortSignal, filtros: FiltrosDashboard = {}): Promise<ResumenFamiliasProgramas> {
+  const response = await fetch(`/api/v1/dashboard/resumen/familias-programas?${agregarFiltrosDashboard(new URLSearchParams(), filtros)}`, {
     credentials: 'same-origin', cache: 'no-store', signal, headers: { Accept: 'application/json' },
   })
   if (!response.ok) throw new Error('No se pudo consultar la participación por programa.')
@@ -47,8 +48,8 @@ export type DetalleIndicador = {
   totalPaginas: number
   registros: Array<{ id: number; titulo: string; subtitulo: string; fecha?: string; estado?: string }>
 }
-export async function consultarDetalleIndicador(tipo: TipoDetalleIndicador, meses: 3|6|12, pagina = 1, signal?: AbortSignal): Promise<DetalleIndicador> {
-  const p = new URLSearchParams({tipo, meses: String(meses), pagina: String(pagina), limite: '10'})
+export async function consultarDetalleIndicador(tipo: TipoDetalleIndicador, meses: 3|6|12, pagina = 1, signal?: AbortSignal, filtros: FiltrosDashboard = {}): Promise<DetalleIndicador> {
+  const p = agregarFiltrosDashboard(new URLSearchParams({tipo, meses: String(meses), pagina: String(pagina), limite: '10'}), filtros)
   const r = await fetch(`/api/v1/dashboard/resumen/detalle?${p}`, {credentials: 'same-origin',cache:'no-store',signal})
   if (!r.ok) throw new Error('No se pudo cargar el detalle.')
   return await r.json() as DetalleIndicador
@@ -60,8 +61,8 @@ export type IndicadoresVisitasCapacitaciones = {
   capacitaciones: { realizadas: number; programadas: number; otras: number }
   porResponsable: Array<{ id: string; nombre: string; visitas: number; capacitaciones: number }>
 }
-export async function consultarIndicadoresVisitasCapacitaciones(meses: 3|6|12, signal?: AbortSignal): Promise<IndicadoresVisitasCapacitaciones> {
-  const r = await fetch(`/api/v1/dashboard/resumen/visitas-capacitaciones?meses=${meses}`,
+export async function consultarIndicadoresVisitasCapacitaciones(meses: 3|6|12, signal?: AbortSignal, filtros: FiltrosDashboard = {}): Promise<IndicadoresVisitasCapacitaciones> {
+  const r = await fetch(`/api/v1/dashboard/resumen/visitas-capacitaciones?${agregarFiltrosDashboard(new URLSearchParams({ meses: String(meses) }), filtros)}`,
     {credentials:'same-origin',cache:'no-store',signal,headers:{Accept:'application/json'}})
   if (!r.ok) throw new Error('No se pudieron consultar las actividades.')
   return await r.json() as IndicadoresVisitasCapacitaciones
@@ -80,9 +81,19 @@ export type IndicadoresAgricolas = {
   porComunidad:Array<{nombre:string;familias:number;ciclosActivos:number}>
   produccionMensual:Array<{mes:string;kg:number;unidades:number;registros:number}>
 }
-export async function consultarIndicadoresAgricolas(meses: 3|6|12, signal?: AbortSignal): Promise<IndicadoresAgricolas> {
-  const response = await fetch(`/api/v1/dashboard/resumen/agricultura-produccion?meses=${meses}`,
+export async function consultarIndicadoresAgricolas(meses: 3|6|12, signal?: AbortSignal, filtros: FiltrosDashboard = {}): Promise<IndicadoresAgricolas> {
+  const response = await fetch(`/api/v1/dashboard/resumen/agricultura-produccion?${agregarFiltrosDashboard(new URLSearchParams({ meses: String(meses) }), filtros)}`,
     {credentials:'same-origin',cache:'no-store',signal,headers:{Accept:'application/json'}})
   if (!response.ok) throw new Error('No se pudieron consultar los indicadores agrícolas.')
   return (await response.json()) as IndicadoresAgricolas
+}
+
+export type OpcionesFiltrosDashboard = {
+  comunidades: Array<{id: number; nombre: string}>
+  responsables: Array<{id: number; nombre: string}>
+}
+export async function consultarOpcionesFiltrosDashboard(signal?: AbortSignal): Promise<OpcionesFiltrosDashboard> {
+  const r = await fetch('/api/v1/dashboard/resumen/filtros', { credentials:'same-origin', cache:'no-store', signal })
+  if (!r.ok) throw new Error('No se pudieron cargar los filtros.')
+  return await r.json() as OpcionesFiltrosDashboard
 }

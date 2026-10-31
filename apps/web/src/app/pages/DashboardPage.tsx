@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
-import { AlertCircle, CalendarDays, ChartNoAxesCombined, CheckCircle2, GraduationCap, Leaf, RefreshCw, Sprout, UsersRound } from 'lucide-react'
+import { AlertCircle, CalendarDays, Filter, RotateCcw, ChartNoAxesCombined, CheckCircle2, GraduationCap, Leaf, RefreshCw, Sprout, UsersRound } from 'lucide-react'
 import PageMeta from '@/components/common/PageMeta'
-import { consultarDashboard, consultarFamiliasProgramas, consultarIndicadoresVisitasCapacitaciones, consultarIndicadoresAgricolas, type IndicadoresAgricolas, type ResumenDashboard, type ResumenFamiliasProgramas, type IndicadoresVisitasCapacitaciones, type TipoDetalleIndicador } from '@/features/dashboard/services/dashboardSummaryService'
+import { consultarDashboard, consultarFamiliasProgramas, consultarIndicadoresVisitasCapacitaciones, consultarIndicadoresAgricolas, consultarOpcionesFiltrosDashboard, type OpcionesFiltrosDashboard, type IndicadoresAgricolas, type ResumenDashboard, type ResumenFamiliasProgramas, type IndicadoresVisitasCapacitaciones, type TipoDetalleIndicador } from '@/features/dashboard/services/dashboardSummaryService'
 import FamiliasProgramasPanel from '@/features/dashboard/pages/FamiliasProgramasPanel'
 import VisitasCapacitacionesPanel from '@/features/dashboard/pages/VisitasCapacitacionesPanel'
 import IndicadorDetalleDialog from '@/features/dashboard/pages/IndicadorDetalleDialog'
 import AgriculturaProduccionPanel from '@/features/dashboard/pages/AgriculturaProduccionPanel'
 import { ProAreaChart } from '@/features/dashboard/charts/TailAdminCharts'
 import { seriesActividad } from '@/features/dashboard/lib/chartSeries'
+import type { FiltrosDashboard } from '@/features/dashboard/lib/dashboardFilters'
 
 const tarjeta = 'rounded-2xl border border-gray-200 bg-white p-5 shadow-theme-xs transition-[box-shadow,transform] duration-300 hover:-translate-y-0.5 hover:shadow-lg dark:border-gray-800 dark:bg-gray-900'
 type Icono = typeof UsersRound
@@ -36,6 +37,10 @@ function GraficaActividad({ datos }: { datos: ResumenDashboard['actividadMensual
 export default function DashboardPage() {
   const [meses, setMeses] = useState<3 | 6 | 12>(6)
   const [actualizacion, setActualizacion] = useState(0)
+  const [comunidadId, setComunidadId] = useState<number | undefined>()
+  const [responsableId, setResponsableId] = useState<number | undefined>()
+  const [opciones, setOpciones] = useState<OpcionesFiltrosDashboard | null>(null)
+  const [errorOpciones, setErrorOpciones] = useState(false)
   const [resumen, setResumen] = useState<ResumenDashboard | null>(null)
   const [cargando, setCargando] = useState(true)
   const [familiasProgramas, setFamiliasProgramas] = useState<ResumenFamiliasProgramas | null>(null)
@@ -46,51 +51,63 @@ export default function DashboardPage() {
   const [agricultura, setAgricultura] = useState<IndicadoresAgricolas|null>(null)
   const [errorAgricultura, setErrorAgricultura] = useState('')
   const [detalleAbierto, setDetalleAbierto] = useState<TipoDetalleIndicador | null>(null)
+  const filtros: FiltrosDashboard = { comunidadId, responsableId }
+  const restablecer = () => { setMeses(6); setComunidadId(undefined); setResponsableId(undefined) }
   const cerrarDetalle = useCallback(() => setDetalleAbierto(null), [])
   const actualizar = useCallback(() => setActualizacion(v => v + 1), [])
   useEffect(() => {
     const controller = new AbortController()
     setCargando(true); setError('')
-    void consultarDashboard(meses, controller.signal).then(data => {
+    void consultarDashboard(meses, controller.signal, filtros).then(data => {
       if (!controller.signal.aborted) setResumen(data)
     }).catch(() => {
       if (!controller.signal.aborted) setError('No se pudieron cargar los indicadores.')
     }).finally(() => { if (!controller.signal.aborted) setCargando(false) })
     return () => controller.abort()
-  }, [meses, actualizacion])
+  }, [meses, comunidadId, responsableId, actualizacion])
 
   // MON-02 es exclusivamente institucional; no se consulta desde cuentas técnicas.
   useEffect(() => {
     if (resumen?.alcance !== 'INSTITUCIONAL') return
     const controller = new AbortController()
     setErrorFamilias('')
-    void consultarFamiliasProgramas(controller.signal).then(datos => {
+    void consultarFamiliasProgramas(controller.signal, filtros).then(datos => {
       if (!controller.signal.aborted) setFamiliasProgramas(datos)
     }).catch(() => {
       if (!controller.signal.aborted) setErrorFamilias('No se pudieron cargar los programas.')
     })
     return () => controller.abort()
-  }, [resumen?.alcance, actualizacion])
+  }, [resumen?.alcance, comunidadId, responsableId, actualizacion])
 
   useEffect(() => {
     const controller = new AbortController()
     setErrorOperativos(''); setIndicadoresOperativos(null)
-    void consultarIndicadoresVisitasCapacitaciones(meses, controller.signal).then(data => {
+    void consultarIndicadoresVisitasCapacitaciones(meses, controller.signal, filtros).then(data => {
       if (!controller.signal.aborted) setIndicadoresOperativos(data)
     }).catch(() => { if (!controller.signal.aborted) setErrorOperativos('No se pudieron cargar las actividades.') })
     return () => controller.abort()
-  }, [meses, actualizacion])
+  }, [meses, comunidadId, responsableId, actualizacion])
 
   // No solicitar información agrícola institucional desde cuentas operativas.
   useEffect(() => {
     if (resumen?.alcance !== 'INSTITUCIONAL') { setAgricultura(null); return }
     const controller = new AbortController()
     setErrorAgricultura(''); setAgricultura(null)
-    void consultarIndicadoresAgricolas(meses, controller.signal).then(data => {
+    void consultarIndicadoresAgricolas(meses, controller.signal, filtros).then(data => {
       if (!controller.signal.aborted) setAgricultura(data)
     }).catch(() => { if (!controller.signal.aborted) setErrorAgricultura('No se pudieron cargar los indicadores agrícolas.') })
     return () => controller.abort()
-  }, [resumen?.alcance, meses, actualizacion])
+  }, [resumen?.alcance, meses, comunidadId, responsableId, actualizacion])
+
+  useEffect(() => {
+    if (resumen?.alcance !== 'INSTITUCIONAL') { setOpciones(null); return }
+    const controller = new AbortController()
+    setErrorOpciones(false)
+    void consultarOpcionesFiltrosDashboard(controller.signal).then(data => {
+      if (!controller.signal.aborted) setOpciones(data)
+    }).catch(() => { if (!controller.signal.aborted) setErrorOpciones(true) })
+    return () => controller.abort()
+  }, [resumen?.alcance, actualizacion])
 
   const institucional = resumen?.alcance === 'INSTITUCIONAL'
   const indicadores: Array<{ etiqueta: string; valor: number; icono: Icono; tipo: TipoDetalleIndicador }> = []
@@ -127,9 +144,31 @@ export default function DashboardPage() {
     <PageMeta title="Dashboard | Viviendas León" description="Indicadores de actividades y programas" />
     <div className="flex flex-wrap items-center justify-between gap-4">
       <div><h1 className="flex items-center gap-2 text-2xl font-semibold text-gray-900 dark:text-white"><ChartNoAxesCombined size={25} className="text-brand-600"/> Dashboard</h1><p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{institucional ? 'Resumen institucional' : 'Mi actividad'}</p></div>
-      <div className="flex items-center gap-2"><label htmlFor="dashboard-meses" className="sr-only">Período</label><select id="dashboard-meses" value={meses} onChange={event => setMeses(Number(event.target.value) as 3 | 6 | 12)} className="rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"><option value={3}>3 meses</option><option value={6}>6 meses</option><option value={12}>12 meses</option></select><button type="button" onClick={actualizar} aria-label="Actualizar indicadores" disabled={cargando} className="rounded-lg border border-gray-300 p-2.5 text-gray-600 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300"><RefreshCw size={18}/></button></div>
+      <div className="flex flex-wrap items-center gap-2">
+        {institucional && <span className="mr-1 inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400"><Filter size={15}/> Filtros</span>}
+        <label htmlFor="dashboard-meses" className="sr-only">Período</label>
+        <select id="dashboard-meses" value={meses} onChange={event => setMeses(Number(event.target.value) as 3 | 6 | 12)} className="rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"><option value={3}>3 meses</option><option value={6}>6 meses</option><option value={12}>12 meses</option></select>
+        {institucional && <>
+          <label htmlFor="dashboard-comunidad" className="sr-only">Comunidad</label>
+          <select id="dashboard-comunidad" value={comunidadId ?? ''} onChange={event => setComunidadId(event.target.value ? Number(event.target.value) : undefined)} disabled={!opciones}
+            className="max-w-48 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+            <option value="">Todas las comunidades</option>
+            {opciones?.comunidades.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+          </select>
+          <label htmlFor="dashboard-responsable" className="sr-only">Responsable (solo actividades)</label>
+          <select id="dashboard-responsable" value={responsableId ?? ''} onChange={event => setResponsableId(event.target.value ? Number(event.target.value) : undefined)} disabled={!opciones}
+            title="Solo filtra visitas y capacitaciones" className="max-w-48 rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+            <option value="">Todos los responsables</option>
+            {opciones?.responsables.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+          </select>
+        </>}
+        <button type="button" onClick={restablecer} disabled={meses === 6 && !comunidadId && !responsableId} aria-label="Restablecer filtros" title="Restablecer filtros"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-600 disabled:opacity-40 dark:border-gray-700 dark:text-gray-300"><RotateCcw size={16}/> Limpiar</button>
+        <button type="button" onClick={actualizar} aria-label="Actualizar indicadores" disabled={cargando} title="Actualizar indicadores" className="rounded-lg border border-gray-300 p-2.5 text-gray-600 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300"><RefreshCw size={18}/></button>
+      </div>
     </div>
+    {institucional && errorOpciones && <p role="status" className="-mt-2 text-xs text-amber-600">No se pudieron cargar las opciones de filtros.</p>}
     <div className="dashboard-content-enter space-y-6">{contenido}</div>
-    {detalleAbierto && <IndicadorDetalleDialog key={`${detalleAbierto}-${meses}`} tipo={detalleAbierto} meses={meses} cerrar={cerrarDetalle}/>}
+    {detalleAbierto && <IndicadorDetalleDialog key={`${detalleAbierto}-${meses}-${comunidadId ?? 0}-${responsableId ?? 0}`} tipo={detalleAbierto} meses={meses} filtros={filtros} cerrar={cerrarDetalle}/>}
   </main>
 }
