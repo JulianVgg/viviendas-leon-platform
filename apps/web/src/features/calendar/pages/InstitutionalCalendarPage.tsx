@@ -37,6 +37,16 @@ function itemTitle(item: CalendarItem): string {
   if (item.kind === 'technical') return technicalTitle(item.visit)
   return `Capacitación · ${item.training.tema}`
 }
+// Segunda línea compacta: horario y responsable, sin expandir las tarjetas.
+function horarioActividad(item: CalendarItem): string {
+  const dato = item.kind === 'institutional' ? item.event : item.kind === 'technical' ? item.visit : item.training
+  if (dato.horaInicio && dato.horaFin) return `${dato.horaInicio}–${dato.horaFin}`
+  return item.kind === 'institutional' ? 'Todo el día' : ''
+}
+function resumenActividad(item: CalendarItem): string {
+  return [horarioActividad(item), responsableActividad(item)].filter(Boolean).join(' · ')
+}
+
 function itemColor(item: CalendarItem): string {
   if (item.kind === 'institutional') return eventColor(item.event.categoria)
   if (item.kind === 'training') return 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900 dark:bg-violet-500/15 dark:text-violet-200'
@@ -292,10 +302,11 @@ export default function InstitutionalCalendarPage() {
                           onDoubleClick={click => click.stopPropagation()}
                           onClick={() => viewItem(event)}
                           aria-busy={event.kind === 'technical' && loadingVisitId === event.visit.id}
-                          title={`${itemTitle(event)} · ${responsableActividad(event) || 'Sin responsable'}`}
-                          className={`block w-full truncate rounded-md border border-l-[3px] px-2 py-1.5 text-left text-[11px] font-medium transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-brand-500 ${itemColor(event)}`}
+                          title={`${itemTitle(event)} · ${resumenActividad(event)}`}
+                          className={`block w-full rounded-md border border-l-[3px] px-2 py-1.5 text-left transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-brand-500 ${itemColor(event)}`}
                         >
-                          {itemTitle(event)}
+                          <span className="block truncate text-[11px] font-semibold">{itemTitle(event)}</span>
+                          <span className="mt-0.5 block truncate text-[10px] opacity-80">{resumenActividad(event)}</span>
                         </button>
                       ))}
                       {dayEvents.length > 3 && (
@@ -316,7 +327,7 @@ export default function InstitutionalCalendarPage() {
         </div>
         : <div className="max-h-[620px] space-y-2 overflow-y-auto p-4">
           {listadas.map(item => <button key={item.key} type="button" onClick={()=>viewItem(item)} aria-busy={item.kind === 'technical' && loadingVisitId === item.visit.id} className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 p-3 text-left hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800">
-            <span className="min-w-0"><span className="block text-sm font-semibold text-gray-800 dark:text-gray-100">{itemTitle(item)}</span><span className="mt-1 block text-xs text-gray-500">{responsableActividad(item)||'Sin responsable'}{comunidadActividad(item)?` · ${comunidadActividad(item)}`:''}</span></span>
+            <span className="min-w-0"><span className="block text-sm font-semibold text-gray-800 dark:text-gray-100">{itemTitle(item)}</span><span className="mt-1 block text-xs text-gray-500">{resumenActividad(item)}{comunidadActividad(item)?` · ${comunidadActividad(item)}`:''}</span></span>
             <span className="text-right text-xs text-gray-500">{readableDate(fechaActividad(item))}<span className="block capitalize">{estadoActividad(item,todayKey())}</span></span>
           </button>)}
           {!listadas.length && <p className="p-6 text-center text-sm text-gray-500">Sin actividades.</p>}
@@ -350,6 +361,10 @@ export default function InstitutionalCalendarPage() {
                 <dd className="mt-1 break-words font-medium text-gray-900 dark:text-gray-100">{selectedTraining.tema}</dd>
               </div>
               <div>
+                <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">Horario</dt>
+                <dd className="mt-1 text-gray-900 dark:text-gray-100">{selectedTraining.horaInicio && selectedTraining.horaFin ? `${selectedTraining.horaInicio}–${selectedTraining.horaFin}` : 'Sin horario'}</dd>
+              </div>
+              <div>
                 <dt className="text-xs font-medium text-gray-500 dark:text-gray-400">Estado</dt>
                 <dd className="mt-1 text-gray-900 dark:text-gray-100">{selectedTraining.estado}</dd>
               </div>
@@ -377,12 +392,13 @@ export default function InstitutionalCalendarPage() {
               onClick={() => viewItem(event)}
               className={`block w-full rounded-lg border border-l-4 p-3 text-left text-sm ${itemColor(event)}`}
             >
-              {itemTitle(event)}
+              <span className="block font-semibold">{itemTitle(event)}</span>
+              <span className="mt-1 block text-xs opacity-80">{resumenActividad(event)}</span>
             </button>
           ))}
           {selectedDayEvents.length === 0 && <p className="text-sm text-gray-500">No hay eventos para este día.</p>}
         </div>
-        {editable && dayList && (
+        {editable && dayList && dayList >= todayKey() && (
           <div className="mt-4 flex justify-end">
             <Button type="button" onClick={() => createEvent(dayList)}><Plus size={16} /> Crear evento</Button>
           </div>

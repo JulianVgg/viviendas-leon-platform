@@ -2,6 +2,8 @@ import { Router } from 'express'
 import { requireAuth } from '../auth/auth.middleware.js'
 import { getAuthenticatedUser } from '../auth/auth.service.js'
 import { obtenerResumenDashboard } from './dashboard-summary.service.js'
+import { obtenerIndicadoresFamiliasProgramas } from './families-programs.service.js'
+import { puedeEditarPerfilCompleto } from '../profile/profile.permissions.js'
 
 export const dashboardSummaryRouter = Router()
 dashboardSummaryRouter.use(requireAuth)
@@ -20,5 +22,21 @@ dashboardSummaryRouter.get('/', async (req, res) => {
   } catch (error) {
     console.error('[MON-01] No se pudo cargar el dashboard:', error)
     res.status(503).json({ error: { message: 'No fue posible consultar los indicadores.' } })
+  }
+})
+
+// MON-02: métricas institucionales, con verificación explícita de perfil.
+dashboardSummaryRouter.get('/familias-programas', async (req, res) => {
+  try {
+    const usuario = await getAuthenticatedUser(req.session.userId!)
+    if (!usuario) { res.status(401).json({ error: 'Sesión inválida.' }); return }
+    if (!puedeEditarPerfilCompleto(usuario.roles)) {
+      res.status(403).json({ error: 'No tienes permiso para consultar los indicadores institucionales.' }); return
+    }
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.json(await obtenerIndicadoresFamiliasProgramas())
+  } catch (error) {
+    console.error('[MON-02] Error consultando indicadores de familias:', error)
+    res.status(503).json({ error: 'No fue posible consultar la participación por programa.' })
   }
 })
