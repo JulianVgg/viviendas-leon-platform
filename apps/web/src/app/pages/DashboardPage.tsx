@@ -2,10 +2,13 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import { AlertCircle, CalendarDays, ChartNoAxesCombined, CheckCircle2, GraduationCap, Leaf, RefreshCw, Sprout, UsersRound } from 'lucide-react'
 import PageMeta from '@/components/common/PageMeta'
-import { consultarDashboard, consultarFamiliasProgramas, consultarIndicadoresVisitasCapacitaciones, type ResumenDashboard, type ResumenFamiliasProgramas, type IndicadoresVisitasCapacitaciones, type TipoDetalleIndicador } from '@/features/dashboard/services/dashboardSummaryService'
+import { consultarDashboard, consultarFamiliasProgramas, consultarIndicadoresVisitasCapacitaciones, consultarIndicadoresAgricolas, type IndicadoresAgricolas, type ResumenDashboard, type ResumenFamiliasProgramas, type IndicadoresVisitasCapacitaciones, type TipoDetalleIndicador } from '@/features/dashboard/services/dashboardSummaryService'
 import FamiliasProgramasPanel from '@/features/dashboard/pages/FamiliasProgramasPanel'
 import VisitasCapacitacionesPanel from '@/features/dashboard/pages/VisitasCapacitacionesPanel'
 import IndicadorDetalleDialog from '@/features/dashboard/pages/IndicadorDetalleDialog'
+import AgriculturaProduccionPanel from '@/features/dashboard/pages/AgriculturaProduccionPanel'
+import { ProAreaChart } from '@/features/dashboard/charts/TailAdminCharts'
+import { seriesActividad } from '@/features/dashboard/lib/chartSeries'
 
 const tarjeta = 'rounded-2xl border border-gray-200 bg-white p-5 shadow-theme-xs transition-[box-shadow,transform] duration-300 hover:-translate-y-0.5 hover:shadow-lg dark:border-gray-800 dark:bg-gray-900'
 type Icono = typeof UsersRound
@@ -20,41 +23,13 @@ function Indicador({ etiqueta, valor, icono: Icono, onClick }: { etiqueta: strin
 }
 
 function GraficaActividad({ datos }: { datos: ResumenDashboard['actividadMensual'] }) {
-  const maximo = Math.max(1, ...datos.flatMap(d => [d.visitas, d.capacitaciones]))
-  const w = 670, h = 216, left = 37, right = 14, top = 20, bottom = 30
-  const x = (i: number) => left + (datos.length === 1 ? 0 : i * (w-left-right)/(datos.length-1))
-  const y = (n: number) => h-bottom-n*(h-top-bottom)/maximo
-  const smooth = (clave: 'visitas'|'capacitaciones') => {
-    const points = datos.map((d,i)=>[x(i),y(d[clave])] as const)
-    if (!points.length) return ''
-    return points.slice(1).reduce((path,p,i)=>{
-      const prev=points[i]; const middle=(prev[0]+p[0])/2
-      return `${path} C ${middle} ${prev[1]}, ${middle} ${p[1]}, ${p[0]} ${p[1]}`
-    },`M ${points[0][0]} ${points[0][1]}`)
-  }
-  const sinDatos = datos.every(d => d.visitas===0 && d.capacitaciones===0)
-  const base = h-bottom
-  return <section className={tarjeta}>
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h2 className="text-base font-semibold text-gray-800 dark:text-white">Actividad por mes</h2>
-      <div className="flex flex-wrap gap-4 text-xs text-gray-500 dark:text-gray-400"><span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-[#3C6E8E]"/>Visitas realizadas</span><span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-[#15A38D]"/>Capacitaciones</span></div></div>
-    <style>{`@keyframes dashboardFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }`}</style>
-    <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Visitas realizadas y capacitaciones por mes" className="h-auto w-full overflow-visible" preserveAspectRatio="xMidYMid meet">
-      <defs><linearGradient id="dash-visitas" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#3C6E8E" stopOpacity=".24"/><stop offset="100%" stopColor="#3C6E8E" stopOpacity="0"/></linearGradient>
-        <linearGradient id="dash-capacitaciones" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#15A38D" stopOpacity=".17"/><stop offset="100%" stopColor="#15A38D" stopOpacity="0"/></linearGradient></defs>
-      {[0,.25,.5,.75,1].map((f,i)=><g key={i}><line x1={left} y1={y(maximo*f)} x2={w-right} y2={y(maximo*f)} stroke="currentColor" className="text-gray-100 dark:text-gray-800"/><text x={left-8} y={y(maximo*f)+4} textAnchor="end" fontSize="11" fill="currentColor" className="text-gray-400">{Math.round(maximo*f)}</text></g>)}
-      {!sinDatos && <>
-        <path d={`${smooth('visitas')} L ${x(datos.length-1)} ${base} L ${x(0)} ${base} Z`} fill="url(#dash-visitas)"/>
-        <path d={`${smooth('capacitaciones')} L ${x(datos.length-1)} ${base} L ${x(0)} ${base} Z`} fill="url(#dash-capacitaciones)"/>
-        <path d={smooth('visitas')} fill="none" stroke="#3C6E8E" strokeWidth="3.5" strokeLinecap="round" className="motion-safe:animate-[dashboardFade_.7s_ease-out]"/>
-        <path d={smooth('capacitaciones')} fill="none" stroke="#15A38D" strokeWidth="3" strokeLinecap="round" className="motion-safe:animate-[dashboardFade_.9s_ease-out]"/>
-        {datos.map((d,i)=><g key={d.mes}>
-          <circle cx={x(i)} cy={y(d.visitas)} r="5" fill="#3C6E8E" stroke="white" strokeWidth="2"><title>{d.mes}: {d.visitas} visitas realizadas</title></circle>
-          <circle cx={x(i)} cy={y(d.capacitaciones)} r="4.5" fill="#15A38D" stroke="white" strokeWidth="2"><title>{d.mes}: {d.capacitaciones} capacitaciones</title></circle>
-        </g>)}
-      </>}
-      {datos.map((d,i)=><text key={d.mes} x={x(i)} y={h-5} fontSize="12" textAnchor="middle" fill="currentColor" className="text-gray-500 dark:text-gray-400">{d.etiqueta}</text>)}
-    </svg>
-    {sinDatos && <p className="mt-2 text-center text-sm text-gray-500">Sin actividad en este período.</p>}
+  const { labels, series } = seriesActividad(datos)
+  const sinActividad = datos.every(dato => dato.visitas === 0 && dato.capacitaciones === 0)
+  return <section className={tarjeta} aria-label="Actividad mensual">
+    <h2 className="mb-3 text-base font-semibold text-gray-800 dark:text-white">Actividad por mes</h2>
+    {sinActividad
+      ? <p className="py-20 text-center text-sm text-gray-500">Sin actividad en este período.</p>
+      : <ProAreaChart labels={labels} series={series} ariaLabel="Visitas realizadas y capacitaciones por mes" height={280}/>}
   </section>
 }
 
@@ -68,6 +43,8 @@ export default function DashboardPage() {
   const [error, setError] = useState('')
   const [indicadoresOperativos, setIndicadoresOperativos] = useState<IndicadoresVisitasCapacitaciones | null>(null)
   const [errorOperativos, setErrorOperativos] = useState('')
+  const [agricultura, setAgricultura] = useState<IndicadoresAgricolas|null>(null)
+  const [errorAgricultura, setErrorAgricultura] = useState('')
   const [detalleAbierto, setDetalleAbierto] = useState<TipoDetalleIndicador | null>(null)
   const cerrarDetalle = useCallback(() => setDetalleAbierto(null), [])
   const actualizar = useCallback(() => setActualizacion(v => v + 1), [])
@@ -104,6 +81,17 @@ export default function DashboardPage() {
     return () => controller.abort()
   }, [meses, actualizacion])
 
+  // No solicitar información agrícola institucional desde cuentas operativas.
+  useEffect(() => {
+    if (resumen?.alcance !== 'INSTITUCIONAL') { setAgricultura(null); return }
+    const controller = new AbortController()
+    setErrorAgricultura(''); setAgricultura(null)
+    void consultarIndicadoresAgricolas(meses, controller.signal).then(data => {
+      if (!controller.signal.aborted) setAgricultura(data)
+    }).catch(() => { if (!controller.signal.aborted) setErrorAgricultura('No se pudieron cargar los indicadores agrícolas.') })
+    return () => controller.abort()
+  }, [resumen?.alcance, meses, actualizacion])
+
   const institucional = resumen?.alcance === 'INSTITUCIONAL'
   const indicadores: Array<{ etiqueta: string; valor: number; icono: Icono; tipo: TipoDetalleIndicador }> = []
   if (resumen) {
@@ -127,19 +115,21 @@ export default function DashboardPage() {
     {indicadoresOperativos && <VisitasCapacitacionesPanel datos={indicadoresOperativos}/>}
     {errorOperativos && <p role="alert" className="text-sm text-rose-600">{errorOperativos}</p>}
     {institucional && familiasProgramas && <FamiliasProgramasPanel datos={familiasProgramas} />}
+    {institucional && agricultura && <AgriculturaProduccionPanel datos={agricultura}/>}
+    {institucional && errorAgricultura && <p role="alert" className="text-sm text-rose-600">{errorAgricultura}</p>}
     {institucional && !familiasProgramas && !errorFamilias && <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-500 dark:border-gray-800 dark:bg-gray-900">Cargando participación...</div>}
     {institucional && errorFamilias && <p role="alert" className="text-sm text-rose-600">{errorFamilias}</p>}
     <div className="flex flex-wrap items-center gap-3 text-sm">
       <Link to="/mi-agenda" className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2.5 font-medium text-brand-700 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-brand-300"><CalendarDays size={16}/> Mi agenda</Link>
     </div>
   </>
-  return <main className="mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6">
+  return <main className="dashboard-page-enter mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6">
     <PageMeta title="Dashboard | Viviendas León" description="Indicadores de actividades y programas" />
     <div className="flex flex-wrap items-center justify-between gap-4">
       <div><h1 className="flex items-center gap-2 text-2xl font-semibold text-gray-900 dark:text-white"><ChartNoAxesCombined size={25} className="text-brand-600"/> Dashboard</h1><p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{institucional ? 'Resumen institucional' : 'Mi actividad'}</p></div>
       <div className="flex items-center gap-2"><label htmlFor="dashboard-meses" className="sr-only">Período</label><select id="dashboard-meses" value={meses} onChange={event => setMeses(Number(event.target.value) as 3 | 6 | 12)} className="rounded-lg border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200"><option value={3}>3 meses</option><option value={6}>6 meses</option><option value={12}>12 meses</option></select><button type="button" onClick={actualizar} aria-label="Actualizar indicadores" disabled={cargando} className="rounded-lg border border-gray-300 p-2.5 text-gray-600 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300"><RefreshCw size={18}/></button></div>
     </div>
-    {contenido}
+    <div className="dashboard-content-enter space-y-6">{contenido}</div>
     {detalleAbierto && <IndicadorDetalleDialog key={`${detalleAbierto}-${meses}`} tipo={detalleAbierto} meses={meses} cerrar={cerrarDetalle}/>}
   </main>
 }

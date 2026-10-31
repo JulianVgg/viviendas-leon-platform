@@ -66,3 +66,23 @@ export async function consultarIndicadoresVisitasCapacitaciones(meses: 3|6|12, s
   if (!r.ok) throw new Error('No se pudieron consultar las actividades.')
   return await r.json() as IndicadoresVisitasCapacitaciones
 }
+
+export type IndicadoresAgricolas = {
+  alcance: 'INSTITUCIONAL'
+  periodo: { meses:number; desde:string; hasta:string }
+  indicadores: {
+    ciclosRegistrados:number; ciclosActivos:number; ciclosFinalizados:number
+    variedadesActivas:number; familiasConSiembras:number; plantasActivas:number
+    registrosProduccion:number; produccionKg:number; produccionUnidades:number; unidadesNoComparables:number
+  }
+  visitasConProduccion:number
+  porCultivo:Array<{id:number;nombre:string;ciclos:number;activos:number;plantas:number;kg:number;unidades:number}>
+  porComunidad:Array<{nombre:string;familias:number;ciclosActivos:number}>
+  produccionMensual:Array<{mes:string;kg:number;unidades:number;registros:number}>
+}
+export async function consultarIndicadoresAgricolas(meses: 3|6|12, signal?: AbortSignal): Promise<IndicadoresAgricolas> {
+  const response = await fetch(`/api/v1/dashboard/resumen/agricultura-produccion?meses=${meses}`,
+    {credentials:'same-origin',cache:'no-store',signal,headers:{Accept:'application/json'}})
+  if (!response.ok) throw new Error('No se pudieron consultar los indicadores agrícolas.')
+  return (await response.json()) as IndicadoresAgricolas
+}
