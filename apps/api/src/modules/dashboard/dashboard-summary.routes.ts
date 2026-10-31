@@ -6,6 +6,7 @@ import { obtenerIndicadoresFamiliasProgramas } from './families-programs.service
 import { puedeEditarPerfilCompleto } from '../profile/profile.permissions.js'
 import { obtenerDetalleIndicador, TIPOS_DETALLE } from './dashboard-detail.service.js'
 import { obtenerIndicadoresVisitasCapacitaciones } from './visits-training.service.js'
+import { obtenerIndicadoresAgricolas } from './agriculture-production.service.js'
 
 export const dashboardSummaryRouter = Router()
 dashboardSummaryRouter.use(requireAuth)
@@ -78,5 +79,23 @@ dashboardSummaryRouter.get('/detalle', async (req, res) => {
   } catch (error) {
     console.error('[MON-03] Error consultando detalle:', error)
     res.status(503).json({ error: 'No fue posible consultar el detalle.' })
+  }
+})
+
+// MON-04: indicadores agrícolas y producción real, solo para supervisión autorizada.
+dashboardSummaryRouter.get('/agricultura-produccion', async (req, res) => {
+  const meses = Number(req.query.meses ?? 6)
+  if (![3, 6, 12].includes(meses)) { res.status(400).json({ error: 'Período inválido.' }); return }
+  try {
+    const usuario = await getAuthenticatedUser(req.session.userId!)
+    if (!usuario) { res.status(401).json({ error: 'Sesión inválida.' }); return }
+    if (!puedeEditarPerfilCompleto(usuario.roles)) {
+      res.status(403).json({ error: 'No autorizado.' }); return
+    }
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.json(await obtenerIndicadoresAgricolas(meses))
+  } catch (error) {
+    console.error('[MON-04] Error consultando producción agrícola:', error)
+    res.status(503).json({ error: 'No fue posible consultar los indicadores agrícolas.' })
   }
 })

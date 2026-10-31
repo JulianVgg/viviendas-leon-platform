@@ -329,3 +329,42 @@
     transition: background-color 220ms ease, border-color 220ms ease, color 220ms ease;
   }
 }
+
+/* Entrada de página consistente con diálogos y tarjetas del sistema. */
+@keyframes dashboard-page-show {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes dashboard-content-show {
+  from { opacity: 0; transform: translateY(9px) scale(.992); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.dashboard-page-enter { animation: dashboard-page-show 260ms cubic-bezier(.2,.8,.25,1) both; }
+.dashboard-content-enter { animation: dashboard-content-show 340ms cubic-bezier(.2,.8,.25,1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-page-enter, .dashboard-content-enter { animation: none; }
+}
+
+/* Integración de las gráficas originales ApexCharts de TailAdmin Pro. */
+.dashboard-pro-chart .apexcharts-canvas,
+.dashboard-pro-chart .apexcharts-svg {
+  max-width: 100%;
+}
+.dashboard-pro-chart .apexcharts-tooltip,
+.dashboard-pro-chart .apexcharts-xaxistooltip {
+  border-radius: 10px;
+  font-family: "PT Sans", "Segoe UI", sans-serif;
+  box-shadow: 0 8px 28px rgb(16 24 40 / 12%);
+}
+.dark .dashboard-pro-chart .apexcharts-tooltip,
+.dark .dashboard-pro-chart .apexcharts-xaxistooltip {
+  box-shadow: 0 8px 28px rgb(0 0 0 / 24%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-pro-chart *,
+  .dashboard-pro-chart *::before,
+  .dashboard-pro-chart *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
