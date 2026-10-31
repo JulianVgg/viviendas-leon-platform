@@ -7,6 +7,8 @@ import FamiliasProgramasPanel from '@/features/dashboard/pages/FamiliasProgramas
 import VisitasCapacitacionesPanel from '@/features/dashboard/pages/VisitasCapacitacionesPanel'
 import IndicadorDetalleDialog from '@/features/dashboard/pages/IndicadorDetalleDialog'
 import AgriculturaProduccionPanel from '@/features/dashboard/pages/AgriculturaProduccionPanel'
+import AlertasSeguimientosPanel from '@/features/dashboard/pages/AlertasSeguimientosPanel'
+import { consultarResumenAlertas, type ResumenAlertas } from '@/features/dashboard/services/dashboardSummaryService'
 import { ProAreaChart } from '@/features/dashboard/charts/TailAdminCharts'
 import { seriesActividad } from '@/features/dashboard/lib/chartSeries'
 import type { FiltrosDashboard } from '@/features/dashboard/lib/dashboardFilters'
@@ -50,6 +52,8 @@ export default function DashboardPage() {
   const [errorOperativos, setErrorOperativos] = useState('')
   const [agricultura, setAgricultura] = useState<IndicadoresAgricolas|null>(null)
   const [errorAgricultura, setErrorAgricultura] = useState('')
+  const [alertas, setAlertas] = useState<ResumenAlertas | null>(null)
+  const [errorAlertas, setErrorAlertas] = useState('')
   const [detalleAbierto, setDetalleAbierto] = useState<TipoDetalleIndicador | null>(null)
   const filtros: FiltrosDashboard = { comunidadId, responsableId }
   const restablecer = () => { setMeses(6); setComunidadId(undefined); setResponsableId(undefined) }
@@ -109,6 +113,17 @@ export default function DashboardPage() {
     return () => controller.abort()
   }, [resumen?.alcance, actualizacion])
 
+  // MON-06: los pendientes son vigentes, no dependen del período de estadísticas.
+  useEffect(() => {
+    const controller = new AbortController()
+    setErrorAlertas('')
+    setAlertas(null)
+    void consultarResumenAlertas(controller.signal, filtros)
+      .then(datos => { if (!controller.signal.aborted) setAlertas(datos) })
+      .catch(() => { if (!controller.signal.aborted) setErrorAlertas('No se pudieron cargar las alertas.') })
+    return () => controller.abort()
+  }, [comunidadId, responsableId, actualizacion])
+
   const institucional = resumen?.alcance === 'INSTITUCIONAL'
   const indicadores: Array<{ etiqueta: string; valor: number; icono: Icono; tipo: TipoDetalleIndicador }> = []
   if (resumen) {
@@ -132,6 +147,8 @@ export default function DashboardPage() {
     {indicadoresOperativos && <VisitasCapacitacionesPanel datos={indicadoresOperativos}/>}
     {errorOperativos && <p role="alert" className="text-sm text-rose-600">{errorOperativos}</p>}
     {institucional && familiasProgramas && <FamiliasProgramasPanel datos={familiasProgramas} />}
+    {alertas && <AlertasSeguimientosPanel datos={alertas} filtros={filtros}/>}
+    {errorAlertas && <p role="alert" className="text-sm text-rose-600">{errorAlertas}</p>}
     {institucional && agricultura && <AgriculturaProduccionPanel datos={agricultura}/>}
     {institucional && errorAgricultura && <p role="alert" className="text-sm text-rose-600">{errorAgricultura}</p>}
     {institucional && !familiasProgramas && !errorFamilias && <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-500 dark:border-gray-800 dark:bg-gray-900">Cargando participación...</div>}

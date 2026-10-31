@@ -97,3 +97,54 @@ export async function consultarOpcionesFiltrosDashboard(signal?: AbortSignal): P
   if (!r.ok) throw new Error('No se pudieron cargar los filtros.')
   return await r.json() as OpcionesFiltrosDashboard
 }
+
+// MON-06: alertas y compromisos actuales, independientes del período estadístico.
+export type RegistroAlerta = {
+  id: string
+  tipo: 'VISITA' | 'COMPROMISO'
+  titulo: string
+  fecha: string | null
+  estado: 'VENCIDA' | 'PENDIENTE'
+  comunidad: string
+  familia?: string
+  responsable: string
+  revisionProximaVisita?: boolean
+  destino: string
+}
+export type ResumenAlertas = {
+  fechaHoy: string
+  indicadores: { visitasVencidas: number; compromisosPendientes: number; compromisosVencidos: number }
+  visitas: RegistroAlerta[]
+  compromisos: RegistroAlerta[]
+}
+export type TipoListaAlertas = 'visitas' | 'compromisos'
+export type SituacionListaAlertas = 'todas' | 'vencidas'
+export type DetalleAlertas = {
+  tipo: TipoListaAlertas
+  situacion: SituacionListaAlertas
+  pagina: number
+  limite: number
+  total: number
+  totalPaginas: number
+  registros: RegistroAlerta[]
+}
+export async function consultarResumenAlertas(signal?: AbortSignal, filtros: FiltrosDashboard = {}): Promise<ResumenAlertas | null> {
+  const parametros = agregarFiltrosDashboard(new URLSearchParams(), filtros)
+  const r = await fetch(`/api/v1/dashboard/resumen/alertas?${parametros}`, {
+    credentials: 'same-origin', cache: 'no-store', signal, headers: { Accept: 'application/json' },
+  })
+  if (r.status === 403) return null // Usuario sin acceso operativo; no mostrar indicadores técnicos.
+  if (!r.ok) throw new Error('No se pudieron consultar las alertas.')
+  return (await r.json()) as ResumenAlertas
+}
+export async function consultarDetalleAlertas(
+  tipo: TipoListaAlertas, situacion: SituacionListaAlertas, pagina: number, signal?: AbortSignal,
+  filtros: FiltrosDashboard = {},
+): Promise<DetalleAlertas> {
+  const parametros = agregarFiltrosDashboard(new URLSearchParams({ tipo, situacion, pagina: String(pagina), limite: '10' }), filtros)
+  const r = await fetch(`/api/v1/dashboard/resumen/alertas/detalle?${parametros}`, {
+    credentials: 'same-origin', cache: 'no-store', signal, headers: { Accept: 'application/json' },
+  })
+  if (!r.ok) throw new Error('No se pudo consultar el detalle de las alertas.')
+  return (await r.json()) as DetalleAlertas
+}
