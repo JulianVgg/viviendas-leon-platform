@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router'
 import AppLayout from '@/app/layout/AppLayout'
 import DashboardPage from '@/app/pages/DashboardPage'
 import MiAgendaPage from '@/features/dashboard/pages/MiAgendaPage'
+import IndicadoresFamiliasPage from '@/features/dashboard/pages/IndicadoresFamiliasPage'
 import ModulePage from '@/components/common/ModulePage'
 
 import FamilyListPage from '@/features/families/pages/FamilyListPage'
@@ -13,6 +14,7 @@ import HuertosPage, { CreateGardenPage } from '@/features/agriculture/pages/Huer
 import CultivosPage from '@/features/agriculture/pages/CultivosPage'
 import CiclosAgricolasPage from '@/features/agriculture/pages/CiclosAgricolasPage'
 import CicloDetallePage from '@/features/agriculture/pages/CicloDetallePage'
+import ProduccionPage from '@/features/agriculture/pages/ProduccionPage'
 
 import OfflineTestPage from '@/features/offline/pages/OfflineTestPage'
 import OfflineOperationsTestPage from '@/features/offline/pages/OfflineOperationsTestPage'
@@ -213,14 +215,7 @@ export default function AppRoutes() {
           <Route path="gestion-agricola/ciclos" element={<CiclosAgricolasPage />} />
           <Route path="gestion-agricola/ciclos/:id" element={<CicloDetallePage />} />
           <Route path="gestion-agricola/cultivos" element={<Navigate to="/administracion/cultivos" replace />} />
-          <Route
-            path="gestion-agricola/produccion"
-            element={module(
-              'Producción',
-              'Vista base para el seguimiento de producción agrícola.',
-              ['Periodo', 'Cultivo', 'Resultado'],
-            )}
-          />
+          <Route path="gestion-agricola/produccion" element={<ProduccionPage />} />
 
           <Route
             path="gestion-agricola/control-fitosanitario"
@@ -297,11 +292,7 @@ export default function AppRoutes() {
 
           <Route
             path="reportes/indicadores"
-            element={module(
-              'Indicadores',
-              'Vista base para indicadores de seguimiento.',
-              ['Indicador', 'Periodo', 'Valor'],
-            )}
+            element={<IndicadoresFamiliasPage />}
           />
 
           <Route

@@ -8,12 +8,13 @@ import PageMeta from '@/components/common/PageMeta'
 import PageHeader from '@/components/common/PageHeader'
 import LoadingState from '@/components/ui/LoadingState'
 import { useAuth } from '@/features/auth/AuthProvider'
-import { canViewPath } from '@/features/auth/screenPermissions'
+import { canViewPath, canWriteProduction } from '@/features/auth/screenPermissions'
 import { listCycles, type Cycle } from '../services/cyclesService'
 
 export default function CiclosAgricolasPage() {
   const { usuario } = useAuth()
   const allowed = Boolean(usuario && canViewPath(usuario, '/gestion-agricola/ciclos'))
+  const canRegisterProduction = Boolean(usuario && canViewPath(usuario, '/gestion-agricola/produccion') && canWriteProduction(usuario))
   const [data, setData] = useState<Cycle[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -60,6 +61,7 @@ export default function CiclosAgricolasPage() {
         <p className="mt-1 text-xs text-slate-500">Plantas iniciales: {cycle.cantidadPlantas ?? 'No indicado'}</p>
         <Link to={`/familias/${cycle.huerto.familiaId}?tab=gardens`} className="mt-3 inline-block text-sm font-medium text-brand-600 underline">Abrir expediente</Link>
         <Link to={`/gestion-agricola/ciclos/${cycle.id}`} className="ml-3 inline-block text-sm font-medium text-brand-600 underline">Ver seguimiento</Link>
+        {canRegisterProduction && <Link to={`/gestion-agricola/produccion?cicloId=${cycle.id}`} className="ml-3 inline-block text-sm font-medium text-brand-600 underline">Registrar cosecha</Link>}
       </article>)}</div>}
     </CardBody></Card>
   </>

@@ -77,6 +77,10 @@ export function canWriteCrops(usuario: PermissionUser): boolean {
   return isDireccionGeneral(usuario) || usuario.permisos.includes('CULTIVOS_WRITE')
 }
 
+export function canWriteProduction(usuario: PermissionUser): boolean {
+  return isDireccionGeneral(usuario) || usuario.permisos.includes('PRODUCCION_WRITE')
+}
+
 export function canWriteCommunities(usuario: PermissionUser): boolean {
   return isDireccionGeneral(usuario) || usuario.permisos.includes('COMUNIDADES_WRITE')
 }

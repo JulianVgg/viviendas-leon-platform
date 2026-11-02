@@ -11,7 +11,8 @@
     "test:qa": "npm run build && node --test tests/families-integral.qa.test.mjs",
     "test:management:qa": "npm run build && node --test tests/families-management.qa.test.mjs",
     "postinstall": "prisma skills sync || exit 0",
-    "test:gardens": "npm run build && node --test tests/gardens.validation.test.mjs"
+    "test:gardens": "npm run build && node --test tests/gardens.validation.test.mjs",
+    "test:production": "npm run build && node --test tests/production.validation.test.mjs tests/production-mon04.contract.test.mjs"
   },
   "description": "",
   "main": "index.js",

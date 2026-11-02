@@ -16,7 +16,7 @@ const inputClass = 'min-h-11 w-full rounded-lg border border-gray-300 bg-white p
 const labelClass = 'mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-200'
 const initial = (date: string): CalendarEventInput => ({
   categoria: 'SOPORTE', titulo: 'Visita de soporte técnico',
-  fechaInicio: date, descripcion: '', participantesIds: [], recordatorios: [{ tipo: 'DIA_ANTES' }],
+  fechaInicio: date, descripcion: '', todoElDia: true, horaInicio: null, horaFin: null, participantesIds: [], recordatorios: [{ tipo: 'DIA_ANTES' }],
 })
 const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 const isSelectableType = (category: string) => eventTypes.some(item => item.id === category)
@@ -49,6 +49,8 @@ export default function InstitutionalEventDialog({
       categoria: isSelectableType(selected.categoria) ? selected.categoria : 'OTRO',
       titulo: isSelectableType(selected.categoria) ? eventDisplayTitle(selected) : selected.titulo,
       fechaInicio: selected.fechaInicio,
+      todoElDia: !selected.horaInicio || !selected.horaFin,
+      horaInicio: selected.horaInicio, horaFin: selected.horaFin,
       descripcion: selected.descripcion,
       participantesIds: selected.participantes.map(person => person.id),
       recordatorios: selected.recordatorios === null ? [{ tipo: 'DIA_ANTES' }] : selected.recordatorios.filter(item => item.tipo !== 'PERSONALIZADO'),
@@ -98,6 +100,10 @@ export default function InstitutionalEventDialog({
     }
     if (!data.fechaInicio || data.fechaInicio < todayInGuatemala()) {
       setError('Selecciona una fecha a partir de hoy.')
+      return
+    }
+    if (!data.todoElDia && (!data.horaInicio || !data.horaFin || data.horaInicio >= data.horaFin)) {
+      setError('La hora de finalización debe ser posterior a la hora de inicio.')
       return
     }
     setBusy(true)
@@ -175,6 +181,23 @@ export default function InstitutionalEventDialog({
             onChange={event => setData(current => ({ ...current, fechaInicio: event.target.value }))}
           />
         </div>
+
+        <fieldset className="space-y-3 rounded-xl border border-gray-200 p-4 dark:border-gray-700" disabled={!editable || busy}>
+          <legend className="px-1 text-sm font-semibold text-gray-800 dark:text-gray-100">Horario</legend>
+          <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-200">
+            <input type="checkbox" checked={data.todoElDia} onChange={event => setData(current => ({ ...current,
+              todoElDia: event.target.checked, horaInicio: event.target.checked ? null : '08:00', horaFin: event.target.checked ? null : '09:00',
+            }))} className="size-4 accent-brand-500" /> Todo el día
+          </label>
+          {!data.todoElDia && <div className="grid grid-cols-2 gap-3">
+            <label className={labelClass}>Desde
+              <input type="time" required value={data.horaInicio ?? ''} onChange={event => setData(current => ({...current, horaInicio: event.target.value}))} className={`${inputClass} mt-1.5`} />
+            </label>
+            <label className={labelClass}>Hasta
+              <input type="time" required min={data.horaInicio ?? undefined} value={data.horaFin ?? ''} onChange={event => setData(current => ({...current, horaFin: event.target.value}))} className={`${inputClass} mt-1.5`} />
+            </label>
+          </div>}
+        </fieldset>
 
         <div>
           <label htmlFor="institutional-description" className={labelClass}>Descripción (opcional)</label>

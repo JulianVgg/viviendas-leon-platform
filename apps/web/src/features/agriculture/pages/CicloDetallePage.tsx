@@ -10,6 +10,7 @@ import LoadingState from '@/components/ui/LoadingState'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { canViewPath } from '@/features/auth/screenPermissions'
 import { getCycle, listCycleSeguimientos, type Cycle, type CycleSeguimientosPage } from '../services/cyclesService'
+import CicloProduccionSection from '../components/CicloProduccionSection'
 
 const emptyPage = (): CycleSeguimientosPage => ({ items: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 1 } })
 
@@ -55,6 +56,7 @@ export default function CicloDetallePage() {
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Siembra: {cycle.fechaSiembra || 'Sin fecha'} · Trasplante: {cycle.fechaTrasplante || 'Sin fecha'} · Plantas iniciales: {cycle.cantidadPlantas ?? 'No registradas'}</p>
         {cycle.observaciones && <p className="mt-2 whitespace-pre-wrap text-sm">Observaciones iniciales: {cycle.observaciones}</p>}
       </CardBody></Card>
+      <CicloProduccionSection cicloId={cycle.id} />
       <Card><CardBody>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-lg font-semibold">Historial de evaluaciones</h2><p className="text-sm text-slate-500">{seguimientos.pagination.total} evaluaciones registradas</p></div></div>
         {!loading && !error && seguimientos.items.length === 0 && <p className="text-sm text-slate-500">Este ciclo todavía no tiene evaluaciones registradas.</p>}

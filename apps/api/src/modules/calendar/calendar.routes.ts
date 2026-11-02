@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express'
+import { Prisma } from '../../generated/prisma/client.js'
 import { getPrismaClient } from '../../config/prisma.js'
 import { requireAuth } from '../auth/auth.middleware.js'
 import { getAuthenticatedUser } from '../auth/auth.service.js'
@@ -8,6 +9,7 @@ import { actualizarRecordatorios, cancelarRecordatorios, configGuardada, configP
 import { descripcionAvisoCalendario, eventoTieneCambios, planificarCambioCalendario, type EventoResumen, type TipoAvisoCalendario } from '../notifications/notifications.activity.js'
 import { eventoYaFinalizo } from './event-history.js'
 import { fechaAnteriorAHoy } from './guatemala-date.js'
+import { horariosSeCruzan, interpretarHorario, type HorarioEvento } from './calendar-schedule.rules.js'
 
 export const calendarRouter = Router()
 calendarRouter.use(requireAuth)
@@ -78,9 +80,34 @@ function parseEvent(input: unknown) {
       !Array.isArray(participants) || participants.length > 300 ||
       !participants.every(id => Number.isSafeInteger(id) && id > 0) ||
       new Set(participants).size !== participants.length) return null
+  const horario = interpretarHorario(data.todoElDia, data.horaInicio, data.horaFin)
+  if (!horario) return null
   const recordatorios = parseReglas(data.recordatorios, date)
   if (recordatorios === undefined) return null
-  return { titulo: title, categoria, descripcion, date, participantesIds: participants as number[], recordatorios }
+  return { titulo: title, categoria, descripcion, date, participantesIds: participants as number[], recordatorios, ...horario }
+}
+
+// Serializa asignaciones del mismo día entre procesos distintos. Las visitas técnicas
+// tienen agenda propia y no participan en esta validación institucional.
+class ConflictoHorario extends Error {
+  constructor() { super('Uno o más participantes ya tienen otro evento en ese horario.') }
+}
+type TxCalendario = Prisma.TransactionClient
+async function verificarCruceInstitucional(tx: TxCalendario, fecha: string, horario: HorarioEvento,
+  participantesIds: number[], exceptId?: number) {
+  if (!participantesIds.length) return
+  const dayNumber = Math.floor(Date.parse(`${fecha}T00:00:00Z`) / 86400000)
+  // pg_advisory_xact_lock(2 x int4): libera el bloqueo al completar la transacción.
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(${81315}, ${dayNumber})::text`
+  const existentes = await tx.eventoInstitucional.findMany({
+    where: {
+      fechaInicio: new Date(`${fecha}T12:00:00Z`),
+      ...(exceptId ? { id: { not: exceptId } } : {}),
+      participantes: { some: { usuarioId: { in: participantesIds }, estadoInvitacion: { not: 'RECHAZADA' } } },
+    },
+    select: { horaInicio: true, horaFin: true },
+  })
+  if (existentes.some(evento => horariosSeCruzan(horario, evento))) throw new ConflictoHorario()
 }
 
 // El destinatario se determina en el servidor a partir de participantes reales.
@@ -132,7 +159,7 @@ calendarRouter.get('/', async (req: Request, res: Response) => {
         estado: { in: ['PROGRAMADA', 'REALIZADA'] },
       },
       select: {
-        id: true, fecha: true, estado: true,
+        id: true, fecha: true, estado: true, horaInicio: true, horaFin: true,
         familia: { select: { nombreReferencia: true, comunidad: { select: { nombre: true } } } },
         usuarioResponsable: { select: { id: true, nombre: true, apellido: true } },
       },
@@ -149,7 +176,7 @@ calendarRouter.get('/', async (req: Request, res: Response) => {
         },
       },
       select: {
-        id: true, tema: true, fecha: true, estado: true,
+        id: true, tema: true, fecha: true, estado: true, horaInicio: true, horaFin: true,
         facilitadorNombre: true,
         comunidad: { select: { nombre: true } },
       },
@@ -157,12 +184,15 @@ calendarRouter.get('/', async (req: Request, res: Response) => {
       take: 600,
     })
     res.setHeader('Cache-Control', 'private, no-store')
+    const hora = (valor: Date | null) => valor
+      ? `${String(valor.getUTCHours()).padStart(2, '0')}:${String(valor.getUTCMinutes()).padStart(2, '0')}` : null
     res.json({
       capacitaciones: trainings.map(training => ({
         id: training.id,
         tema: training.tema,
         fecha: training.fecha.toISOString().slice(0, 10),
         estado: training.estado,
+        horaInicio: hora(training.horaInicio), horaFin: hora(training.horaFin),
         facilitador: training.facilitadorNombre ?? '',
         comunidad: training.comunidad?.nombre ?? '',
       })),
@@ -170,6 +200,7 @@ calendarRouter.get('/', async (req: Request, res: Response) => {
         id: visit.id,
         fecha: visit.fecha.toISOString().slice(0, 10),
         estado: visit.estado,
+        horaInicio: hora(visit.horaInicio), horaFin: hora(visit.horaFin),
         familia: visit.familia.nombreReferencia,
         comunidad: visit.familia.comunidad.nombre,
         responsable: [visit.usuarioResponsable.nombre, visit.usuarioResponsable.apellido].filter(Boolean).join(' '),
@@ -272,6 +303,7 @@ calendarRouter.post('/', async (req: Request, res: Response) => {
           const mismosDatos = previo.creadoPorId === autorId && previo.titulo === data.titulo &&
             previo.categoria === data.categoria && (previo.descripcion ?? '') === data.descripcion &&
             previo.fechaInicio.toISOString().slice(0, 10) === data.date &&
+            previo.horaInicio === data.horaInicio && previo.horaFin === data.horaFin &&
             previo.participantes.length === data.participantesIds.length &&
             previo.participantes.every(p => data.participantesIds.includes(p.usuarioId)) &&
             JSON.stringify(configGuardada(previo.recordatoriosConfig, data.date)) === JSON.stringify(data.recordatorios)
@@ -279,15 +311,16 @@ calendarRouter.post('/', async (req: Request, res: Response) => {
           return { id: previo.id, duplicate: true }
         }
       }
+      await verificarCruceInstitucional(tx, data.date, data, data.participantesIds)
       const evento = await tx.eventoInstitucional.create({ data: {
         titulo: data.titulo, categoria: data.categoria, descripcion: data.descripcion || null, lugar: null,
         fechaInicio: new Date(`${data.date}T12:00:00Z`), fechaFin: new Date(`${data.date}T12:00:00Z`),
-        horaInicio: null, horaFin: null, responsableId: autorId,
+        horaInicio: data.horaInicio, horaFin: data.horaFin, responsableId: autorId,
         creadoPorId: autorId, operacionCreacionId: operationId, recordatoriosConfig: configParaPrisma(data.recordatorios),
         participantes: { create: data.participantesIds.map(usuarioId => ({ usuarioId, estadoInvitacion: 'PENDIENTE' })) },
       } })
       const resumen: EventoResumen = { titulo: data.titulo, categoria: data.categoria,
-        descripcion: data.descripcion || null, fecha: data.date, participantesIds: data.participantesIds }
+        descripcion: data.descripcion || null, fecha: data.date, horaInicio: data.horaInicio, horaFin: data.horaFin, participantesIds: data.participantesIds }
       await actualizarRecordatorios(tx, 'CALENDARIO', evento.id, data.date, data.participantesIds, data.recordatorios)
       await crearNotificacionesDeActividad(data.participantesIds.map(usuarioId =>
         avisoCalendario(evento.id, 'CREACION', usuarioId, 'CALENDARIO_ASIGNACION', resumen)), tx)
@@ -295,6 +328,7 @@ calendarRouter.post('/', async (req: Request, res: Response) => {
     })
     res.status(created.duplicate ? 200 : 201).json({ accepted: true, id: created.id, duplicate: created.duplicate })
   } catch (error) {
+    if (error instanceof ConflictoHorario) { res.status(409).json({ error: error.message }); return }
     if (error instanceof Error && error.message === 'CALENDAR_OPERATION_CONFLICT') {
       res.status(409).json({ error: 'Este identificador de operación ya corresponde a otro evento.' }); return
     }
@@ -309,6 +343,7 @@ calendarRouter.post('/', async (req: Request, res: Response) => {
           previo.fechaInicio.toISOString().slice(0, 10) === data.date &&
           previo.participantes.length === data.participantesIds.length &&
           previo.participantes.every(p => data.participantesIds.includes(p.usuarioId)) &&
+          previo.horaInicio === data.horaInicio && previo.horaFin === data.horaFin &&
           JSON.stringify(configGuardada(previo.recordatoriosConfig, data.date)) === JSON.stringify(data.recordatorios)) {
         res.status(200).json({ accepted: true, id: previo.id, duplicate: true }); return
       }
@@ -344,19 +379,21 @@ calendarRouter.put('/:id', async (req: Request, res: Response) => {
       const antes: EventoResumen = {
         titulo: found.titulo, categoria: found.categoria,
         descripcion: found.descripcion, fecha: found.fechaInicio.toISOString().slice(0, 10),
+        horaInicio: found.horaInicio, horaFin: found.horaFin,
         participantesIds: found.participantes.map(participante => participante.usuarioId),
       }
       const despues: EventoResumen = {
         titulo: data.titulo, categoria: data.categoria, descripcion: data.descripcion || null,
-        fecha: data.date, participantesIds: data.participantesIds,
+        fecha: data.date, horaInicio: data.horaInicio, horaFin: data.horaFin, participantesIds: data.participantesIds,
       }
       const cambios = planificarCambioCalendario(antes, despues)
       const recordatoriosAntes = configGuardada(found.recordatoriosConfig, antes.fecha)
       if (!eventoTieneCambios(antes, despues) && JSON.stringify(recordatoriosAntes) === JSON.stringify(data.recordatorios)) return true // PUT idempotente.
+      await verificarCruceInstitucional(tx, data.date, data, data.participantesIds, id)
       const actualizado = await tx.eventoInstitucional.update({ where: { id }, data: {
         titulo: data.titulo, categoria: data.categoria, descripcion: data.descripcion || null, lugar: null,
         fechaInicio: new Date(`${data.date}T12:00:00Z`), fechaFin: new Date(`${data.date}T12:00:00Z`),
-        horaInicio: null, horaFin: null, versionNotificacion: { increment: 1 },
+        horaInicio: data.horaInicio, horaFin: data.horaFin, versionNotificacion: { increment: 1 },
         recordatoriosConfig: configParaPrisma(data.recordatorios),
         // Mantiene al responsable original y las respuestas de quienes siguen invitados.
         participantes: {
@@ -375,7 +412,10 @@ calendarRouter.put('/:id', async (req: Request, res: Response) => {
     if (result === 'FINALIZADO') { res.status(409).json({ error: 'Este evento ya finalizó y solo puede consultarse.' }); return }
     if (!result) { res.status(404).json({ error: 'Evento no encontrado.' }); return }
     res.json({ accepted: true })
-  } catch (error) { console.error('Error editando evento:', error); res.status(503).json({ error: 'No se pudo actualizar el evento.' }) }
+  } catch (error) {
+    if (error instanceof ConflictoHorario) { res.status(409).json({ error: error.message }); return }
+    console.error('Error editando evento:', error); res.status(503).json({ error: 'No se pudo actualizar el evento.' })
+  }
 })
 
 calendarRouter.delete('/:id', async (req: Request, res: Response) => {

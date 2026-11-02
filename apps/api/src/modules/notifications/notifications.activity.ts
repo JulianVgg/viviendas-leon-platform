@@ -4,6 +4,8 @@ export type EventoResumen = {
   categoria: string
   descripcion: string | null
   fecha: string // YYYY-MM-DD
+  horaInicio?: string | null
+  horaFin?: string | null
   participantesIds: number[]
 }
 
@@ -19,7 +21,8 @@ export function planificarCambioCalendario(anterior: EventoResumen, siguiente: E
   const antiguos = new Set(anterior.participantesIds)
   const nuevos = new Set(siguiente.participantesIds)
   const cambioDetalle = anterior.titulo !== siguiente.titulo || anterior.categoria !== siguiente.categoria ||
-    (anterior.descripcion ?? '') !== (siguiente.descripcion ?? '') || anterior.fecha !== siguiente.fecha
+    (anterior.descripcion ?? '') !== (siguiente.descripcion ?? '') || anterior.fecha !== siguiente.fecha ||
+    (anterior.horaInicio ?? null) !== (siguiente.horaInicio ?? null) || (anterior.horaFin ?? null) !== (siguiente.horaFin ?? null)
   const avisos: DestinatarioCalendario[] = []
   for (const id of nuevos) {
     if (!antiguos.has(id)) avisos.push({ usuarioId: id, tipo: 'CALENDARIO_ASIGNACION' })
@@ -32,7 +35,8 @@ export function planificarCambioCalendario(anterior: EventoResumen, siguiente: E
 }
 
 export function descripcionAvisoCalendario(tipo: TipoAvisoCalendario, evento: EventoResumen): { titulo: string; mensaje: string } {
-  const detalle = `${evento.titulo} (${evento.fecha})`
+  const horario = evento.horaInicio && evento.horaFin ? `, ${evento.horaInicio}–${evento.horaFin}` : ''
+  const detalle = `${evento.titulo} (${evento.fecha}${horario})`
   switch (tipo) {
     case 'CALENDARIO_ASIGNACION': return { titulo: 'Nueva actividad asignada', mensaje: `Te asignaron a la actividad ${detalle}.` }
     case 'CALENDARIO_CAMBIO': return { titulo: 'Actividad actualizada', mensaje: `Se modificó la actividad ${detalle}. Consulta el calendario para ver los cambios.` }
@@ -55,6 +59,7 @@ export function descripcionAvisoVisita(tipo: TipoAvisoVisita, familia: string, f
 export function eventoTieneCambios(anterior: EventoResumen, siguiente: EventoResumen): boolean {
   return anterior.titulo !== siguiente.titulo || anterior.categoria !== siguiente.categoria ||
     (anterior.descripcion ?? '') !== (siguiente.descripcion ?? '') || anterior.fecha !== siguiente.fecha ||
+    (anterior.horaInicio ?? null) !== (siguiente.horaInicio ?? null) || (anterior.horaFin ?? null) !== (siguiente.horaFin ?? null) ||
     anterior.participantesIds.length !== siguiente.participantesIds.length ||
     anterior.participantesIds.some(id => !siguiente.participantesIds.includes(id))
 }

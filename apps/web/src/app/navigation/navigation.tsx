@@ -2,7 +2,6 @@ import type { ReactNode } from 'react'
 import {
   Activity,
   Bell,
-  Bug,
   CalendarDays,
   ContactRound,
   ChartNoAxesColumnIncreasing,
@@ -54,7 +53,6 @@ const icons = {
   gardens: <House size={size} strokeWidth={strokeWidth} />,
   crops: <Leaf size={size} strokeWidth={strokeWidth} />,
   production: <Wheat size={size} strokeWidth={strokeWidth} />,
-  phytosanitary: <Bug size={size} strokeWidth={strokeWidth} />,
   supplies: <Package size={size} strokeWidth={strokeWidth} />,
   visits: <ClipboardCheck size={size} strokeWidth={strokeWidth} />,
   agenda: <CalendarDays size={size} strokeWidth={strokeWidth} /> ,
@@ -81,12 +79,11 @@ export const navigationGroups: { id: string; name: string; items: NavigationItem
     items: [
       { id: 'dashboard', name: 'Dashboard', path: '/', icon: icons.dashboard, roles: ['fieldWorker', 'coordination', 'operationsDirector', 'administration', 'audit'] },
       { id: 'profile', name: 'Mi perfil', path: '/mi-perfil', icon: icons.profile, roles: ['fieldWorker', 'coordination', 'operationsDirector', 'administration', 'audit'] },
-      { id: 'institutional-calendar', name: 'Calendario', path: '/calendario', icon: icons.institutionalCalendar },
       { id: 'my-calendar', name: 'Mi calendario', path: '', icon: icons.agenda, children: [
         { id: 'calendar-personal', name: 'Calendario', path: '/visitas/agenda', icon: icons.agenda, exact: true },
+        { id: 'calendar-institutional', name: 'Calendario', path: '/calendario', icon: icons.institutionalCalendar, exact: true },
         { id: 'my-agenda', name: 'Mi agenda', path: '/mi-agenda', icon: icons.history, exact: true },
       ] },
-      { id: 'my-agenda-standalone', name: 'Mi agenda', path: '/mi-agenda', icon: icons.history },
       { id: 'families', name: 'Familias y beneficiarios', path: '/familias', icon: icons.families, roles: ['fieldWorker', 'coordination'], children: [
         { id: 'families-list', name: 'Listado de familias', path: '/familias', icon: icons.familyList, exact: true },
         { id: 'families-create', name: 'Registrar familias', path: '/familias/nueva', icon: icons.familyCreate, exact: true },
@@ -96,7 +93,6 @@ export const navigationGroups: { id: string; name: string; items: NavigationItem
         { id: 'gardens', name: 'Huertos', path: '/gestion-agricola/huertos', icon: icons.gardens },
         { id: 'cycles', name: 'Ciclos agrícolas', path: '/gestion-agricola/ciclos', icon: icons.crops },
         { id: 'production', name: 'Producción', path: '/gestion-agricola/produccion', icon: icons.production },
-        { id: 'phytosanitary', name: 'Control fitosanitario', path: '/gestion-agricola/control-fitosanitario', icon: icons.phytosanitary },
         { id: 'supplies', name: 'Insumos', path: '/gestion-agricola/insumos', icon: icons.supplies },
       ] },
       { id: 'visits', name: 'Visitas técnicas', path: '/visitas', icon: icons.visits, roles: ['fieldWorker', 'coordination'], children: [
@@ -144,8 +140,13 @@ export function navigationForAccount(usuario: PermissionUser) {
     .map((grupo) => ({
       ...grupo,
       items: grupo.items.flatMap((item) => {
-        if (item.id === 'my-calendar' && !esTecnicoCampo(usuario)) return []
-        if (item.id === 'my-agenda-standalone' && esTecnicoCampo(usuario)) return []
+        if (item.id === 'my-calendar') {
+          const calendario = esTecnicoCampo(usuario) ? 'calendar-personal' : 'calendar-institutional'
+          const children = item.children!.filter(child =>
+            (child.id === 'my-agenda' || child.id === calendario) && canViewPath(usuario, child.path),
+          )
+          return children.length ? [{ ...item, children }] : []
+        }
         if ((item.id === 'visits' || item.id === 'activities') && !esTecnicoCampo(usuario)) return []
         if (!item.children) return canViewPath(usuario, item.path) ? [item] : []
         const children = item.children.filter((child) => canViewPath(usuario, child.path) && !(esTecnicoCampo(usuario) && child.id === 'visits-agenda'))
