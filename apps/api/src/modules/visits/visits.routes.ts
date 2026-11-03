@@ -14,6 +14,7 @@ import { sincronizarAvisosSeguimiento } from '../notifications/followup-alerts.s
 import { resolverAvisosVisitaVencida } from '../notifications/overdue-visits.worker.js'
 import { actualizarRecordatorios, cancelarRecordatorios, configGuardada, configParaPrisma, parseReglas, reglasTrasCambioFecha, type ReglaRecordatorio } from '../notifications/reminders.service.js'
 import { buildEvaluationObservations } from '../agriculture/followup-format.js'
+import { normalizarTelefonoWhatsapp } from './whatsapp-reminder.rules.js'
 
 // Dirección y Coordinación supervisan y pueden reprogramar citas institucionales.
 // Los demás técnicos conservan exclusivamente los registros propios.
@@ -199,6 +200,42 @@ visitsRouter.get('/', async (req: Request, res: Response) => {
     res.setHeader('Cache-Control','no-store')
     res.json({ data: rows.map(row => serialize(row, byVisit.get(row.id) ?? null, byEvidence.get(row.id) ?? [])) })
   } catch (error) { console.error('Error consultando visitas:',error); res.status(503).json({ error: 'No se pudieron consultar las visitas.' }) }
+})
+
+// NTF-13: el teléfono nunca forma parte del listado general ni del caché offline.
+// Solo se devuelve bajo demanda para una visita propia o visible por supervisión.
+visitsRouter.get('/agenda/:visitId/recordatorio-whatsapp', async (req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store')
+  const id = Number(req.params.visitId)
+  if (!Number.isSafeInteger(id) || id <= 0) { res.status(400).json({ error: 'Identificador de visita inválido.' }); return }
+  try {
+    const userId = req.session.userId
+    if (!userId) { res.status(401).json({ error: 'Sesión requerida.' }); return }
+    const user = await getAuthenticatedUser(userId)
+    if (!user) { res.status(401).json({ error: 'Sesión no válida.' }); return }
+    const visita = await getPrismaClient().visita.findFirst({
+      where: { id, estado: 'PROGRAMADA', ...(isSupervisor(user.roles) ? {} : { usuarioResponsableId: userId }) },
+      select: {
+        fecha: true,
+        familia: { select: { integrantes: {
+          where: { activo: true, whatsappAutorizado: true, whatsappAutorizadoEn: { not: null }, telefono: { not: null } },
+          select: { id: true, nombreCompleto: true, telefono: true },
+          orderBy: { id: 'asc' },
+        } } },
+      },
+    })
+    if (!visita) { res.status(404).json({ error: 'Visita no encontrada o no autorizada.' }); return }
+    const fecha = visita.fecha.toISOString().slice(0, 10)
+    if (fecha < fechaHoyGuatemala()) { res.status(409).json({ error: 'La visita está vencida. Reprográmala antes de enviar un recordatorio.' }); return }
+    const destinatarios = visita.familia.integrantes.flatMap(persona => {
+      const telefono = normalizarTelefonoWhatsapp(persona.telefono)
+      return telefono ? [{ id: persona.id, nombre: persona.nombreCompleto, telefono }] : []
+    })
+    res.json({ data: { visitaId: id, fecha, destinatarios } })
+  } catch (error) {
+    console.error('Error consultando contactos autorizados para WhatsApp:', error)
+    res.status(503).json({ error: 'No fue posible preparar el recordatorio.' })
+  }
 })
 
 // Estado compacto por familia para planificar la cobertura de cada ciclo de 8 días.

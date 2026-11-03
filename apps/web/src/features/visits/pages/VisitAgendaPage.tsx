@@ -11,6 +11,7 @@ import { useAuth } from '@/features/auth/AuthProvider'
 import RescheduleVisitDialog from '@/features/visits/components/RescheduleVisitDialog'
 import FollowUpEditDialog from '@/features/visits/components/FollowUpEditDialog'
 import VisitDetailDialog from '@/features/visits/components/VisitDetailDialog'
+import WhatsAppReminderDialog from '@/features/visits/components/WhatsAppReminderDialog'
 import InvitacionDetalleDialog from '@/features/notifications/components/InvitacionDetalleDialog'
 import { obtenerMisInvitaciones, type DetalleInvitacion } from '@/features/notifications/services/invitationsService'
 import { filtrarAgenda, filtrosIniciales, type FiltrosAgenda } from '@/features/visits/services/personalCalendarFilters'
@@ -47,6 +48,7 @@ export default function VisitAgendaPage() {
   const [error, setError] = useState('')
   const [local, setLocal] = useState(false)
   const [selected, setSelected] = useState<VisitListItem | null>(null)
+  const [whatsappVisit, setWhatsappVisit] = useState<VisitListItem | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<VisitListItem | null>(null)
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [deleteError, setDeleteError] = useState('')
@@ -409,10 +411,12 @@ export default function VisitAgendaPage() {
       </div>)}</div>}
       <div className="mt-3 flex flex-wrap gap-4">
         {canManageVisit(selected) && selected.status === 'PROGRAMADA' && <button type="button" disabled={!selected.id} onClick={()=>openReschedule(selected)} className="text-xs font-semibold text-brand-600 hover:underline disabled:opacity-40 dark:text-brand-400">Cambiar fecha programada</button>}
+        {canManageVisit(selected) && selected.status === 'PROGRAMADA' && selected.date >= today && selected.id !== null && (!selected.syncStatus || selected.syncStatus === 'synced') && <button type="button" onClick={() => { setWhatsappVisit(selected); setSelected(null) }} className="text-xs font-semibold text-green-700 hover:underline dark:text-green-400">Enviar recordatorio por WhatsApp</button>}
         {canManageVisit(selected) && selected.status === 'PROGRAMADA' && <button type="button" disabled={!selected.id || Boolean(selected.syncStatus && selected.syncStatus !== 'synced')} onClick={()=>requestDelete(selected)} className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:underline disabled:cursor-not-allowed disabled:opacity-40 dark:text-red-400"><Trash2 size={14}/> Eliminar visita</button>}
         {!institutionManager && visitOwner(selected) && !(selected.status === 'PROGRAMADA' && selected.date < today) && <Link className="text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400" to={`/visitas/nueva?familia=${selected.familyId}${selected.id && selected.status === 'PROGRAMADA' ? `&programada=${selected.id}` : ''}`}>Registrar siguiente visita ↗</Link>}
       </div>
     </section> : undefined}/>
+    <WhatsAppReminderDialog key={whatsappVisit?.id ?? 'recordatorio-whatsapp'} visit={whatsappVisit} onClose={() => setWhatsappVisit(null)} />
     <Dialog open={Boolean(deleteTarget)} onClose={() => { if (!deleteBusy) setDeleteTarget(null) }}
       title="Eliminar visita programada"
       description={deleteTarget ? `${deleteTarget.familyName} · ${dateLabel(deleteTarget.date)}` : ''}

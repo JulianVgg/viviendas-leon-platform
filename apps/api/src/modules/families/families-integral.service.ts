@@ -17,7 +17,7 @@ const recordSelect = {
   comunidad: { select: { id: true, nombre: true, municipio: { select: { id: true, nombre: true } } } },
   integrantes: {
     orderBy: { id: 'asc' },
-    select: { id: true, nombreCompleto: true, fechaNacimiento: true, sexo: true, parentesco: true, telefono: true, observaciones: true, activo: true },
+    select: { id: true, nombreCompleto: true, fechaNacimiento: true, sexo: true, parentesco: true, telefono: true, whatsappAutorizado: true, whatsappAutorizadoEn: true, observaciones: true, activo: true },
   },
   programas: {
     orderBy: [{ programa: { nombre: 'asc' } }, { id: 'asc' }],
@@ -35,7 +35,8 @@ function serializeRecord(
     ...record,
     version,
     fechaIngreso: record.fechaIngreso?.toISOString() ?? null,
-    integrantes: record.integrantes.map((member) => ({ ...member, version: memberVersions.get(member.id) ?? '', fechaNacimiento: member.fechaNacimiento?.toISOString() ?? null })),
+    integrantes: record.integrantes.map((member) => ({ ...member, version: memberVersions.get(member.id) ?? '', fechaNacimiento: member.fechaNacimiento?.toISOString() ?? null,
+      whatsappAutorizadoEn: member.whatsappAutorizadoEn?.toISOString() ?? null })),
     programas: record.programas.map((program) => ({ ...program, version: programVersions.get(program.id) ?? '', fechaIngreso: program.fechaIngreso?.toISOString() ?? null, fechaSalida: program.fechaSalida?.toISOString() ?? null })),
   }
 }

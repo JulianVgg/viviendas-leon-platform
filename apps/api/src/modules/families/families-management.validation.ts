@@ -96,22 +96,27 @@ export function validateFamilyUpdate(body: unknown): { data?: FamilyUpdateInput;
 
 export function validateMemberCreate(body: unknown): { data?: FamilyMemberCreateInput; details: ValidationDetail[] } {
   const details: ValidationDetail[] = []
-  const input = objectInput(body, ['nombreCompleto', 'fechaNacimiento', 'sexo', 'parentesco', 'telefono', 'observaciones'], details)
+  const input = objectInput(body, ['nombreCompleto', 'fechaNacimiento', 'sexo', 'parentesco', 'telefono', 'whatsappAutorizado', 'observaciones'], details)
   if (!input) return { details }
+  if (input.whatsappAutorizado !== undefined && typeof input.whatsappAutorizado !== 'boolean')
+    details.push({ field: 'whatsappAutorizado', message: 'La autorización debe ser verdadera o falsa.' })
   const data: FamilyMemberCreateInput = {
     nombreCompleto: requiredText(input.nombreCompleto, 'nombreCompleto', MEMBER_NAME_MAX, details),
     fechaNacimiento: dateValue(input.fechaNacimiento, 'fechaNacimiento', details, false) as Date,
     sexo: optionValue(input.sexo, 'sexo', SEX_OPTIONS, details, false) as string,
     parentesco: optionValue(input.parentesco, 'parentesco', RELATIONSHIP_OPTIONS, details, false) as string,
     telefono: nullableText(input.telefono, 'telefono', PHONE_MAX, details),
+    ...(input.whatsappAutorizado !== undefined ? { whatsappAutorizado: input.whatsappAutorizado === true } : {}),
     observaciones: nullableText(input.observaciones, 'observaciones', MAX_OBSERVATIONS_LENGTH, details),
   }
+  if (data.whatsappAutorizado && !data.telefono)
+    details.push({ field: 'telefono', message: 'Registra un teléfono antes de autorizar WhatsApp.' })
   return details.length ? { details } : { data, details }
 }
 
 export function validateMemberUpdate(body: unknown): { data?: FamilyMemberUpdateInput; details: ValidationDetail[] } {
   const details: ValidationDetail[] = []
-  const fields = ['nombreCompleto', 'fechaNacimiento', 'sexo', 'parentesco', 'telefono', 'observaciones']
+  const fields = ['nombreCompleto', 'fechaNacimiento', 'sexo', 'parentesco', 'telefono', 'whatsappAutorizado', 'observaciones']
   const input = objectInput(body, [...fields, 'version'], details)
   if (!input) return { details }
   const data: FamilyMemberUpdateInput = { version: versionValue(input.version, details) }
@@ -120,6 +125,11 @@ export function validateMemberUpdate(body: unknown): { data?: FamilyMemberUpdate
   if (has(input, 'sexo')) data.sexo = optionValue(input.sexo, 'sexo', SEX_OPTIONS, details, true)
   if (has(input, 'parentesco')) data.parentesco = optionValue(input.parentesco, 'parentesco', RELATIONSHIP_OPTIONS, details, true)
   if (has(input, 'telefono')) data.telefono = nullableText(input.telefono, 'telefono', PHONE_MAX, details)
+  if (has(input, 'whatsappAutorizado')) {
+    if (typeof input.whatsappAutorizado !== 'boolean')
+      details.push({ field: 'whatsappAutorizado', message: 'La autorización debe ser verdadera o falsa.' })
+    else data.whatsappAutorizado = input.whatsappAutorizado
+  }
   if (has(input, 'observaciones')) data.observaciones = nullableText(input.observaciones, 'observaciones', MAX_OBSERVATIONS_LENGTH, details)
   if (!fields.some((field) => has(input, field))) details.push({ field: 'body', message: 'Incluye al menos un campo para actualizar.' })
   return details.length ? { details } : { data, details }

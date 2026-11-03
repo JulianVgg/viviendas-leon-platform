@@ -70,6 +70,8 @@ model IntegranteFamilia {
   sexo            String?
   parentesco      String?
   telefono        String?
+  whatsappAutorizado Boolean   @default(false) @map("whatsapp_autorizado")
+  whatsappAutorizadoEn DateTime? @map("whatsapp_autorizado_en") @db.Timestamptz(6)
   observaciones   String?
   activo          Boolean
 
