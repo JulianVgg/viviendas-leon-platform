@@ -378,3 +378,13 @@
   .notification-live-toast { animation: none; }
   .notification-live-toast-progress { animation: none; }
 }
+
+/* AI-01.3 — Entrada ligera para resultados bajo demanda. */
+@keyframes analysis-result-reveal {
+  from { opacity: 0; transform: translateY(8px) scale(.992); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.analysis-result-enter { animation: analysis-result-reveal 280ms cubic-bezier(.2,.8,.25,1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .analysis-result-enter { animation: none; }
+}
