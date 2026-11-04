@@ -35,6 +35,8 @@ export type IntegralFamilyRecord = {
     id: number
     version: string
     fechaNacimiento: string | null
+    whatsappAutorizado: boolean
+    whatsappAutorizadoEn: string | null
     activo: boolean
   }>
   programas: Array<Omit<FamilyProgramInput, 'fechaIngreso' | 'fechaSalida'> & {

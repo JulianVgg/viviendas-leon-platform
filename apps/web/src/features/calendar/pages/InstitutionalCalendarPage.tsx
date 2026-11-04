@@ -7,6 +7,7 @@ import PageHeader from '@/components/common/PageHeader'
 import Button from '@/components/ui/Button'
 import Dialog from '@/components/ui/Dialog'
 import VisitDetailDialog from '@/features/visits/components/VisitDetailDialog'
+import WhatsAppReminderDialog from '@/features/visits/components/WhatsAppReminderDialog'
 import type { VisitListItem } from '@/features/visits/services/visitService'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { esSupervisorCalendario } from '@/features/auth/calendarAccess'
@@ -74,6 +75,7 @@ export default function InstitutionalCalendarPage() {
   const [error, setError] = useState('')
   const [selected, setSelected] = useState<CalendarEvent | null>(null)
   const [fullVisit, setFullVisit] = useState<VisitListItem | null>(null)
+  const [whatsAppVisit, setWhatsAppVisit] = useState<VisitListItem | null>(null)
   const [detailError, setDetailError] = useState('')
   const [loadingVisitId, setLoadingVisitId] = useState<number | null>(null)
   const detailRequest = useRef<AbortController | null>(null)
@@ -373,7 +375,16 @@ export default function InstitutionalCalendarPage() {
         onSave={save}
         onDelete={erase}
       />
-      {fullVisit && <VisitDetailDialog key={fullVisit.id} visit={fullVisit} onClose={() => setFullVisit(null)} />}
+      {fullVisit && <VisitDetailDialog key={fullVisit.id} visit={fullVisit} onClose={() => setFullVisit(null)}
+        extra={fullVisit.id !== null && fullVisit.status === 'PROGRAMADA' && fullVisit.date >= todayKey() ? (
+          <section className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+            <Button type="button" onClick={() => { setWhatsAppVisit(fullVisit); setFullVisit(null) }}>
+              Enviar recordatorio por WhatsApp
+            </Button>
+            <p className="mt-2 text-xs text-gray-500">Se abrirá WhatsApp con un mensaje editable. El envío es manual.</p>
+          </section>
+        ) : undefined} />}
+      <WhatsAppReminderDialog visit={whatsAppVisit} onClose={() => setWhatsAppVisit(null)} />
       <Dialog
         open={selectedTraining !== null}
         title="Capacitación"

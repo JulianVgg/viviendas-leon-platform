@@ -33,7 +33,7 @@ export type FamilyParticipationUpdateInput = Partial<Omit<FamilyProgramInput, 'p
 
 export type IntegralFamilyRecord = FamilyDetail & {
   version: string
-  integrantes: Array<FamilyMemberInput & { id: number; version: string; activo: boolean }>
+  integrantes: Array<FamilyMemberInput & { id: number; version: string; activo: boolean; whatsappAutorizado: boolean; whatsappAutorizadoEn: string | null }>
   programas: FamilyParticipationRecord[]
 }
 
@@ -64,4 +64,4 @@ export type FamilyUpdateInput = {
 }
 
 export type FamilyMemberRecord = IntegralFamilyRecord['integrantes'][number]
-export type FamilyMemberUpdateInput = Partial<FamilyMemberInput> & { version: string }
+export type FamilyMemberUpdateInput = Partial<FamilyMemberInput & { whatsappAutorizado: boolean }> & { version: string }

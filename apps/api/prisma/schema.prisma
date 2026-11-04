@@ -70,6 +70,8 @@ model IntegranteFamilia {
   sexo            String?
   parentesco      String?
   telefono        String?
+  whatsappAutorizado Boolean   @default(false) @map("whatsapp_autorizado")
+  whatsappAutorizadoEn DateTime? @map("whatsapp_autorizado_en") @db.Timestamptz(6)
   observaciones   String?
   activo          Boolean
 
@@ -742,6 +744,7 @@ model Notificacion {
   claveEvento   String?   @unique @map("clave_evento") @db.VarChar(191)
 
   usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  entregasPush EntregaPush[]
 
   @@index([usuarioId, fechaCreacion(sort: Desc), id(sort: Desc)])
   @@index([usuarioId, fechaLectura])
@@ -764,9 +767,62 @@ model SuscripcionPush {
   fechaActualizacion DateTime @updatedAt @map("fecha_actualizacion") @db.Timestamptz(6)
 
   usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  entregasPush EntregaPush[]
 
   @@index([usuarioId])
   @@map("suscripcion_push")
+}
+
+// ============================================================
+// NTF-12: ENVÍO AUTOMÁTICO Y PREFERENCIAS DE WEB PUSH
+// ============================================================
+
+// La preferencia de silencio es independiente de la anticipación de los recordatorios.
+// Las horas HH:mm se interpretan en Guatemala (UTC-06:00).
+model PreferenciaPush {
+  usuarioId       Int      @id @map("usuario_id")
+  habilitadas     Boolean  @default(true)
+  silencioInicio  String?  @map("silencio_inicio") @db.VarChar(5)
+  silencioFin     String?  @map("silencio_fin") @db.VarChar(5)
+  actualizadoEn   DateTime @updatedAt @map("actualizado_en") @db.Timestamptz(6)
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@map("preferencia_push")
+}
+
+// La combinación notificación + endpoint evita crear dos entregas del mismo aviso.
+// Una suscripción eliminada se desvincula sin borrar la trazabilidad histórica.
+model EntregaPush {
+  id             Int       @id @default(autoincrement())
+  notificacionId Int       @map("notificacion_id")
+  suscripcionId  Int?      @map("suscripcion_id")
+  endpointHash   String    @map("endpoint_hash") @db.VarChar(64)
+  estado         String    @default("PENDIENTE") @db.VarChar(16)
+  intentos       Int       @default(0)
+  proximoIntento DateTime? @map("proximo_intento") @db.Timestamptz(6)
+  ultimoCodigo   Int?      @map("ultimo_codigo")
+  ultimoError    String?   @map("ultimo_error") @db.VarChar(250)
+  procesadoEn    DateTime? @map("procesado_en") @db.Timestamptz(6)
+  creadoEn       DateTime  @default(now()) @map("creado_en") @db.Timestamptz(6)
+  actualizadoEn  DateTime  @updatedAt @map("actualizado_en") @db.Timestamptz(6)
+
+  notificacion Notificacion @relation(fields: [notificacionId], references: [id], onDelete: Cascade)
+  suscripcion  SuscripcionPush? @relation(fields: [suscripcionId], references: [id], onDelete: SetNull)
+
+  @@unique([notificacionId, endpointHash], map: "entrega_push_notificacion_endpoint_key")
+  @@index([estado, proximoIntento, id], map: "entrega_push_pendientes_idx")
+  @@index([suscripcionId])
+  @@map("entrega_push")
+}
+
+// NTF-12: punto de activación persistente para no reenviar avisos anteriores.
+model ControlPush {
+  id            Int       @id
+  activadoEn    DateTime  @default(now()) @map("activado_en") @db.Timestamptz(6)
+  ultimoEscaneo DateTime? @map("ultimo_escaneo") @db.Timestamptz(6)
+
+  @@map("control_push")
 }
 
 // ============================================================
@@ -802,6 +858,7 @@ model Usuario {
   bitacoras    Bitacora[]
   notificaciones Notificacion[]
   suscripcionesPush SuscripcionPush[]
+  preferenciaPush PreferenciaPush?
   avisosSeguimiento AvisoSeguimiento[]
   cambiosFechaVisita VisitaReprogramacion[]
   cambiosFechaSeguimiento SeguimientoReprogramacion[]

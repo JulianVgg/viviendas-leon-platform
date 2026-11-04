@@ -15,6 +15,7 @@ export type FamilyMemberCreateInput = {
   sexo: string
   parentesco: string
   telefono: string | null
+  whatsappAutorizado?: boolean
   observaciones: string | null
 }
 
@@ -24,6 +25,7 @@ export type FamilyMemberUpdateInput = Partial<{
   sexo: string | null
   parentesco: string | null
   telefono: string | null
+  whatsappAutorizado: boolean
   observaciones: string | null
 }> & { version: string }
 

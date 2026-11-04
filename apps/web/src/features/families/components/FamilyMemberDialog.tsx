@@ -18,13 +18,14 @@ export default function FamilyMemberDialog({ familyId, member, onClose, onSaved 
 }) {
   const initial = useMemo(() => memberDraftFrom(member), [member])
   const [draft, setDraft] = useState(initial)
+  const [whatsappAutorizado, setWhatsappAutorizado] = useState(Boolean(member?.whatsappAutorizado))
   const [errors, setErrors] = useState<MemberEditErrors>({})
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string>()
   const [uncertain, setUncertain] = useState(false)
   const [idempotencyKey] = useState(() => crypto.randomUUID())
   const isOnline = useOnlineStatus()
-  const dirty = JSON.stringify(draft) !== JSON.stringify(initial)
+  const dirty = JSON.stringify(draft) !== JSON.stringify(initial) || whatsappAutorizado !== Boolean(member?.whatsappAutorizado)
 
   function close() {
     if (!dirty || window.confirm('¿Cerrar el formulario y descartar el borrador?')) onClose()
@@ -35,16 +36,20 @@ export default function FamilyMemberDialog({ familyId, member, onClose, onSaved 
     if (saving || uncertain) return
     if (!isOnline) { setError('Se requiere conexión con el servidor. El borrador permanece únicamente en memoria.'); return }
     const nextErrors = validateMemberDraft(draft, !member)
+    if (whatsappAutorizado && !draft.telefono.trim())
+      nextErrors.telefono = 'Registra el teléfono antes de autorizar WhatsApp.'
     if (Object.keys(nextErrors).length) { setErrors(nextErrors); return }
     setSaving(true); setError(undefined)
     try {
       let saved: FamilyMemberRecord
       if (member) {
         const changes = buildMemberUpdate(member, draft, initial)
+        if (whatsappAutorizado !== Boolean(member.whatsappAutorizado) || draft.telefono !== initial.telefono)
+          changes.whatsappAutorizado = whatsappAutorizado
         if (Object.keys(changes).length === 1) { onClose(); return }
         saved = await updateFamilyMember(familyId, member.id, changes)
       } else {
-        saved = await createFamilyMember(familyId, buildMemberCreate(draft), idempotencyKey)
+        saved = await createFamilyMember(familyId, { ...buildMemberCreate(draft), whatsappAutorizado }, idempotencyKey)
       }
       onSaved(saved)
     } catch (cause) {
@@ -59,7 +64,7 @@ export default function FamilyMemberDialog({ familyId, member, onClose, onSaved 
   }
 
   const field = (key: keyof MemberEditDraft, label: string, options?: readonly string[]) => <FormField id={`member-${key}`} label={label} required={!member && ['nombreCompleto', 'fechaNacimiento', 'sexo', 'parentesco'].includes(key)} error={errors[key]}>
-    {options ? <select id={`member-${key}`} className={formControlClassName} value={draft[key]} onChange={(event) => setDraft({ ...draft, [key]: event.target.value })}><option value="">Sin dato registrado</option>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select> : <input id={`member-${key}`} type={key === 'fechaNacimiento' ? 'date' : key === 'telefono' ? 'tel' : 'text'} className={formControlClassName} value={draft[key]} maxLength={key === 'nombreCompleto' ? 150 : key === 'telefono' ? 30 : undefined} onChange={(event) => setDraft({ ...draft, [key]: event.target.value })} />}
+    {options ? <select id={`member-${key}`} className={formControlClassName} value={draft[key]} onChange={(event) => setDraft({ ...draft, [key]: event.target.value })}><option value="">Sin dato registrado</option>{options.map((option) => <option key={option} value={option}>{option}</option>)}</select> : <input id={`member-${key}`} type={key === 'fechaNacimiento' ? 'date' : key === 'telefono' ? 'tel' : 'text'} className={formControlClassName} value={draft[key]} maxLength={key === 'nombreCompleto' ? 150 : key === 'telefono' ? 30 : undefined} onChange={(event) => { setDraft({ ...draft, [key]: event.target.value }); if (key === 'telefono' && event.target.value !== draft.telefono) setWhatsappAutorizado(false) }} />}
   </FormField>
 
   return <Dialog open title={member ? 'Editar integrante' : 'Agregar integrante'} description={member ? 'Los datos reales se muestran precargados. Los campos no modificados se conservarán.' : 'La persona quedará asociada únicamente a este expediente.'} onClose={close} className="max-w-2xl" actions={<><Button type="button" variant="secondary" disabled={saving} onClick={close}>Cancelar</Button><Button type="submit" form="member-form" disabled={saving || uncertain || !isOnline}>{saving && <LoaderCircle size={17} className="animate-spin motion-reduce:animate-none" />}{saving ? 'Guardando...' : member ? 'Guardar cambios' : 'Agregar integrante'}</Button></>}>
@@ -67,6 +72,13 @@ export default function FamilyMemberDialog({ familyId, member, onClose, onSaved 
       {!isOnline && <Alert variant="warning" title="Sin conexión">No se enviará ninguna escritura. El borrador se conserva mientras este modal permanezca abierto.</Alert>}
       {error && <Alert variant="error" title="No se pudo completar la operación"><p>{error}</p>{uncertain && <Button type="button" variant="secondary" size="sm" className="mt-3" onClick={() => window.location.reload()}>Recargar y verificar expediente</Button>}</Alert>}
       <div className="grid gap-4 sm:grid-cols-2">{field('nombreCompleto', 'Nombre completo')}{field('fechaNacimiento', 'Fecha de nacimiento')}{field('sexo', 'Sexo', memberSexOptions)}{field('parentesco', 'Parentesco', memberRelationshipOptions)}{field('telefono', 'Teléfono')}</div>
+      <label className="flex items-start gap-3 rounded-xl border border-gray-200 p-3 text-sm dark:border-gray-700">
+        <input type="checkbox" className="mt-1" checked={whatsappAutorizado}
+          onChange={(event) => setWhatsappAutorizado(event.target.checked)} />
+        <span>Confirmo que esta persona autorizó recibir recordatorios de visitas por WhatsApp en el teléfono registrado.
+          <span className="mt-1 block text-xs text-gray-500">Sin autorización, no se habilitará el recordatorio. Cambiar el teléfono requiere una nueva autorización.</span>
+        </span>
+      </label>
       <FormField id="member-observaciones" label="Observaciones" error={errors.observaciones} hint="Máximo 2000 caracteres."><textarea id="member-observaciones" className={`${formControlClassName} h-auto`} rows={4} maxLength={2000} value={draft.observaciones} onChange={(event) => setDraft({ ...draft, observaciones: event.target.value })} /></FormField>
     </form>
   </Dialog>

@@ -1,6 +1,45 @@
 // NTF-11: suscripciones push del usuario autenticado.
 const BASE = '/api/v1/notificaciones/push'
 
+// Solo se guarda la decisión del usuario, nunca las claves ni el endpoint.
+// Está separada por usuario y por origen (cada navegador tiene su propio storage).
+const CLAVE_CONSENTIMIENTO = 'viviendas-leon:push:recordar:'
+export function recordarActivacionPush(usuarioId: number, activada: boolean): void {
+  if (!Number.isSafeInteger(usuarioId) || usuarioId < 1) return
+  try {
+    const clave = `${CLAVE_CONSENTIMIENTO}${usuarioId}`
+    if (activada) localStorage.setItem(clave, '1')
+    else localStorage.removeItem(clave)
+  } catch { /* El almacenamiento privado podría estar bloqueado. */ }
+}
+export function activacionPushRecordada(usuarioId: number): boolean {
+  if (!Number.isSafeInteger(usuarioId) || usuarioId < 1) return false
+  try { return localStorage.getItem(`${CLAVE_CONSENTIMIENTO}${usuarioId}`) === '1' }
+  catch { return false }
+}
+
+/** Restaura una suscripción del mismo usuario al entrar de nuevo.
+ * Nunca solicita permiso en segundo plano ni reutiliza suscripciones de otra cuenta.
+ * En navegadores que exijan interacción, el usuario puede activarla manualmente.
+ */
+export async function restaurarPushRecordado(usuarioId: number): Promise<boolean> {
+  if (!activacionPushRecordada(usuarioId) || !navegadorPermitePush() ||
+    Notification.permission !== 'granted') return false
+  const registro = await navigator.serviceWorker.getRegistration()
+  if (!registro?.active || !navigator.serviceWorker.controller ||
+    await registro.pushManager.getSubscription()) return false
+  const clavePublica = await obtenerClavePublicaPush()
+  const suscripcion = await registro.pushManager.subscribe({
+    userVisibleOnly: true, applicationServerKey: convertirClaveVapid(clavePublica),
+  })
+  try { await registrarDispositivoPush(suscripcion) }
+  catch (error) {
+    await suscripcion.unsubscribe().catch(() => false)
+    throw error
+  }
+  return true
+}
+
 export type DispositivoPush = {
   id: number
   endpointHash: string
@@ -36,6 +75,25 @@ export async function obtenerClavePublicaPush(): Promise<string> {
 export async function listarDispositivosPush(): Promise<DispositivoPush[]> {
   const { dispositivos } = await solicitar<{ dispositivos: DispositivoPush[] }>('/suscripciones')
   return dispositivos
+}
+
+export type PreferenciasEnvioPush = {
+  habilitadas: boolean
+  silencioInicio: string | null
+  silencioFin: string | null
+}
+
+/** Las preferencias afectan a envíos automáticos, no a la prueba manual de NTF-11. */
+export function consultarPreferenciasEnvioPush(): Promise<PreferenciasEnvioPush> {
+  return solicitar<PreferenciasEnvioPush>('/preferencias')
+}
+
+export function guardarPreferenciasEnvioPush(preferencias: PreferenciasEnvioPush): Promise<PreferenciasEnvioPush> {
+  return solicitar<PreferenciasEnvioPush>('/preferencias', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+    body: JSON.stringify(preferencias),
+  })
 }
 
 export async function registrarDispositivoPush(suscripcion: PushSubscription): Promise<void> {
@@ -151,12 +209,16 @@ export async function desactivarPushAlCerrarSesion(): Promise<void> {
 }
 
 /** Una cuenta diferente jamás debe heredar los avisos del usuario anterior. */
-export async function desvincularPushDeOtraCuenta(): Promise<void> {
+export async function desvincularPushDeOtraCuenta(usuarioId?: number): Promise<void> {
   const suscripcion = await suscripcionDelNavegador()
   if (!suscripcion) return
   const hash = await hashEndpoint(suscripcion.endpoint)
   const dispositivos = await listarDispositivosPush()
-  if (dispositivos.some(item => item.endpointHash === hash)) return
+  if (dispositivos.some(item => item.endpointHash === hash)) {
+    // Migrar sin pedir otro clic a quienes activaron push antes de este cambio.
+    if (usuarioId) recordarActivacionPush(usuarioId, true)
+    return
+  }
   if (!(await suscripcion.unsubscribe())) {
     throw new Error('No se pudo desvincular una suscripción anterior del navegador.')
   }
