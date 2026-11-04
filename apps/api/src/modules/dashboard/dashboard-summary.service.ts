@@ -4,8 +4,8 @@ import { puedeEditarPerfilCompleto } from '../profile/profile.permissions.js'
 import { agruparPorMes, periodoDashboard } from './dashboard-summary.rules.js'
 import { filtroFamilia, filtroHuerto, filtroCiclo, filtroVisita, filtroCapacitacion, type FiltrosMon05 } from './mon05-filters.js'
 
-export async function obtenerResumenDashboard(user: AuthenticatedUser, meses: number, db = getPrismaClient(), filtros: FiltrosMon05 = {}) {
-  const { desde, hoy, claves } = periodoDashboard(new Date(), meses)
+export async function obtenerResumenDashboard(user: AuthenticatedUser, meses: number, db = getPrismaClient(), filtros: FiltrosMon05 = {}, ahora = new Date()) {
+  const { desde, hoy, claves } = periodoDashboard(ahora, meses)
   const institucional = puedeEditarPerfilCompleto(user.roles)
   const filtroVisitas = { ...filtroVisita(institucional ? filtros : {}), ...(!institucional ? { usuarioResponsableId: user.id } : {}) }
   const filtroCapacitaciones = { ...filtroCapacitacion(institucional ? filtros : {}), ...(!institucional ? { usuarioResponsableId: user.id } : {}) }
