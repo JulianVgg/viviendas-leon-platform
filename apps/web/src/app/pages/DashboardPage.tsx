@@ -8,6 +8,7 @@ import VisitasCapacitacionesPanel from '@/features/dashboard/pages/VisitasCapaci
 import IndicadorDetalleDialog from '@/features/dashboard/pages/IndicadorDetalleDialog'
 import AgriculturaProduccionPanel from '@/features/dashboard/pages/AgriculturaProduccionPanel'
 import AlertasSeguimientosPanel from '@/features/dashboard/pages/AlertasSeguimientosPanel'
+import AnalisisAsistidoPanel from '@/features/dashboard/pages/AnalisisAsistidoPanel'
 import { consultarResumenAlertas, type ResumenAlertas } from '@/features/dashboard/services/dashboardSummaryService'
 import { ProAreaChart } from '@/features/dashboard/charts/TailAdminCharts'
 import { seriesActividad } from '@/features/dashboard/lib/chartSeries'
@@ -143,6 +144,7 @@ export default function DashboardPage() {
     <div className={`grid grid-cols-2 gap-3 md:gap-5 ${institucional ? 'xl:grid-cols-3' : 'lg:grid-cols-3'}`}>
       {indicadores.map(item => <Indicador key={item.etiqueta} etiqueta={item.etiqueta} valor={item.valor} icono={item.icono} onClick={() => setDetalleAbierto(item.tipo)} />)}
     </div>
+    {institucional && <AnalisisAsistidoPanel key={`${meses}-${comunidadId ?? 0}-${responsableId ?? 0}-${actualizacion}`} meses={meses} filtros={filtros}/>}
     <GraficaActividad datos={resumen.actividadMensual}/>
     {indicadoresOperativos && <VisitasCapacitacionesPanel datos={indicadoresOperativos}/>}
     {errorOperativos && <p role="alert" className="text-sm text-rose-600">{errorOperativos}</p>}
