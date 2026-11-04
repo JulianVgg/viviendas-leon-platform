@@ -76,7 +76,7 @@ export function updateFamilyProgram(familyId: number, participationId: number, i
   })
 }
 
-export function createFamilyMember(id: number, input: FamilyMemberInput, idempotencyKey: string) {
+export function createFamilyMember(id: number, input: FamilyMemberInput & { whatsappAutorizado?: boolean }, idempotencyKey: string) {
   return requestData<FamilyMemberRecord>(`v1/familias/${id}/integrantes`, {
     method: 'POST',
     headers: { 'Idempotency-Key': idempotencyKey },

@@ -26,6 +26,8 @@ type LockedMember = {
   id: number
   familia_id: number
   activo: boolean
+  telefono: string | null
+  whatsapp_autorizado: boolean
   version: string
 }
 
@@ -36,12 +38,15 @@ const memberSelect = {
   sexo: true,
   parentesco: true,
   telefono: true,
+  whatsappAutorizado: true,
+  whatsappAutorizadoEn: true,
   observaciones: true,
   activo: true,
 } satisfies Prisma.IntegranteFamiliaSelect
 
-function serializeMember<T extends { fechaNacimiento: Date | null }>(member: T, version: string) {
-  return { ...member, version, fechaNacimiento: member.fechaNacimiento?.toISOString() ?? null }
+function serializeMember<T extends { fechaNacimiento: Date | null; whatsappAutorizadoEn: Date | null }>(member: T, version: string) {
+  return { ...member, version, fechaNacimiento: member.fechaNacimiento?.toISOString() ?? null,
+    whatsappAutorizadoEn: member.whatsappAutorizadoEn?.toISOString() ?? null }
 }
 
 function conflict(entity: 'familia' | 'integrante') {
@@ -57,7 +62,7 @@ async function lockFamily(transaction: Prisma.TransactionClient, familyId: numbe
 
 async function lockMember(transaction: Prisma.TransactionClient, familyId: number, memberId: number, version: string) {
   const rows = await transaction.$queryRaw<LockedMember[]>`
-    SELECT id, familia_id, activo, xmin::text AS version
+    SELECT id, familia_id, activo, telefono, whatsapp_autorizado, xmin::text AS version
     FROM integrante_familia WHERE id = ${memberId} FOR UPDATE
   `
   if (!rows.length || rows[0].familia_id !== familyId) throw new FamilyManagementError(404, 'FAMILY_MEMBER_NOT_FOUND', 'El integrante no existe en esta familia.')
@@ -111,7 +116,12 @@ export async function createFamilyMember(familyId: number, input: FamilyMemberCr
       const versions = await transaction.$queryRaw<Array<{ version: string }>>`SELECT xmin::text AS version FROM integrante_familia WHERE id = ${member.id}`
       return { member: serializeMember(member, versions[0].version), replayed: true }
     }
-    const member = await transaction.integranteFamilia.create({ data: { ...input, familiaId: familyId, activo: true }, select: memberSelect })
+    const { whatsappAutorizado, ...personalData } = input
+    const autorizado = whatsappAutorizado === true
+    const member = await transaction.integranteFamilia.create({ data: {
+      ...personalData, familiaId: familyId, activo: true,
+      whatsappAutorizado: autorizado, whatsappAutorizadoEn: autorizado ? new Date() : null,
+    }, select: memberSelect })
     const versions = await transaction.$queryRaw<Array<{ version: string }>>`SELECT xmin::text AS version FROM integrante_familia WHERE id = ${member.id}`
     const serialized = serializeMember(member, versions[0].version)
     await transaction.bitacora.create({ data: {
@@ -120,7 +130,7 @@ export async function createFamilyMember(familyId: number, input: FamilyMemberCr
       registroId: String(member.id),
       accion: 'CREATE',
       fecha: new Date(),
-      datosNuevos: JSON.stringify({ requestHash, changedFields: ['activo', 'fechaNacimiento', 'nombreCompleto', 'observaciones', 'parentesco', 'sexo', 'telefono'] }),
+      datosNuevos: JSON.stringify({ requestHash, changedFields: ['activo', 'fechaNacimiento', 'nombreCompleto', 'observaciones', 'parentesco', 'sexo', 'telefono', 'whatsappAutorizado', 'whatsappAutorizadoEn'] }),
       descripcion: description,
     } })
     return { member: serialized, replayed: false }
@@ -128,11 +138,28 @@ export async function createFamilyMember(familyId: number, input: FamilyMemberCr
 }
 
 export async function updateFamilyMember(familyId: number, memberId: number, input: FamilyMemberUpdateInput, userId: number) {
-  const { version, ...changes } = input
+  const { version, whatsappAutorizado, ...changes } = input
   return getPrismaClient().$transaction(async (transaction) => {
     await lockFamily(transaction, familyId)
-    await lockMember(transaction, familyId, memberId, version)
-    const member = await transaction.integranteFamilia.update({ where: { id: memberId }, data: changes, select: memberSelect })
+    const locked = await lockMember(transaction, familyId, memberId, version)
+    const phoneChanged = changes.telefono !== undefined && changes.telefono !== locked.telefono
+    const nextPhone = changes.telefono !== undefined ? changes.telefono : locked.telefono
+    if (whatsappAutorizado === true && !nextPhone) throw new FamilyManagementError(
+      400, 'VALIDATION_ERROR', 'Se necesita un teléfono para autorizar WhatsApp.',
+      [{ field: 'telefono', message: 'Registra un teléfono válido antes de autorizar.' }],
+    )
+    // Cambiar el número revoca el consentimiento anterior; el trabajador debe
+    // volver a confirmar explícitamente la autorización para el nuevo número.
+    const consent = whatsappAutorizado ?? (phoneChanged ? false : undefined)
+    const change = {
+      ...changes,
+      ...(consent !== undefined ? {
+        whatsappAutorizado: consent,
+        whatsappAutorizadoEn: !consent ? null :
+          (!locked.whatsapp_autorizado || phoneChanged ? new Date() : undefined),
+      } : {}),
+    }
+    const member = await transaction.integranteFamilia.update({ where: { id: memberId }, data: change, select: memberSelect })
     const versions = await transaction.$queryRaw<Array<{ version: string }>>`SELECT xmin::text AS version FROM integrante_familia WHERE id = ${member.id}`
     const serialized = serializeMember(member, versions[0].version)
     await transaction.bitacora.create({ data: {
@@ -141,7 +168,7 @@ export async function updateFamilyMember(familyId: number, memberId: number, inp
       registroId: String(memberId),
       accion: 'UPDATE',
       fecha: new Date(),
-      datosNuevos: JSON.stringify({ changedFields: Object.keys(changes).sort() }),
+      datosNuevos: JSON.stringify({ changedFields: Object.keys(change).sort() }),
       descripcion: 'Actualización de datos personales de un integrante.',
     } })
     return serialized
