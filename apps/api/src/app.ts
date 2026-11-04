@@ -22,6 +22,7 @@ import { pushSubscriptionsRouter } from './modules/notifications/push-subscripti
 import { remindersRouter } from './modules/notifications/reminders.routes.js';
 import { miAgendaRouter } from './modules/dashboard/my-agenda.routes.js';
 import { dashboardSummaryRouter } from './modules/dashboard/dashboard-summary.routes.js';
+import { analysisRouter } from './modules/ai/analysis.routes.js';
 import { trainingRouter } from './modules/training/training.routes.js';
 
 // AUTH-04: Administración de usuarios
@@ -105,6 +106,7 @@ app.use('/api/v1/notificaciones', notificationsRouter);
 app.use('/api/v1/recordatorios', remindersRouter);
 app.use('/api/v1/mi-agenda', miAgendaRouter);
 app.use('/api/v1/dashboard/resumen', dashboardSummaryRouter);
+app.use('/api/v1/dashboard/analisis', analysisRouter);
 app.use('/api/v1/capacitaciones', trainingRouter);
 
 // Manejo global de errores
