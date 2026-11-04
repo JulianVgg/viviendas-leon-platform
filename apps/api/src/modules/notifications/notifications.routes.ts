@@ -4,6 +4,9 @@ import {
   contarNoLeidas, listarNotificaciones, marcarComoLeida, marcarTodasComoLeidas,
 } from './notifications.service.js'
 import { parseListarNotificacionesQuery, parseNotificacionId } from './notifications.validation.js'
+import { getPrismaClient } from '../../config/prisma.js'
+import { getAuthenticatedUser } from '../auth/auth.service.js'
+import { destinoPushAutorizado } from './push-navigation.rules.js'
 
 export const notificationsRouter = Router()
 notificationsRouter.use(requireAuth)
@@ -39,6 +42,37 @@ notificationsRouter.get('/', async (req, res, next) => {
 notificationsRouter.get('/contador', async (req, res, next) => {
   try {
     res.json(await contarNoLeidas(req.session.userId!))
+  } catch (error) { next(error) }
+})
+
+// El ID se consulta siempre dentro de la sesión: no se revelan avisos ajenos.
+// La autorización la decide el backend, nunca la ruta guardada en Web Push.
+notificationsRouter.get('/:id/destino', async (req, res, next) => {
+  try {
+    const id = parseNotificacionId(req.params.id)
+    if (id === null) {
+      errorValidacion(res, 'Identificador de notificación inválido.')
+      return
+    }
+    const usuarioId = req.session.userId!
+    const aviso = await getPrismaClient().notificacion.findFirst({
+      where: { id, usuarioId }, select: { referencia: true },
+    })
+    if (!aviso) {
+      res.status(404).json({ error: {
+        code: 'NOT_FOUND', message: 'Notificación no encontrada.',
+      } })
+      return
+    }
+    const usuario = await getAuthenticatedUser(usuarioId)
+    if (!usuario) {
+      res.status(401).json({ error: {
+        code: 'UNAUTHORIZED', message: 'Sesión no válida.',
+      } })
+      return
+    }
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.json({ destino: destinoPushAutorizado(aviso.referencia, usuario) })
   } catch (error) { next(error) }
 })
 

@@ -46,6 +46,11 @@ export function obtenerNotificaciones({ pagina = 1, limite = 10, estado = 'todas
   return solicitar<ListadoNotificaciones>(`?${query}`, { signal })
 }
 
+/** Resuelve el destino para el usuario autenticado; nunca confía en la ruta del SW. */
+export function obtenerDestinoPushNotificacion(id: number) {
+  return solicitar<{ destino: string }>(`/${id}/destino`)
+}
+
 const patchOptions: RequestInit = {
   method: 'PATCH',
   headers: { 'X-Requested-With': 'XMLHttpRequest' },

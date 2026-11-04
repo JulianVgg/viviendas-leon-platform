@@ -3,6 +3,7 @@ import { app } from './app.js';
 import { iniciarProcesadorRecordatorios } from './modules/notifications/reminders.worker.js';
 import { iniciarProcesadorAvisosSeguimiento } from './modules/notifications/followup-alerts.worker.js';
 import { iniciarProcesadorVisitasVencidas } from './modules/notifications/overdue-visits.worker.js';
+import { iniciarProcesadorPush } from './modules/notifications/push-automatic.worker.js';
 
 const PORT = Number(process.env.PORT ?? 3000);
 
@@ -11,4 +12,5 @@ app.listen(PORT, () => {
   iniciarProcesadorRecordatorios();
   iniciarProcesadorAvisosSeguimiento();
   iniciarProcesadorVisitasVencidas();
+  iniciarProcesadorPush();
 });
