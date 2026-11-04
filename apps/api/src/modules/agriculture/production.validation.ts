@@ -53,7 +53,12 @@ export function validateProductionInput(body: unknown): { data?: ProductionInput
     if (typeof source.observaciones !== 'string' || source.observaciones.length > 2000 ||
       /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(source.observaciones)) {
       details.push({ field: 'observaciones', message: 'Las observaciones no son válidas (máximo 2000 caracteres).' })
-    } else observaciones = source.observaciones.normalize('NFC').trim() || null
+    } else {
+      const normalized = source.observaciones.normalize('NFC').trim()
+      if ((normalized.match(/\S+/gu)?.length ?? 0) > 100) {
+        details.push({ field: 'observaciones', message: 'Las observaciones permiten un máximo de 100 palabras.' })
+      } else observaciones = normalized || null
+    }
   }
   if (details.length) return { details }
   return { data: { cicloCultivoId, fechaCosecha, cantidad: cantidad as string, unidadMedidaId, observaciones }, details }

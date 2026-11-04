@@ -20,6 +20,30 @@ import {
 
 const cycleName = (cycle: Cycle) => `${cycle.cultivo.nombre} · ${cycle.huerto.familia.nombreReferencia} · ${cycle.huerto.nombre ?? `Huerto #${cycle.huerto.id}`}`
 const dateLabel = (record: Production) => record.fechaCosecha ?? `${record.fechaInicioPeriodo} a ${record.fechaFinPeriodo}`
+const MAX_OBSERVATION_WORDS = 100
+
+// El formulario usa la fecha de Guatemala, aunque el navegador tenga otra zona horaria.
+function todayInGuatemala(): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Guatemala', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(new Date())
+  const get = (type: string) => parts.find(part => part.type === type)?.value ?? ''
+  return `${get('year')}-${get('month')}-${get('day')}`
+}
+
+function normalizeCycleSearch(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es')
+}
+
+const wordCount = (value: string) => value.match(/\S+/gu)?.length ?? 0
+
+// También limita el texto pegado, sin romper los saltos de línea existentes.
+function capObservationWords(value: string): string {
+  const words = [...value.matchAll(/\S+/gu)]
+  if (words.length <= MAX_OBSERVATION_WORDS) return value
+  const last = words[MAX_OBSERVATION_WORDS - 1]
+  return value.slice(0, (last.index ?? 0) + last[0].length)
+}
 
 export default function ProduccionPage() {
   const { usuario } = useAuth()
@@ -44,6 +68,7 @@ export default function ProduccionPage() {
   const [submitError, setSubmitError] = useState('')
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [cycleId, setCycleId] = useState('')
+  const [cycleSearch, setCycleSearch] = useState('')
   const [fecha, setFecha] = useState('')
   const [cantidad, setCantidad] = useState('')
   const [unitId, setUnitId] = useState('')
@@ -75,9 +100,22 @@ export default function ProduccionPage() {
     return target.includes(search.trim().toLocaleLowerCase('es'))
   }), [records, filterCycle, search])
 
+  // Búsqueda local: no requiere nuevas rutas y mantiene la opción ya seleccionada.
+  const matchingCycles = useMemo(() => {
+    const query = normalizeCycleSearch(cycleSearch.trim())
+    if (!query) return cycles
+    return cycles.filter(cycle => normalizeCycleSearch(
+      `${cycleName(cycle)} ${cycle.huerto.familia.comunidad.nombre} #${cycle.id} ${cycle.id}`,
+    ).includes(query))
+  }, [cycles, cycleSearch])
+  const selectedCycleOption = cycles.find(cycle => String(cycle.id) === cycleId)
+  const cycleOptions = selectedCycleOption && !matchingCycles.some(cycle => cycle.id === selectedCycleOption.id)
+    ? [selectedCycleOption, ...matchingCycles] : matchingCycles
+
   function startRegistration() {
     setCycleId(filterCycle)
-    setFecha(''); setCantidad(''); setUnitId(''); setNotes('')
+    setCycleSearch('')
+    setFecha(todayInGuatemala()); setCantidad(''); setUnitId(''); setNotes('')
     setSubmitError(''); setFieldErrors({}); setModalOpen(true)
   }
   function closeRegistration() { if (!saving) setModalOpen(false) }
@@ -96,7 +134,8 @@ export default function ProduccionPage() {
     }
     if (!/^\d{1,9}(?:\.\d{1,3})?$/.test(cantidad) || Number(cantidad) <= 0) fields.cantidad = 'Ingresa una cantidad positiva, máximo tres decimales.'
     if (!units.some(item => item.id === Number(unitId))) fields.unidadMedidaId = 'Selecciona una unidad de medida.'
-    if (notes.length > 2000) fields.observaciones = 'Máximo 2000 caracteres.'
+    if (wordCount(notes) > MAX_OBSERVATION_WORDS) fields.observaciones = 'Máximo 100 palabras.'
+    else if (notes.length > 2000) fields.observaciones = 'Máximo 2000 caracteres.'
     setFieldErrors(fields)
     if (Object.keys(fields).length) return
     setSaving(true); setSubmitError('')
@@ -164,13 +203,18 @@ export default function ProduccionPage() {
     <Dialog open={modalOpen} title="Registrar cosecha" description="Asocia la cantidad cosechada a un ciclo y su unidad de medida." onClose={closeRegistration}>
       <form className="space-y-4" onSubmit={(event) => void submit(event)}>
         {submitError && <Alert variant="error" title="No se pudo registrar">{submitError}</Alert>}
-        <FormField id="harvest-cycle" label="Ciclo de cultivo" required error={fieldErrors.cicloCultivoId}>
+        <FormField id="harvest-cycle-search" label="Buscar cultivo o familia" hint={`${matchingCycles.length} ciclo(s) encontrados. Busca por cultivo, huerto, familia o ID.`}>
+          <input id="harvest-cycle-search" type="search" autoComplete="off" className={formControlClassName} value={cycleSearch}
+            onChange={event => setCycleSearch(event.target.value)} placeholder="Ej. tomate, huerto o familia" />
+        </FormField>
+        <FormField id="harvest-cycle" label="Ciclo de cultivo" required error={fieldErrors.cicloCultivoId}
+          hint={cycleSearch.trim() && matchingCycles.length === 0 ? 'Sin coincidencias. Cambia la búsqueda para encontrar otros ciclos.' : undefined}>
           <select id="harvest-cycle" required className={formControlClassName} value={cycleId} onChange={event => setCycleId(event.target.value)}>
             <option value="">Selecciona el ciclo</option>
-            {cycles.map(cycle => <option key={cycle.id} value={cycle.id}>{cycleName(cycle)} · {cycle.estado} · #{cycle.id}</option>)}
+            {cycleOptions.map(cycle => <option key={cycle.id} value={cycle.id}>{cycleName(cycle)} · {cycle.estado} · #{cycle.id}</option>)}
           </select>
         </FormField>
-        <FormField id="harvest-date" label="Fecha de cosecha" required error={fieldErrors.fechaCosecha}>
+        <FormField id="harvest-date" label="Fecha de cosecha" required error={fieldErrors.fechaCosecha} hint="Fecha de hoy preseleccionada; puedes cambiarla.">
           <input id="harvest-date" type="date" required className={formControlClassName} value={fecha} onChange={event => setFecha(event.target.value)} />
         </FormField>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -184,8 +228,10 @@ export default function ProduccionPage() {
             </select>
           </FormField>
         </div>
-        <FormField id="harvest-notes" label="Observaciones" error={fieldErrors.observaciones}>
-          <textarea id="harvest-notes" rows={3} maxLength={2000} className={formControlClassName} value={notes} onChange={event => setNotes(event.target.value)} />
+        <FormField id="harvest-notes" label="Observaciones" error={fieldErrors.observaciones}
+          hint={`${wordCount(notes)} / ${MAX_OBSERVATION_WORDS} palabras · Máximo 2000 caracteres.`}>
+          <textarea id="harvest-notes" rows={3} maxLength={2000} className={formControlClassName}
+            value={notes} onChange={event => setNotes(capObservationWords(event.target.value))} />
         </FormField>
         <div className="flex flex-wrap justify-end gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
           <Button type="button" variant="secondary" disabled={saving} onClick={closeRegistration}>Cancelar</Button>
