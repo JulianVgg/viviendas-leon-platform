@@ -1,13 +1,16 @@
 import { useMemo, useState } from 'react'
-import { BarChart3, CalendarDays, Leaf, PackageCheck, Scale, Sprout, UsersRound } from 'lucide-react'
+import { BarChart3, CalendarDays, Leaf, PackageCheck, Scale, Sprout, UsersRound, ArrowUpRight } from 'lucide-react'
 import type { IndicadoresAgricolas } from '../services/dashboardSummaryService'
 import { ProBarChart } from '../charts/TailAdminCharts'
 import { seriesProduccion, seriesComunidadesAgricolas } from '../lib/chartSeries'
+import CosechasDashboardDialog from './CosechasDashboardDialog'
+import type { FiltrosDashboard } from '../lib/dashboardFilters'
 
 const panel = 'rounded-2xl border border-gray-200 bg-white p-5 shadow-theme-xs dark:border-gray-800 dark:bg-gray-900'
 const numero = (value:number) => value.toLocaleString('es-GT',{maximumFractionDigits:2})
 
-export default function AgriculturaProduccionPanel({datos}: {datos:IndicadoresAgricolas}) {
+export default function AgriculturaProduccionPanel({datos, meses, filtros}: {datos:IndicadoresAgricolas; meses:3|6|12; filtros:FiltrosDashboard}) {
+  const [detalleAbierto,setDetalleAbierto] = useState(false)
   const [cultivoSeleccionado,setCultivoSeleccionado] = useState<number|null>(null)
   const [modo,setModo] = useState<'kg'|'unidades'>('kg')
   const cultivo = useMemo(()=>datos.porCultivo.find(item=>item.id===cultivoSeleccionado),[cultivoSeleccionado,datos.porCultivo])
@@ -22,9 +25,21 @@ export default function AgriculturaProduccionPanel({datos}: {datos:IndicadoresAg
   const produccion = seriesProduccion(datos, modo)
   const comunidades = seriesComunidadesAgricolas(datos)
   return <section aria-label="MON-04 · Indicadores agrícolas y producción" className="space-y-4">
-    <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Agricultura y producción</h2>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Agricultura y producción</h2>
+      <button type="button" onClick={()=>setDetalleAbierto(true)}
+        className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-brand-700 transition-colors hover:bg-brand-50 dark:border-gray-700 dark:bg-gray-900 dark:text-brand-300 dark:hover:bg-gray-800">
+        Ver cosechas <ArrowUpRight size={16}/>
+      </button>
+    </div>
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-      {tarjetas.map(item=><div key={item.nombre} className={`${panel} !p-4 transition-shadow duration-300 hover:shadow-md`}>
+      {tarjetas.map(item=>item.nombre==='Registros de producción' ? <button key={item.nombre} type="button"
+        onClick={()=>setDetalleAbierto(true)} aria-label="Ver cosechas registradas"
+        className={`${panel} !p-4 text-left transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-2 focus-visible:outline-brand-500`}>
+        <item.icono size={19} className="mb-3 text-brand-600" strokeWidth={1.7}/>
+        <p className="text-2xl font-semibold tabular-nums text-gray-900 dark:text-white">{numero(item.valor)}</p>
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{item.nombre}</p>
+      </button> : <div key={item.nombre} className={`${panel} !p-4 transition-shadow duration-300 hover:shadow-md`}>
         <item.icono size={19} className="mb-3 text-brand-600" strokeWidth={1.7}/>
         <p className="text-2xl font-semibold tabular-nums text-gray-900 dark:text-white">{numero(item.valor)}</p>
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{item.nombre}</p>
@@ -78,5 +93,6 @@ export default function AgriculturaProduccionPanel({datos}: {datos:IndicadoresAg
       </div>
       {datos.indicadores.unidadesNoComparables>0 && <p className="mt-3 text-xs text-gray-500">Hay producción registrada en otras unidades; no se suma a kg o unidades.</p>}
     </div>
+    {detalleAbierto && <CosechasDashboardDialog meses={meses} filtros={filtros} cerrar={()=>setDetalleAbierto(false)}/>}
   </section>
 }

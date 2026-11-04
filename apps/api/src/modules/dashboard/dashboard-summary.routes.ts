@@ -7,6 +7,7 @@ import { puedeEditarPerfilCompleto } from '../profile/profile.permissions.js'
 import { obtenerDetalleIndicador, TIPOS_DETALLE } from './dashboard-detail.service.js'
 import { obtenerIndicadoresVisitasCapacitaciones } from './visits-training.service.js'
 import { obtenerIndicadoresAgricolas } from './agriculture-production.service.js'
+import { obtenerCosechasDashboard } from './agriculture-harvests.service.js'
 import { validarFiltrosMon05 } from './mon05-filters.js'
 import { obtenerResumenAlertasMon06, obtenerDetalleAlertasMon06 } from './mon06-alerts.service.js'
 import { getPrismaClient } from '../../config/prisma.js'
@@ -119,6 +120,29 @@ dashboardSummaryRouter.get('/agricultura-produccion', async (req, res) => {
   } catch (error) {
     console.error('[MON-04] Error consultando producción agrícola:', error)
     res.status(503).json({ error: 'No fue posible consultar los indicadores agrícolas.' })
+  }
+})
+
+// AGR-05 + MON-04: detalle de cosechas reales, paginado desde PostgreSQL.
+// Ruta declarada ANTES de /filtros para mantener el orden explícito de las consultas.
+dashboardSummaryRouter.get('/agricultura-produccion/cosechas', async (req, res) => {
+  const meses = Number(req.query.meses ?? 6)
+  const pagina = Number(req.query.pagina ?? 1)
+  const limite = Number(req.query.limite ?? 10)
+  if (![3, 6, 12].includes(meses) || !Number.isInteger(pagina) || pagina < 1 || pagina > 100000 || limite !== 10) {
+    res.status(400).json({ error: 'Filtros inválidos.' }); return
+  }
+  try {
+    const usuario = await getAuthenticatedUser(req.session.userId!)
+    if (!usuario) { res.status(401).json({ error: 'Sesión inválida.' }); return }
+    if (!puedeEditarPerfilCompleto(usuario.roles)) { res.status(403).json({ error: 'No autorizado.' }); return }
+    const filtros = filtrosPara(req, res, true)
+    if (!filtros) return
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.json(await obtenerCosechasDashboard(meses, pagina, limite, undefined, undefined, filtros))
+  } catch (error) {
+    console.error('[AGR-05/MON-04] Error consultando cosechas:', error)
+    res.status(503).json({ error: 'No fue posible consultar las cosechas.' })
   }
 })
 

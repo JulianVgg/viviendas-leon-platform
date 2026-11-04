@@ -88,6 +88,38 @@ export async function consultarIndicadoresAgricolas(meses: 3|6|12, signal?: Abor
   return (await response.json()) as IndicadoresAgricolas
 }
 
+// AGR-05: desglose verificable de cosechas, separado de estimaciones de visitas.
+export type ResumenCosechasDashboard = {
+  periodo: { meses: number; desde: string; hasta: string }
+  pagina: number
+  limite: number
+  total: number
+  totalPaginas: number
+  registros: Array<{
+    id: number
+    cicloCultivoId: number
+    fecha: string
+    cultivo: string
+    huerto: string | null
+    familia: string
+    comunidad: string
+    cantidades: Array<{ cantidad: string; unidad: string; tipo: 'kg' | 'unidades' | 'otra' }>
+  }>
+}
+export async function consultarCosechasDashboard(
+  meses: 3 | 6 | 12,
+  pagina: number,
+  signal?: AbortSignal,
+  filtros: FiltrosDashboard = {},
+): Promise<ResumenCosechasDashboard> {
+  const p = agregarFiltrosDashboard(new URLSearchParams({ meses: String(meses), pagina: String(pagina), limite: '10' }), filtros)
+  const r = await fetch(`/api/v1/dashboard/resumen/agricultura-produccion/cosechas?${p}`, {
+    credentials: 'same-origin', cache: 'no-store', signal, headers: { Accept: 'application/json' },
+  })
+  if (!r.ok) throw new Error('No se pudieron consultar las cosechas.')
+  return (await r.json()) as ResumenCosechasDashboard
+}
+
 export type OpcionesFiltrosDashboard = {
   comunidades: Array<{id: number; nombre: string}>
   responsables: Array<{id: number; nombre: string}>
