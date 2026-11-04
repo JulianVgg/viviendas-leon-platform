@@ -149,7 +149,7 @@ export default function DashboardPage() {
     {institucional && familiasProgramas && <FamiliasProgramasPanel datos={familiasProgramas} />}
     {alertas && <AlertasSeguimientosPanel datos={alertas} filtros={filtros}/>}
     {errorAlertas && <p role="alert" className="text-sm text-rose-600">{errorAlertas}</p>}
-    {institucional && agricultura && <AgriculturaProduccionPanel datos={agricultura}/>}
+    {institucional && agricultura && <AgriculturaProduccionPanel datos={agricultura} meses={meses} filtros={filtros}/>}
     {institucional && errorAgricultura && <p role="alert" className="text-sm text-rose-600">{errorAgricultura}</p>}
     {institucional && !familiasProgramas && !errorFamilias && <div className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-500 dark:border-gray-800 dark:bg-gray-900">Cargando participación...</div>}
     {institucional && errorFamilias && <p role="alert" className="text-sm text-rose-600">{errorFamilias}</p>}
