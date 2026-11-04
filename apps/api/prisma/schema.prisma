@@ -868,6 +868,7 @@ model Usuario {
   eventosCreados EventoInstitucional[] @relation("EventoCreador")
   eventosParticipante EventoInstitucionalParticipante[]
   capacitacionesAsignadas Capacitacion[] @relation("CapacitacionesAsignadas")
+  solicitudesAnalisisIa AnalisisIaSolicitud[]
 
   @@map("usuario")
 }
@@ -1094,4 +1095,23 @@ model SeguimientoReprogramacion {
 
   @@index([seguimientoId, creadoEn])
   @@map("seguimiento_reprogramacion")
+}
+
+// AI-01.2 — Solo metadatos de consumo. No guarda prompts ni análisis generados.
+model AnalisisIaSolicitud {
+  id            String   @id @default(uuid()) @db.Uuid
+  usuarioId     Int      @map("usuario_id")
+  modelo        String   @db.VarChar(100)
+  estado        String   @default("RESERVADA") @db.VarChar(24)
+  creadoEn      DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+  finalizadoEn  DateTime? @map("finalizado_en") @db.Timestamptz(6)
+  tokensEntrada Int?     @map("tokens_entrada")
+  tokensSalida  Int?     @map("tokens_salida")
+  proveedorId   String?  @map("proveedor_id") @db.VarChar(100)
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@index([usuarioId, creadoEn])
+  @@index([creadoEn])
+  @@map("analisis_ia_solicitud")
 }
