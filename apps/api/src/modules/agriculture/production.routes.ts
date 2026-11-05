@@ -28,6 +28,7 @@ type ProductionRecord = Prisma.RegistroProduccionGetPayload<{ select: typeof pro
 const day = (value: Date) => value.toISOString().slice(0, 10)
 const serialize = (record: ProductionRecord) => ({
   ...record,
+  origenProduccion: 'COSECHA_REAL' as const,
   fechaInicioPeriodo: day(record.fechaInicioPeriodo),
   fechaFinPeriodo: day(record.fechaFinPeriodo),
   fechaCosecha: day(record.fechaInicioPeriodo) === day(record.fechaFinPeriodo) ? day(record.fechaInicioPeriodo) : null,

@@ -62,7 +62,7 @@ export default function AgriculturaProduccionPanel({datos, meses, filtros}: {dat
           : <p className="py-20 text-center text-sm text-gray-500">Sin producción registrada en {modo}.</p>}
         <div className="mt-3 flex justify-between gap-3 border-t border-gray-100 pt-3 text-xs text-gray-500 dark:border-gray-800">
           <span>{datos.indicadores.ciclosFinalizados} ciclos finalizados</span>
-          <span>{datos.visitasConProduccion} visitas con producción reportada</span>
+          <span>{datos.visitasConProduccion} visitas con estimación</span>
         </div>
       </div>
       <div className={panel}>

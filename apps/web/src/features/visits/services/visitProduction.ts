@@ -27,3 +27,15 @@ export function estimatedSaleQ(entry: ProductionEntry): number | null {
   if (quantity === null || !Number.isFinite(price) || price < 0) return null
   return Number((quantity * price).toFixed(2))
 }
+
+/** Solo valorización orientativa de una captura: no representa ingresos por ventas. */
+export function valorEstimadoCapturaQ(crop: {
+  production: boolean; priceBasis: 'unidad' | 'kg';
+  priceQ: number | null; units: number | null; kg: number | null
+}): number | null {
+  if (crop.production !== true || crop.priceQ === null || !Number.isFinite(crop.priceQ) || crop.priceQ < 0) return null
+  const quantity = crop.priceBasis === 'kg' ? crop.kg : crop.units
+  if (quantity === null || !Number.isFinite(quantity) || quantity < 0) return null
+  const amount = quantity * crop.priceQ
+  return Number.isFinite(amount) ? Number(amount.toFixed(2)) : null
+}

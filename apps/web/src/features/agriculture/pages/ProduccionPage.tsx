@@ -169,7 +169,7 @@ export default function ProduccionPage() {
   if (!allowed) return <Alert variant="error" title="Acceso restringido">No tienes permiso para consultar producción agrícola.</Alert>
   return <>
     <PageMeta title="Producción agrícola | ViviendasLeón" description="Registro de cosechas vinculadas a ciclos agrícolas." />
-    <PageHeader title="Producción agrícola" description="Registra resultados de cosecha, consulta su historial y conserva las cantidades para futuros reportes." />
+    <PageHeader title="Cosechas reales" description="Registro formal de producción agrícola por ciclo." />
     {!online && <Alert variant="warning" title="Sin conexión">Puedes consultar la información ya visible, pero registrar una cosecha requiere conexión. Este módulo todavía no dispone de sincronización offline.</Alert>}
     {notice && <Alert variant="success">{notice}</Alert>}
     {error && <Alert variant="error" title="No se pudo cargar">{error}<Button type="button" variant="secondary" className="mt-3" onClick={() => setRefresh(n => n + 1)}>Reintentar</Button></Alert>}

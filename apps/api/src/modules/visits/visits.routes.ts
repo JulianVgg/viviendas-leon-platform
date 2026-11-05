@@ -16,6 +16,7 @@ import { actualizarRecordatorios, cancelarRecordatorios, configGuardada, configP
 import { buildEvaluationObservations } from '../agriculture/followup-format.js'
 import { visitCycleProblem } from '../agriculture/cycles.relations.js'
 import { normalizarTelefonoWhatsapp } from './whatsapp-reminder.rules.js'
+import { marcarEstimacionesVisita, ORIGEN_ESTIMACION_VISITA } from './visit-production-source.js'
 
 // Dirección y Coordinación supervisan y pueden reprogramar citas institucionales.
 // Los demás técnicos conservan exclusivamente los registros propios.
@@ -107,6 +108,7 @@ function validate(input: unknown, operationId: unknown): { capturedAt?: string; 
       ...(c.observacionesCultivo !== undefined ? { observacionesCultivo: clean(c.observacionesCultivo, 2000) } : {}),
       name: clean(c.name,80), stage: clean(c.stage,60), quality: clean(c.quality,60),
       plants: c.plants ?? null, production: Boolean(c.production),
+      ...(c.production === true ? { origenProduccion: ORIGEN_ESTIMACION_VISITA } : {}),
       perPlantUnits: c.perPlantUnits ?? null, perPlantKg: c.perPlantKg ?? null,
       units: c.units ?? null, kg: c.kg ?? null, priceQ: c.priceQ ?? null,
       priceUSD: c.priceUSD ?? null, priceBasis: c.priceBasis === 'kg' ? 'kg' : 'unidad',
@@ -163,7 +165,7 @@ function serialize(row: {
     responsibleUserId: row.usuarioResponsableId,
     responsibleName: [row.usuarioResponsable.nombre, row.usuarioResponsable.apellido].filter(Boolean).join(' '),
     familyId: row.familia.id, familyName: row.familia.nombreReferencia,
-    community: row.familia.comunidad.nombre, capture: captura?.datos ?? null,
+    community: row.familia.comunidad.nombre, capture: marcarEstimacionesVisita(captura?.datos ?? null),
     evidences: evidences.map(item => ({ ...item, url: `/api/v1/visitas/${row.id}/evidencias/${item.id}` })),
   }
 }

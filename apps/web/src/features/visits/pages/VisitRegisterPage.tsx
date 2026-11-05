@@ -13,6 +13,7 @@ import { CyclesApiError, listCycles, type Cycle } from '@/features/agriculture/s
 import { CropsApiError, listAvailableCrops } from '@/features/agriculture/services/cropsService'
 import { addCivilDays, DIAS_CICLO_VISITA } from '@/features/visits/services/visitPlanning'
 import { productionEstimate, estimatedSaleQ } from '@/features/visits/services/visitProduction'
+import { isVisitCycleAvailable } from '@/features/visits/services/visitCycleAvailability'
 import { saveVisitCapture, todayInGuatemala, type VisitCapture, type CropCapture, type VisitPhotoFile, type VisitTimeSlot } from '@/features/visits/services/visitService'
 import SearchableSelect, { catalogOptions } from '@/features/visits/components/SearchableSelect'
 import { getVisitFollowUps, getVisitList, type VisitListItem, type VisitFollowUp, type FollowUpStatus } from '@/features/visits/services/visitService'
@@ -129,10 +130,8 @@ export default function VisitRegisterPage() {
     const key = `visits:cycles:v1:user:${usuario.id}:family:${familyId}`
     listCycles({ familiaId: Number(familyId) }, controller.signal).then(records => {
       if (controller.signal.aborted) return
-      // CIR-04: no ofrecer siembras futuras ni huertos/cultivos inactivos.
-      setAvailableCycles(records.filter(record => record.estado === 'ACTIVO' && record.huerto.familiaId === Number(familyId) &&
-        record.huerto.estado === 'ACTIVO' && record.cultivo.activo &&
-        [record.fechaSiembra, record.fechaTrasplante].filter(Boolean).sort().at(-1)! <= todayLocal()))
+      // Un ciclo sembrado ya es evaluable, aunque su trasplante esté programado para más adelante.
+      setAvailableCycles(records.filter(record => isVisitCycleAvailable(record, Number(familyId), date)))
       void saveOfflineData(key, records).catch(() => {})
     }).catch(async (reason: unknown) => {
       if (reason instanceof CyclesApiError && [401, 403].includes(reason.status)) {
@@ -142,15 +141,13 @@ export default function VisitRegisterPage() {
       try {
         const cached = await getOfflineData<Cycle[]>(key)
         if (!controller.signal.aborted) {
-          setAvailableCycles((cached?.data ?? []).filter(record => record.estado === 'ACTIVO' &&
-            record.huerto.familiaId === Number(familyId) && record.huerto.estado === 'ACTIVO' &&
-            record.cultivo.activo && [record.fechaSiembra, record.fechaTrasplante].filter(Boolean).sort().at(-1)! <= todayLocal()))
+          setAvailableCycles((cached?.data ?? []).filter(record => isVisitCycleAvailable(record, Number(familyId), date)))
           setCyclesWarning('No se pudieron actualizar los ciclos: comprueba que las siembras estén sincronizadas antes de evaluar.')
         }
       } catch { if (!controller.signal.aborted) setCyclesWarning('No se pudieron consultar ciclos agrícolas.') }
     }).finally(() => { if (!controller.signal.aborted) setCyclesLoading(false) })
     return () => controller.abort()
-  }, [familyId, usuario?.id])
+  }, [familyId, usuario?.id, date])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -283,7 +280,7 @@ export default function VisitRegisterPage() {
     }
     if (cropsState.some(c => c.production && c.priceQ.trim() &&
       !(c.priceBasis === 'kg' ? c.perPlantKg : c.perPlantUnits).trim())) {
-      setError('Completa la producción por planta antes de calcular la venta.'); setStep(1); return
+      setError('Completa la producción por planta antes de calcular el valor estimado.'); setStep(1); return
     }
     if (cropsState.some(c => c.observacionesCultivo.length > 2000)) {
       setError('Las observaciones del cultivo no pueden superar 2000 caracteres.'); setStep(1); return
@@ -293,7 +290,8 @@ export default function VisitRegisterPage() {
       name: c.name, stage: c.stage, quality: c.quality, plants: numberOrNull(c.plants),
       ...(c.observacionesCultivo.trim() ? { observacionesCultivo: c.observacionesCultivo.trim() } : {}),
       findings: c.findings.map(f => ({ type: f.type, name: f.name, damage: f.damage })),
-      production: c.production, perPlantUnits: c.production ? numberOrNull(c.perPlantUnits) : null,
+      production: c.production, ...(c.production ? { origenProduccion: 'ESTIMACION_VISITA' as const } : {}),
+      perPlantUnits: c.production ? numberOrNull(c.perPlantUnits) : null,
       perPlantKg: c.production ? numberOrNull(c.perPlantKg) : null,
       units: c.production ? productionEstimate(c).units : null,
       kg: c.production ? productionEstimate(c).kg : null,
@@ -457,8 +455,8 @@ export default function VisitRegisterPage() {
               <Button type="button" variant="secondary" size="sm" onClick={() => updateCrop(crop.id, {findings: crop.findings.filter(item => item.id !== f.id)})}>Quitar</Button>
             </div>)}<Button type="button" variant="secondary" size="sm" onClick={()=>updateCrop(crop.id,{findings:[...crop.findings,{id:crypto.randomUUID(),type:'plaga',name:'',damage:''}]})}>+ Añadir hallazgo</Button></div>
           </details>
-          <details className="mt-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700" open={crop.production || undefined}><summary className="cursor-pointer font-medium text-slate-900 dark:text-white">Producción y ventas</summary>
-            <div className="mt-4 space-y-4"><label className="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={crop.production} onChange={e=>updateCrop(crop.id,{production:e.target.checked})}/> Registrar producción y ventas</label>
+          <details className="mt-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700" open={crop.production || undefined}><summary className="cursor-pointer font-medium text-slate-900 dark:text-white">Producción estimada</summary>
+            <div className="mt-4 space-y-4"><label className="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={crop.production} onChange={e=>updateCrop(crop.id,{production:e.target.checked})}/> Registrar estimación</label>
               {crop.production && <div className="space-y-4 rounded-xl bg-slate-50/70 p-4 dark:bg-slate-800/40">
                 <div className="grid gap-3 sm:grid-cols-2">
                   {([['perPlantUnits','Planta (unidades)'],['perPlantKg','Planta (kg)']] as const).map(([key,name]) =>
@@ -466,12 +464,13 @@ export default function VisitRegisterPage() {
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <FormField id={`price-basis-${crop.id}`} label="Precio por"><select id={`price-basis-${crop.id}`} className={input} value={crop.priceBasis} onChange={e=>updateCrop(crop.id,{priceBasis:e.target.value as CropEntry['priceBasis']})}><option value="unidad">Unidad</option><option value="kg">Kilogramo</option></select></FormField>
-                  <FormField id={`price-q-${crop.id}`} label={`Precio (Q/${crop.priceBasis === 'kg' ? 'kg' : 'unidad'})`}><input id={`price-q-${crop.id}`} className={input} type="number" min="0" step="any" value={crop.priceQ} onChange={e=>updateCrop(crop.id,{priceQ:e.target.value})}/></FormField>
+                  <FormField id={`price-q-${crop.id}`} label={`Precio de referencia (Q/${crop.priceBasis === 'kg' ? 'kg' : 'unidad'})`}><input id={`price-q-${crop.id}`} className={input} type="number" min="0" step="any" value={crop.priceQ} onChange={e=>updateCrop(crop.id,{priceQ:e.target.value})}/></FormField>
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3 dark:border-slate-700">
                   <div className="text-xs text-slate-500 dark:text-slate-400">Producción estimada: {productionEstimate(crop).units ?? '—'} unidades · {productionEstimate(crop).kg ?? '—'} kg</div>
-                  <div className="text-sm text-slate-700 dark:text-slate-200">Venta estimada: <strong className="text-base text-slate-900 dark:text-white">Q {currencyTotal(crop)}</strong></div>
+                  <div className="text-sm text-slate-700 dark:text-slate-200">Valor estimado: <strong className="text-base text-slate-900 dark:text-white">Q {currencyTotal(crop)}</strong></div>
                 </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400">No representa cosecha ni venta efectiva.</p>
               </div>}
             </div>
           </details>
