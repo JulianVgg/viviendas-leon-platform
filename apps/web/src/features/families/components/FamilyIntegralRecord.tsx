@@ -10,7 +10,7 @@ import Button from '@/components/ui/Button'
 import Dialog from '@/components/ui/Dialog'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { canWriteFamilies } from '@/features/auth/screenPermissions'
-import { familyStateVariant, formatRecordDate } from '../services/familyRecord'
+import { familyStateLabel, familyStateVariant, formatRecordDate } from '../services/familyRecord'
 import { FamilyApiError, updateFamilyMemberState } from '../services/familyService'
 import type { FamilyMemberRecord, IntegralFamilyRecord } from '../types/familyIntegral'
 import FamilyMemberDialog from './FamilyMemberDialog'
@@ -97,7 +97,7 @@ export default function FamilyIntegralRecord({ family, onRefresh }: { family: In
     <Card aria-label="Identificación del expediente">
       <CardBody><div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0"><p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Expediente #{family.id}{canManage ? ' · Administración habilitada' : ' · Solo lectura'}</p><h2 className="mt-2 break-words text-xl font-semibold text-slate-900 [overflow-wrap:anywhere] sm:text-2xl dark:text-white">{family.nombreReferencia}</h2><p className="mt-2 break-words text-sm leading-6 text-slate-600 [overflow-wrap:anywhere] dark:text-slate-300">{family.comunidad.nombre} · {family.comunidad.municipio.nombre}</p>{canManage && <Link to={`/familias/${family.id}/editar`} className="layout-focus mt-3 inline-flex min-h-9 items-center gap-2 rounded-lg px-2 text-sm font-medium text-brand-600 hover:bg-brand-50 dark:text-brand-300 dark:hover:bg-brand-500/10"><Pencil size={16} />Editar información</Link>}</div>
-        <div className="min-w-0 sm:max-w-64"><p className="mb-2 text-xs text-slate-500 dark:text-slate-400">Estado de la familia</p><Badge variant={familyStateVariant(family.estado)} className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere]">{family.estado}</Badge></div>
+        <div className="min-w-0 sm:max-w-64"><p className="mb-2 text-xs text-slate-500 dark:text-slate-400">Estado de la familia</p><Badge variant={familyStateVariant(family.estado)} className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere]">{familyStateLabel(family.estado)}</Badge></div>
       </div></CardBody>
     </Card>
     <div className="grid min-w-0 gap-4 sm:grid-cols-2">
@@ -111,7 +111,7 @@ export default function FamilyIntegralRecord({ family, onRefresh }: { family: In
       <section role="tabpanel" id={panelId('general')} aria-labelledby={tabId('general')} hidden={selected !== 'general'} tabIndex={0} className="layout-focus min-w-0 rounded-2xl">
         <Card><CardHeader title="Información general" description="Identificación, ubicación e ingreso de la familia." /><CardBody><dl className="grid min-w-0 gap-x-6 gap-y-5 sm:grid-cols-2">
           {generalFields.map(([label, value]) => <div key={label} className="min-w-0 border-b border-slate-100 pb-4 dark:border-slate-800"><dt className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</dt><dd className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-900 [overflow-wrap:anywhere] dark:text-slate-100">{value}</dd></div>)}
-          <div className="min-w-0 border-b border-slate-100 pb-4 dark:border-slate-800"><dt className="text-xs font-medium text-slate-500 dark:text-slate-400">Estado</dt><dd className="mt-2"><Badge variant={familyStateVariant(family.estado)} className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere]">{family.estado}</Badge></dd></div>
+          <div className="min-w-0 border-b border-slate-100 pb-4 dark:border-slate-800"><dt className="text-xs font-medium text-slate-500 dark:text-slate-400">Estado</dt><dd className="mt-2"><Badge variant={familyStateVariant(family.estado)} className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere]">{familyStateLabel(family.estado)}</Badge></dd></div>
           <div className="min-w-0 sm:col-span-2"><dt className="text-xs font-medium text-slate-500 dark:text-slate-400">Observaciones</dt><dd className="mt-2 whitespace-pre-wrap break-words text-sm leading-7 text-slate-700 [overflow-wrap:anywhere] dark:text-slate-300">{family.observaciones || 'Sin observaciones'}</dd></div>
         </dl></CardBody></Card>
       </section>

@@ -5,6 +5,11 @@ export function formatRecordDate(value: string | null | undefined): string {
   return new Intl.DateTimeFormat('es-GT', { timeZone: 'UTC', day: '2-digit', month: '2-digit', year: 'numeric' }).format(date)
 }
 
+export function familyStateLabel(state: string): string {
+  if (state.toUpperCase() === 'PENDIENTE_VALIDACION') return 'Pendiente de validación'
+  return state.charAt(0).toUpperCase() + state.slice(1).toLowerCase()
+}
+
 export function familyStateVariant(state: string): 'success' | 'warning' | 'neutral' {
   if (state.toUpperCase() === 'ACTIVA') return 'success'
   if (state.toUpperCase() === 'RETIRADA') return 'warning'

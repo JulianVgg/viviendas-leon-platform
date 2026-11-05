@@ -16,6 +16,7 @@ import type { CommunityOption } from '../types/family'
 import type { IntegralFamilyRecord } from '../types/familyIntegral'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { buildFamilyUpdate, familyDraftFrom, validateFamilyDraft, type FamilyEditDraft, type FamilyEditErrors } from '../services/familyManagement'
+import { familyStateLabel } from '../services/familyRecord'
 import FamilyProgramsSection from '../components/FamilyProgramsSection'
 
 const control = formControlClassName
@@ -122,7 +123,7 @@ export default function FamilyEditPage() {
     {loading && <Card><CardBody><LoadingState label="Cargando información real de la familia..." /></CardBody></Card>}
     {!loading && !family && <Alert variant="error" title="No se pudo abrir la edición"><p>{message?.text}</p><Button type="button" variant="secondary" className="mt-3" onClick={retryLoad}>Reintentar</Button></Alert>}
     {!loading && family && draft && <form noValidate onSubmit={submit} className="space-y-5">
-      <Card><CardBody><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-center gap-3"><span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-300"><Home size={22} /></span><div className="min-w-0"><p className="text-xs font-medium uppercase tracking-wide text-gray-500">Expediente #{family.id}</p><h2 className="truncate text-xl font-semibold text-gray-900 dark:text-white">{family.nombreReferencia}</h2></div></div><div><p className="mb-1 text-xs text-gray-500">Estado actual (solo lectura)</p><Badge variant={family.estado === 'ACTIVA' ? 'success' : family.estado === 'RETIRADA' ? 'warning' : 'neutral'}>{family.estado}</Badge></div></div></CardBody></Card>
+      <Card><CardBody><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-center gap-3"><span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-300"><Home size={22} /></span><div className="min-w-0"><p className="text-xs font-medium uppercase tracking-wide text-gray-500">Expediente #{family.id}</p><h2 className="truncate text-xl font-semibold text-gray-900 dark:text-white">{family.nombreReferencia}</h2></div></div><div><p className="mb-1 text-xs text-gray-500">Estado actual (solo lectura)</p><Badge variant={family.estado === 'ACTIVA' ? 'success' : family.estado === 'RETIRADA' ? 'warning' : 'neutral'}>{familyStateLabel(family.estado)}</Badge></div></div></CardBody></Card>
       {!isOnline && <Alert variant="warning" title="Sin conexión">El borrador permanece únicamente en memoria. Reconecta para guardar o recuperar datos actualizados.</Alert>}
       {message && <Alert variant={message.kind} title={message.kind === 'success' ? 'Cambios guardados' : 'No se pudo guardar'}>{message.text}</Alert>}
       <Card><CardHeader title="Información familiar" description="El estado institucional no puede modificarse desde este formulario." /><CardBody><div className="grid gap-5 md:grid-cols-2">

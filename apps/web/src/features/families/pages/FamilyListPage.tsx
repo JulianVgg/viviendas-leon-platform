@@ -14,6 +14,7 @@ import LoadingState from '@/components/ui/LoadingState'
 import { fetchFamiliesWithOffline } from '@/features/families/services/familyOfflineService'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import type { FamilyListResponse } from '@/features/families/types/family'
+import { familyStateLabel } from '@/features/families/services/familyRecord'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { canWriteFamilies } from '@/features/auth/screenPermissions'
 
@@ -22,6 +23,7 @@ const PAGE_SIZE = 20
 const STATUS_OPTIONS = [
   { value: '', label: 'Todos los estados' },
   { value: 'ACTIVA', label: 'Activa' },
+  { value: 'PENDIENTE_VALIDACION', label: 'Pendiente de validación' },
   { value: 'RETIRADA', label: 'Retirada' },
   { value: 'EGRESADA', label: 'Egresada' },
 ]
@@ -30,10 +32,6 @@ function statusBadgeVariant(status: string): 'neutral' | 'success' | 'warning' {
   if (status.toUpperCase() === 'ACTIVA') return 'success'
   if (status.toUpperCase() === 'RETIRADA') return 'warning'
   return 'neutral'
-}
-
-function humanizeStatus(status: string) {
-  return status.charAt(0).toUpperCase() + status.slice(1).toLowerCase()
 }
 
 function formatDate(value: string | null) {
@@ -137,7 +135,7 @@ export default function FamilyListPage({ mode = 'list' }: { mode?: 'list' | 'edi
     <span key={`members-${family.id}`} className="font-medium tabular-nums">{family.integrantes}</span>,
     formatDate(family.fechaIngreso),
     <Badge key={`status-${family.id}`} variant={statusBadgeVariant(family.estado)}>
-      {humanizeStatus(family.estado)}
+      {familyStateLabel(family.estado)}
     </Badge>,
     ...(mode === 'edit' ? [canEdit ? <Link key={`edit-${family.id}`} to={`/familias/${family.id}/editar`} className="layout-focus inline-flex min-h-9 items-center justify-center rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600">Editar</Link> : <span key={`edit-${family.id}`} className="text-xs text-gray-500">Sin permiso</span>] : []),
   ]) ?? []
