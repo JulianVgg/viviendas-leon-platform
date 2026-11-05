@@ -16,7 +16,7 @@ const prod = (id, dia, cultivar, detalles)=>({
 test('MON-04 distingue unidades no equivalentes (kg vs unidad vs manojos)',()=>{
   assert.equal(tipoUnidad('KG',null),'kg')
   assert.equal(tipoUnidad('UNIDAD',null),'unidades')
-  assert.equal(tipoUnidad('MANOJO',null),'otra')
+  assert.equal(tipoUnidad('MANOJO',null),'manojos')
 })
 
 test('MON-04 cuenta ciclos y familias una sola vez; distingue plantas iniciales',()=>{
@@ -40,6 +40,7 @@ test('MON-04 suma producción formal por unidad sin mezclar manojos ni multiplic
   assert.equal(r.indicadores.produccionKg,3.75)
   assert.equal(r.indicadores.produccionUnidades,12)
   assert.equal(r.indicadores.unidadesNoComparables,1)
+  assert.equal(r.indicadores.produccionManojos,3)
   assert.equal(r.produccionMensual[0].kg,0)
   assert.equal(r.produccionMensual[1].kg,3.75)
 })

@@ -21,6 +21,7 @@ test('AGR-05/MON-04: suma cosechas efectivas por unidad, no estimaciones de visi
   assert.equal(resumen.indicadores.produccionKg, 12.75)
   assert.equal(resumen.indicadores.produccionUnidades, 5)
   assert.equal(resumen.indicadores.unidadesNoComparables, 1)
+  assert.equal(resumen.indicadores.produccionManojos, 2)
   assert.equal(resumen.produccionMensual[0].registros, 3)
   assert.equal(resumen.produccionMensual[0].kg, 12.75)
 })

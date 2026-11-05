@@ -52,10 +52,10 @@ export function seriesActividadResponsables(responsables: IndicadoresVisitasCapa
   }
 }
 
-export function seriesProduccion(datos: IndicadoresAgricolas, unidad: 'kg' | 'unidades') {
+export function seriesProduccion(datos: IndicadoresAgricolas, unidad: 'kg' | 'unidades' | 'manojos') {
   return {
     labels: datos.produccionMensual.map(item => item.mes),
-    series: [{ name: unidad === 'kg' ? 'Producción (kg)' : 'Producción (unidades)', data: datos.produccionMensual.map(item => item[unidad]) }],
+    series: [{ name: unidad === 'kg' ? 'Producción (kg)' : unidad === 'manojos' ? 'Producción (manojos)' : 'Producción (unidades)', data: datos.produccionMensual.map(item => item[unidad]) }],
   }
 }
 

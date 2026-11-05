@@ -12,6 +12,7 @@ export function productionEstimate(entry: ProductionEntry): { units: number | nu
   if (!Number.isSafeInteger(plants) || plants <= 0) return { units: null, kg: null }
   const estimate = (value: string) => {
     if (!value.trim()) return null
+    if (!/^\d{1,9}(?:\.\d{1,3})?$/.test(value)) return null
     const result = Number(value) * plants
     return Number.isFinite(result) && result >= 0 ? Number(result.toFixed(3)) : null
   }
@@ -21,6 +22,7 @@ export function productionEstimate(entry: ProductionEntry): { units: number | nu
 export function estimatedSaleQ(entry: ProductionEntry): number | null {
   if (!entry.priceQ.trim()) return null
   const quantity = entry.priceBasis === 'kg' ? productionEstimate(entry).kg : productionEstimate(entry).units
+  if (!/^\d{1,9}(?:\.\d{1,2})?$/.test(entry.priceQ)) return null
   const price = Number(entry.priceQ)
   if (quantity === null || !Number.isFinite(price) || price < 0) return null
   return Number((quantity * price).toFixed(2))
