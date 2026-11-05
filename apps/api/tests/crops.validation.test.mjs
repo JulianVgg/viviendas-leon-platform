@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { parseCropId, validateCropInput } from '../dist/modules/agriculture/crops.validation.js'
+import { cropNameKey, parseCropId, validateCropInput } from '../dist/modules/agriculture/crops.validation.js'
 
 test('AGR-02: valida un cultivo activo e higieniza el nombre', () => {
   const result = validateCropInput({ nombre: '  Tomate   cherry  ', descripcion: ' Hortaliza ', activo: true })
@@ -22,4 +22,10 @@ test('AGR-02: rechaza datos adicionales y tipos erróneos', () => {
 test('AGR-02: rechaza IDs fuera de rango', () => {
   assert.equal(parseCropId('1'), 1)
   for (const id of ['0', '-1', '1.0', '2147483648', 'abc', null]) assert.equal(parseCropId(id), null)
+})
+
+test('CIR-03: normaliza diferencias ortográficas sin unir variedades distintas', () => {
+  assert.equal(cropNameKey('  BROCOLI '), cropNameKey('Brócoli'))
+  assert.equal(cropNameKey('Chile-jalapeno'), cropNameKey('Chile jalapeño'))
+  assert.notEqual(cropNameKey('Frijol'), cropNameKey('Frijol bolonillo'))
 })

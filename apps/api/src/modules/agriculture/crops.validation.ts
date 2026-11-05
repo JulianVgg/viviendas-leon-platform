@@ -3,6 +3,13 @@ export type CropFieldError = { field: string; message: string }
 const allowed = new Set(['nombre', 'descripcion', 'activo'])
 const maxId = 2_147_483_647
 
+// Comparación ortográfica consistente con la importación CIR-03.
+// No equipara variedades distintas (p. ej., Frijol y Frijol bolonillo).
+export function cropNameKey(name: string): string {
+  return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[-_]+/g, ' ').trim().replace(/\s+/g, ' ').toLocaleLowerCase('es-GT')
+}
+
 export function parseCropId(value: unknown): number | null {
   if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) return null
   const id = Number(value)

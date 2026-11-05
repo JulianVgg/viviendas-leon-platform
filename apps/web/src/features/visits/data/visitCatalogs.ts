@@ -1,5 +1,4 @@
 
-export const crops = ['Acelga', 'Apio', 'Brócoli', 'Cebolla', 'Chile pimiento', 'Cilantro', 'Coliflor', 'Espinaca', 'Frijol bolonillo', 'Lechuga', 'Rábano', 'Remolacha', 'Repollo', 'Tomate', 'Zanahoria']
 export const stages = ['Almácigo', 'Trasplantado']
 export const qualities = ['Excelente', 'Bueno', 'Regular/Medio', 'Malo']
 export const weatherOptions = ['Claro', 'Nublado', 'Lluvia ligera', 'Lluvia pesada', 'Viento ligero', 'Viento pesado']

@@ -10,6 +10,7 @@ import { getOfflineData, saveOfflineData } from '@/db/offlineDb'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { esSupervisorCalendario } from '@/features/auth/calendarAccess'
 import { CyclesApiError, listCycles, type Cycle } from '@/features/agriculture/services/cyclesService'
+import { CropsApiError, listAvailableCrops } from '@/features/agriculture/services/cropsService'
 import { addCivilDays, DIAS_CICLO_VISITA } from '@/features/visits/services/visitPlanning'
 import { productionEstimate, estimatedSaleQ } from '@/features/visits/services/visitProduction'
 import { saveVisitCapture, todayInGuatemala, type VisitCapture, type CropCapture, type VisitPhotoFile, type VisitTimeSlot } from '@/features/visits/services/visitService'
@@ -17,7 +18,7 @@ import SearchableSelect, { catalogOptions } from '@/features/visits/components/S
 import { getVisitFollowUps, getVisitList, type VisitListItem, type VisitFollowUp, type FollowUpStatus } from '@/features/visits/services/visitService'
 import VisitEvidencePicker from '@/features/visits/components/VisitEvidencePicker'
 import type { FamilyListItem } from '@/features/families/types/family'
-import { crops, stages, qualities, weatherOptions, diseases, pests, damage } from '@/features/visits/data/visitCatalogs'
+import { stages, qualities, weatherOptions, diseases, pests, damage } from '@/features/visits/data/visitCatalogs'
 
 type Finding = { id: string; type: 'plaga' | 'enfermedad'; name: string; damage: string }
 type CropEntry = {
@@ -66,6 +67,9 @@ export default function VisitRegisterPage() {
   const [followUpRefresh, setFollowUpRefresh] = useState(0)
   const [reviewStates, setReviewStates] = useState<Record<string, FollowUpStatus>>({})
   const [cropsState, setCrops] = useState<CropEntry[]>([])
+  const [catalogCrops, setCatalogCrops] = useState<string[]>([])
+  const [catalogLoading, setCatalogLoading] = useState(true)
+  const [catalogWarning, setCatalogWarning] = useState('')
   const [availableCycles, setAvailableCycles] = useState<Cycle[]>([])
   const [cyclesLoading, setCyclesLoading] = useState(false)
   const [cyclesWarning, setCyclesWarning] = useState('')
@@ -83,6 +87,37 @@ export default function VisitRegisterPage() {
   const [saved, setSaved] = useState<{ status: 'synced' | 'pending' | 'failed'; id: string; type: 'PROGRAMADA' | 'REALIZADA' } | null>(null)
   const [error, setError] = useState('')
   const cacheKey = usuario ? `visits:family-options:v1:user:${usuario.id}` : null
+
+  useEffect(() => {
+    const controller = new AbortController()
+    if (!usuario) { setCatalogCrops([]); setCatalogLoading(false); return () => controller.abort() }
+    const cacheKey = `visits:crop-catalog:v1:user:${usuario.id}`
+    setCatalogCrops([])
+    setCatalogLoading(true)
+    setCatalogWarning('')
+    listAvailableCrops(controller.signal).then(records => {
+      if (controller.signal.aborted) return
+      const names = records.map(record => record.nombre)
+      setCatalogCrops(names)
+      void saveOfflineData(cacheKey, names).catch(() => {})
+    }).catch(async (cause: unknown) => {
+      if (controller.signal.aborted) return
+      if (cause instanceof CropsApiError && [401, 403].includes(cause.status)) {
+        setCatalogWarning('No tienes permiso para consultar el catálogo de cultivos.')
+        return
+      }
+      try {
+        const cached = await getOfflineData<string[]>(cacheKey)
+        if (!controller.signal.aborted) {
+          setCatalogCrops(cached?.data ?? [])
+          setCatalogWarning(cached ? 'Usando catálogo guardado en este dispositivo.' : 'No se pudo consultar el catálogo de cultivos.')
+        }
+      } catch {
+        if (!controller.signal.aborted) setCatalogWarning('No se pudo consultar el catálogo de cultivos.')
+      }
+    }).finally(() => { if (!controller.signal.aborted) setCatalogLoading(false) })
+    return () => controller.abort()
+  }, [usuario?.id])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -349,8 +384,10 @@ export default function VisitRegisterPage() {
       {step === 1 && <section className="space-y-4" aria-label="Evaluación de cultivos">
         <div className={card}>
           <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold text-slate-900 dark:text-white">Evaluación de cultivos</h2>
-            {availableCycles.length === 0 && <Button type="button" disabled={!familyId} onClick={() => setCrops(list => [...list,newCrop()])}>+ Evaluación manual</Button>}
+            {availableCycles.length === 0 && <Button type="button" disabled={!familyId || !catalogCrops.length || catalogLoading} onClick={() => setCrops(list => [...list,newCrop()])}>+ Evaluación manual</Button>}
           </div>
+          {availableCycles.length === 0 && catalogLoading && <p className="mt-3 text-sm text-slate-500">Consultando catálogo de cultivos...</p>}
+          {availableCycles.length === 0 && catalogWarning && <p role="status" className="mt-3 text-sm text-amber-700 dark:text-amber-300">{catalogWarning}</p>}
           {cyclesLoading && <p className="mt-3 text-sm text-slate-500">Cargando siembras...</p>}
           {cyclesWarning && <p role="status" className="mt-3 text-sm text-amber-700 dark:text-amber-300">{cyclesWarning}</p>}
           {familyId && !cyclesLoading && availableCycles.length > 0 && <div className="mt-4 space-y-3">
@@ -391,7 +428,7 @@ export default function VisitRegisterPage() {
               }}><option value="">Seleccionar siembra</option>
                 {availableCycles.filter(item => item.id === crop.cicloCultivoId || !cropsState.some(selected => selected.cicloCultivoId === item.id)).map(item => <option key={item.id} value={item.id}>{item.cultivo.nombre} · {item.huerto.nombre || `Huerto #${item.huertoId}`} · {item.fechaSiembra || item.fechaTrasplante || 'Sin fecha'} (#{item.id})</option>)}
               </select>
-            </FormField> : <SearchableSelect label="Planta (sin vincular)" id={`crop-name-${crop.id}`} value={crop.name} onChange={name => updateCrop(crop.id,{name, cicloCultivoId: null})} options={catalogOptions(crops)} />}
+            </FormField> : <SearchableSelect label="Planta (sin vincular)" id={`crop-name-${crop.id}`} value={crop.name} onChange={name => updateCrop(crop.id,{name, cicloCultivoId: null})} options={catalogOptions(crop.name && !catalogCrops.includes(crop.name) ? [...catalogCrops, crop.name] : catalogCrops)} />}
             <FormField label="Etapa" id={`crop-stage-${crop.id}`}><select id={`crop-stage-${crop.id}`} className={input} value={crop.stage} onChange={e => updateCrop(crop.id,{stage:e.target.value})}><Options items={stages}/></select></FormField>
             <FormField label="Plantas observadas" id={`crop-plants-${crop.id}`}><input id={`crop-plants-${crop.id}`} className={input} type="number" min="0" step="1" value={crop.plants} onChange={e=>updateCrop(crop.id,{plants:e.target.value})}/></FormField>
             <FormField label="Calidad" id={`crop-quality-${crop.id}`}><select id={`crop-quality-${crop.id}`} className={input} value={crop.quality} onChange={e=>updateCrop(crop.id,{quality:e.target.value})}><Options items={qualities}/></select></FormField>
