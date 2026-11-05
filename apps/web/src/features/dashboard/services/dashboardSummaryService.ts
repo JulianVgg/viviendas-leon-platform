@@ -74,12 +74,12 @@ export type IndicadoresAgricolas = {
   indicadores: {
     ciclosRegistrados:number; ciclosActivos:number; ciclosFinalizados:number
     variedadesActivas:number; familiasConSiembras:number; plantasActivas:number
-    registrosProduccion:number; produccionKg:number; produccionUnidades:number; unidadesNoComparables:number
+    registrosProduccion:number; produccionKg:number; produccionUnidades:number; produccionManojos:number; unidadesNoComparables:number; plantasSinDato:number; cantidadesInvalidas:number
   }
   visitasConProduccion:number
-  porCultivo:Array<{id:number;nombre:string;ciclos:number;activos:number;plantas:number;kg:number;unidades:number}>
+  porCultivo:Array<{id:number;nombre:string;ciclos:number;activos:number;plantas:number;kg:number;unidades:number;manojos:number}>
   porComunidad:Array<{nombre:string;familias:number;ciclosActivos:number}>
-  produccionMensual:Array<{mes:string;kg:number;unidades:number;registros:number}>
+  produccionMensual:Array<{mes:string;kg:number;unidades:number;manojos:number;registros:number}>
 }
 export async function consultarIndicadoresAgricolas(meses: 3|6|12, signal?: AbortSignal, filtros: FiltrosDashboard = {}): Promise<IndicadoresAgricolas> {
   const response = await fetch(`/api/v1/dashboard/resumen/agricultura-produccion?${agregarFiltrosDashboard(new URLSearchParams({ meses: String(meses) }), filtros)}`,
@@ -103,7 +103,7 @@ export type ResumenCosechasDashboard = {
     huerto: string | null
     familia: string
     comunidad: string
-    cantidades: Array<{ cantidad: string; unidad: string; tipo: 'kg' | 'unidades' | 'otra' }>
+    cantidades: Array<{ cantidad: string; unidad: string; tipo: 'kg' | 'unidades' | 'manojos' | 'otra' }>
   }>
 }
 export async function consultarCosechasDashboard(

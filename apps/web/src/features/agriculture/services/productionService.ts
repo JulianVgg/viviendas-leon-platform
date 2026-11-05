@@ -1,6 +1,6 @@
 const API = (import.meta.env.VITE_API_URL?.trim() || '/api').replace(/\/$/, '')
 
-export type ProductionUnit = { id: number; codigo: string; nombre: string; abreviatura: string | null; activo?: boolean }
+export type ProductionUnit = { id: number; codigo: string; nombre: string; abreviatura: string | null; activo?: boolean; tipo?: 'kg' | 'unidades' | 'manojos' }
 export type Production = {
   id: number
   cicloCultivoId: number

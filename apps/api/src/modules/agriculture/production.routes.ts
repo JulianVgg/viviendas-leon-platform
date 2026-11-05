@@ -4,6 +4,7 @@ import { Prisma } from '../../generated/prisma/client.js'
 import { requireAuth } from '../auth/auth.middleware.js'
 import { requirePermission } from '../auth/require-permission.middleware.js'
 import { parseProductionId, validateProductionInput } from './production.validation.js'
+import { harvestQuantityError, harvestUnitKind, isOfficialHarvestUnit } from './production.units.js'
 
 export const productionRouter = Router()
 productionRouter.use(requireAuth)
@@ -46,11 +47,12 @@ function handleError(error: unknown, res: Response, next: NextFunction) {
 // Unidades activas para nuevos registros; el historial conserva unidades inactivas.
 productionRouter.get('/unidades', requirePermission('PANTALLA_PRODUCCION'), async (_req, res, next) => {
   try {
-    const data = await getPrismaClient().unidadMedida.findMany({
-      where: { activo: true },
-      select: { id: true, codigo: true, nombre: true, abreviatura: true },
+    const units = await getPrismaClient().unidadMedida.findMany({
+      where: { activo: true, NOT: { codigo: { startsWith: 'SYN-' } } },
+      select: { id: true, codigo: true, nombre: true, abreviatura: true, activo: true },
       orderBy: [{ nombre: 'asc' }, { id: 'asc' }],
     })
+    const data = units.filter(isOfficialHarvestUnit).map(unit => ({ ...unit, tipo: harvestUnitKind(unit) }))
     res.json({ data })
   } catch (error) { next(error) }
 })
@@ -87,8 +89,16 @@ productionRouter.post('/', requirePermission('PRODUCCION_WRITE'), async (req, re
         select: { id: true, fechaSiembra: true, fechaTrasplante: true, fechaFin: true },
       })
       if (!cycle) return { status: 404 as const, code: 'CYCLE_NOT_FOUND', message: 'El ciclo de cultivo no existe.' }
-      const unit = await tx.unidadMedida.findUnique({ where: { id: input.unidadMedidaId }, select: { id: true, activo: true } })
-      if (!unit || !unit.activo) return { status: 409 as const, code: 'UNIT_UNAVAILABLE', message: 'Selecciona una unidad de medida activa.' }
+      const unit = await tx.unidadMedida.findUnique({
+        where: { id: input.unidadMedidaId },
+        select: { id: true, codigo: true, nombre: true, abreviatura: true, activo: true },
+      })
+      if (!unit || !isOfficialHarvestUnit(unit)) {
+        return { status: 409 as const, code: 'UNIT_UNAVAILABLE', message: 'Selecciona una unidad de cosecha activa (kg, unidades o manojos).' }
+      }
+      const quantityError = harvestQuantityError(input.cantidad, harvestUnitKind(unit))
+      if (quantityError) return { status: 400 as const, code: 'VALIDATION_ERROR',
+        message: 'Revisa la cantidad y la unidad de cosecha.', details: [{ field: 'cantidad', message: quantityError }] }
       const dates = [cycle.fechaSiembra, cycle.fechaTrasplante].filter((value): value is Date => value !== null)
       const lastPlantingDate = dates.map(day).sort().at(-1)
       if (lastPlantingDate && input.fechaCosecha < lastPlantingDate) {
@@ -118,7 +128,7 @@ productionRouter.post('/', requirePermission('PRODUCCION_WRITE'), async (req, re
       return { status: 201 as const, data }
     })
     if (result.status !== 201) {
-      res.status(result.status).json(issue(result.code, result.message))
+      res.status(result.status).json(issue(result.code, result.message, 'details' in result ? result.details : undefined))
       return
     }
     res.status(201).json({ data: result.data })

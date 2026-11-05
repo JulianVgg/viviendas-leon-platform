@@ -113,6 +113,7 @@ export default function ProduccionPage() {
     ).includes(query))
   }, [cycles, cycleSearch])
   const selectedCycleOption = cycles.find(cycle => String(cycle.id) === cycleId)
+  const selectedUnit = units.find(unit => String(unit.id) === unitId)
   // Mostrar coincidencias directas, sin obligar a abrir un segundo desplegable.
   const visibleCycleMatches = matchingCycles.slice(0, MAX_VISIBLE_CYCLES)
 
@@ -142,6 +143,7 @@ export default function ProduccionPage() {
       if (selectedCycle.fechaFin && fecha > selectedCycle.fechaFin) fields.fechaCosecha = 'La fecha supera el cierre del ciclo.'
     }
     if (!/^\d{1,9}(?:\.\d{1,3})?$/.test(cantidad) || Number(cantidad) <= 0) fields.cantidad = 'Ingresa una cantidad positiva, máximo tres decimales.'
+    else if (selectedUnit?.tipo !== 'kg' && !/^\d{1,9}$/.test(cantidad)) fields.cantidad = 'Unidades y manojos requieren números enteros.'
     if (!units.some(item => item.id === Number(unitId))) fields.unidadMedidaId = 'Selecciona una unidad de medida.'
     if (notes.length > MAX_OBSERVATION_CHARS) fields.observaciones = 'Máximo 500 caracteres.'
     else if (wordCount(notes) > MAX_OBSERVATION_WORDS) fields.observaciones = 'Máximo 100 palabras.'
@@ -257,8 +259,8 @@ export default function ProduccionPage() {
           <input id="harvest-date" type="date" required className={formControlClassName} value={fecha} onChange={event => setFecha(event.target.value)} />
         </FormField>
         <div className="grid gap-4 sm:grid-cols-2">
-          <FormField id="harvest-amount" label="Cantidad producida" required error={fieldErrors.cantidad}>
-            <input id="harvest-amount" required type="number" min="0.001" max="999999999.999" step="0.001" className={formControlClassName} value={cantidad} onChange={event => setCantidad(event.target.value)} placeholder="Ej. 25.5" />
+          <FormField id="harvest-amount" label="Cantidad cosechada" required error={fieldErrors.cantidad}>
+            <input id="harvest-amount" required type="number" min={selectedUnit?.tipo === 'kg' ? '0.001' : '1'} max={selectedUnit?.tipo === 'kg' ? '999999999.999' : '999999999'} step={selectedUnit?.tipo === 'kg' ? '0.001' : '1'} className={formControlClassName} value={cantidad} onChange={event => setCantidad(event.target.value)} placeholder={selectedUnit?.tipo === 'kg' ? 'Ej. 25.500' : 'Ej. 25'} />
           </FormField>
           <FormField id="harvest-unit" label="Unidad de medida" required error={fieldErrors.unidadMedidaId}>
             <select id="harvest-unit" required className={formControlClassName} value={unitId} onChange={event => setUnitId(event.target.value)}>
@@ -267,6 +269,8 @@ export default function ProduccionPage() {
             </select>
           </FormField>
         </div>
+        {selectedUnit && <p className="text-xs text-gray-500">{selectedUnit.tipo === 'kg'
+          ? 'Kilogramos: hasta tres decimales.' : 'Unidades y manojos: números enteros.'} No se convierten automáticamente entre unidades.</p>}
         <FormField id="harvest-notes" label="Observaciones" error={fieldErrors.observaciones}
           hint={`${notes.length} / ${MAX_OBSERVATION_CHARS} caracteres · ${wordCount(notes)} / ${MAX_OBSERVATION_WORDS} palabras`}>
           <textarea id="harvest-notes" rows={3} maxLength={MAX_OBSERVATION_CHARS} className={formControlClassName}

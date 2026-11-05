@@ -272,6 +272,11 @@ export default function VisitRegisterPage() {
         cropsState.some(c => c.plants.trim() && !Number.isSafeInteger(Number(c.plants)))) {
       setError('Revisa las cantidades y precios; deben ser números positivos.'); setStep(1); return
     }
+    if (cropsState.some(c => c.production && (['perPlantUnits', 'perPlantKg'] as const).some(key =>
+      c[key].trim() && !/^\d{1,9}(?:\.\d{1,3})?$/.test(c[key])) ||
+      c.production && c.priceQ.trim() && !/^\d{1,9}(?:\.\d{1,2})?$/.test(c.priceQ))) {
+      setError('Revisa los valores por planta (máximo tres decimales) y el precio (máximo dos).'); setStep(1); return
+    }
     if (cropsState.some(c => c.production && (c.perPlantUnits.trim() || c.perPlantKg.trim() || c.priceQ.trim()) &&
       (!c.plants.trim() || Number(c.plants) <= 0))) {
       setError('Ingresa las plantas observadas para calcular la producción.'); setStep(1); return

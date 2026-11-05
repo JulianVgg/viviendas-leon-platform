@@ -12,7 +12,7 @@ const numero = (value:number) => value.toLocaleString('es-GT',{maximumFractionDi
 export default function AgriculturaProduccionPanel({datos, meses, filtros}: {datos:IndicadoresAgricolas; meses:3|6|12; filtros:FiltrosDashboard}) {
   const [detalleAbierto,setDetalleAbierto] = useState(false)
   const [cultivoSeleccionado,setCultivoSeleccionado] = useState<number|null>(null)
-  const [modo,setModo] = useState<'kg'|'unidades'>('kg')
+  const [modo,setModo] = useState<'kg'|'unidades'|'manojos'>('kg')
   const cultivo = useMemo(()=>datos.porCultivo.find(item=>item.id===cultivoSeleccionado),[cultivoSeleccionado,datos.porCultivo])
   const tarjetas = [
     {nombre:'Ciclos activos',valor:datos.indicadores.ciclosActivos,icono:Sprout},
@@ -21,6 +21,7 @@ export default function AgriculturaProduccionPanel({datos, meses, filtros}: {dat
     {nombre:'Registros de producción',valor:datos.indicadores.registrosProduccion,icono:PackageCheck},
     {nombre:'Producción (kg)',valor:datos.indicadores.produccionKg,icono:Scale},
     {nombre:'Producción (unidades)',valor:datos.indicadores.produccionUnidades,icono:BarChart3},
+    {nombre:'Producción (manojos)',valor:datos.indicadores.produccionManojos,icono:PackageCheck},
   ]
   const produccion = seriesProduccion(datos, modo)
   const comunidades = seriesComunidadesAgricolas(datos)
@@ -32,7 +33,7 @@ export default function AgriculturaProduccionPanel({datos, meses, filtros}: {dat
         Ver cosechas <ArrowUpRight size={16}/>
       </button>
     </div>
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
       {tarjetas.map(item=>item.nombre==='Registros de producción' ? <button key={item.nombre} type="button"
         onClick={()=>setDetalleAbierto(true)} aria-label="Ver cosechas registradas"
         className={`${panel} !p-4 text-left transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-2 focus-visible:outline-brand-500`}>
@@ -50,8 +51,8 @@ export default function AgriculturaProduccionPanel({datos, meses, filtros}: {dat
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2"><CalendarDays size={17} className="text-brand-600"/><h3 className="text-sm font-semibold text-gray-800 dark:text-white">Producción por mes</h3></div>
           <div className="inline-flex rounded-lg border border-gray-200 p-1 dark:border-gray-700" role="group" aria-label="Unidad del gráfico">
-            {(['kg','unidades'] as const).map(opcion=><button key={opcion} type="button" onClick={()=>setModo(opcion)} aria-pressed={modo===opcion}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${modo===opcion?'bg-brand-50 text-brand-700 dark:bg-brand-500/20 dark:text-brand-300':'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>{opcion==='kg'?'Kilogramos':'Unidades'}</button>)}
+            {(['kg','unidades','manojos'] as const).map(opcion=><button key={opcion} type="button" onClick={()=>setModo(opcion)} aria-pressed={modo===opcion}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${modo===opcion?'bg-brand-50 text-brand-700 dark:bg-brand-500/20 dark:text-brand-300':'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>{opcion==='kg'?'Kilogramos':opcion==='manojos'?'Manojos':'Unidades'}</button>)}
           </div>
         </div>
         {datos.produccionMensual.some(item => item[modo] > 0) ? <ProBarChart
@@ -70,7 +71,7 @@ export default function AgriculturaProduccionPanel({datos, meses, filtros}: {dat
           {datos.porCultivo.map(item=><button key={item.id} type="button" onClick={()=>setCultivoSeleccionado(v=>v===item.id?null:item.id)} aria-pressed={item.id===cultivoSeleccionado}
             className={`w-full rounded-xl border p-3 text-left transition-colors ${item.id===cultivoSeleccionado?'border-brand-300 bg-brand-50/50 dark:border-brand-700 dark:bg-brand-500/10':'border-gray-100 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-gray-800'}`}>
             <span className="flex items-center justify-between gap-2"><span className="min-w-0 truncate text-sm font-medium text-gray-800 dark:text-white">{item.nombre}</span><span className="shrink-0 text-xs text-gray-500">{item.activos} activos</span></span>
-            <span className="mt-1 block text-xs text-gray-500">{numero(item.plantas)} plantas · {numero(item.kg)} kg · {numero(item.unidades)} unidades</span>
+            <span className="mt-1 block text-xs text-gray-500">{numero(item.plantas)} plantas · {numero(item.kg)} kg · {numero(item.unidades)} unidades · {numero(item.manojos)} manojos</span>
           </button>)}
           {!datos.porCultivo.length && <p className="text-sm text-gray-500">Sin siembras registradas.</p>}
         </div>
@@ -91,6 +92,8 @@ export default function AgriculturaProduccionPanel({datos, meses, filtros}: {dat
         </div>)}
         {!datos.porComunidad.length && <p className="text-sm text-gray-500">Sin registros agrícolas.</p>}
       </div>
+      {datos.indicadores.plantasSinDato>0 && <p className="mt-3 text-xs text-gray-500">{datos.indicadores.plantasSinDato} ciclos activos sin cantidad de plantas informada.</p>}
+      {datos.indicadores.cantidadesInvalidas>0 && <p className="mt-3 text-xs text-amber-700">{datos.indicadores.cantidadesInvalidas} cantidades incompletas o inválidas excluidas de los totales.</p>}
       {datos.indicadores.unidadesNoComparables>0 && <p className="mt-3 text-xs text-gray-500">Hay producción registrada en otras unidades; no se suma a kg o unidades.</p>}
     </div>
     {detalleAbierto && <CosechasDashboardDialog meses={meses} filtros={filtros} cerrar={()=>setDetalleAbierto(false)}/>}
