@@ -34,3 +34,6 @@ Thumbs.db
 
 # Private training evidence files (never commit photographs)
 /apps/api/storage/training/
+
+# CIR-02: padrones y resultados de conciliación con información personal
+/apps/api/private/cir-02/
