@@ -37,3 +37,6 @@ Thumbs.db
 
 # CIR-02: padrones y resultados de conciliación con información personal
 /apps/api/private/cir-02/
+
+# CIR-04: diagnósticos de relaciones sin publicar datos de instalación
+/apps/api/private/cir-04/

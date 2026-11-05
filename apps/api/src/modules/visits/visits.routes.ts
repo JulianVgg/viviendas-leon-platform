@@ -14,6 +14,7 @@ import { sincronizarAvisosSeguimiento } from '../notifications/followup-alerts.s
 import { resolverAvisosVisitaVencida } from '../notifications/overdue-visits.worker.js'
 import { actualizarRecordatorios, cancelarRecordatorios, configGuardada, configParaPrisma, parseReglas, reglasTrasCambioFecha, type ReglaRecordatorio } from '../notifications/reminders.service.js'
 import { buildEvaluationObservations } from '../agriculture/followup-format.js'
+import { visitCycleProblem } from '../agriculture/cycles.relations.js'
 import { normalizarTelefonoWhatsapp } from './whatsapp-reminder.rules.js'
 
 // Dirección y Coordinación supervisan y pueden reprogramar citas institucionales.
@@ -434,11 +435,18 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
             const cycleId = Number(crop.cicloCultivoId)
             if (seen.has(cycleId)) throw new Error('DUPLICATE_VISIT_CYCLE')
             seen.add(cycleId)
-            const cycle = await tx.cicloCultivo.findFirst({
-              where: { id: cycleId, huerto: { familiaId: payload.familyId } },
-              select: { id: true, cultivo: { select: { nombre: true } } },
+            const cycle = await tx.cicloCultivo.findUnique({
+              where: { id: cycleId },
+              select: {
+                estado: true, fechaSiembra: true, fechaTrasplante: true, fechaFin: true,
+                huerto: { select: { familiaId: true, estado: true } },
+                cultivo: { select: { nombre: true, activo: true } },
+              },
             })
-            if (!cycle || cycle.cultivo.nombre !== crop.name) throw new Error('INVALID_VISIT_CYCLE')
+            const problem = visitCycleProblem(cycle, {
+              familiaId: payload.familyId, fechaVisita: payload.date, nombreCultivo: String(crop.name),
+            })
+            if (problem) throw new Error('INVALID_VISIT_CYCLE')
             const stage = typeof crop.stage === 'string' && crop.stage ? await tx.etapaCultivo.findFirst({
               where: { nombre: { equals: crop.stage, mode: 'insensitive' } }, select: { id: true },
             }) : null
@@ -490,7 +498,7 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
     if (!result || result.conflict) { res.status(409).json({ error: 'Identificador utilizado por otra operación.' }); return }
     res.status(result.duplicate ? 200 : 201).json({ operationId: normalizedId, accepted: true, duplicate: result.duplicate, visitId: result.visitId })
   } catch (error) {
-    if (error instanceof Error && error.message === 'INVALID_VISIT_CYCLE') { res.status(409).json({ error: 'La siembra seleccionada no corresponde a la familia o al cultivo.' }); return }
+    if (error instanceof Error && error.message === 'INVALID_VISIT_CYCLE') { res.status(409).json({ error: 'La siembra seleccionada no está disponible para esta familia, cultivo o fecha. Actualiza la agenda agrícola.' }); return }
     if (error instanceof Error && error.message === 'DUPLICATE_VISIT_CYCLE') { res.status(409).json({ error: 'Una misma siembra no puede evaluarse dos veces en una visita.' }); return }
     if (error instanceof Error && error.message === 'SCHEDULE_PAST_DATE') { res.status(422).json({ error: 'No puedes agendar visitas en fechas anteriores a hoy.' }); return }
     if (error instanceof Error && error.message === 'SCHEDULE_ALREADY_ASSIGNED') { res.status(409).json({ error: 'Ya existe una visita para este período o una visita vencida. Revisa la agenda.' }); return }
