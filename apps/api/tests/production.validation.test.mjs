@@ -25,3 +25,18 @@ test('AGR-05: no admite cantidad cero, negativa, excesiva ni con coma decimal', 
   }
   assert.ok(validateProductionInput({ ...base, observaciones: 'x'.repeat(2001) }).details.some(e => e.field === 'observaciones'))
 })
+
+test('AGR-05: observaciones limitadas a 500 caracteres en la API', () => {
+  const maximum = 'á'.repeat(500)
+  const valid = validateProductionInput({ ...base, observaciones: maximum })
+  assert.equal(valid.details.length, 0)
+  assert.equal(valid.data.observaciones, maximum)
+  assert.ok(validateProductionInput({ ...base, observaciones: 'x'.repeat(501) })
+    .details.some(e => e.field === 'observaciones' && e.message.includes('500 caracteres')))
+  assert.equal(validateProductionInput({ ...base, observaciones: '   ' }).data.observaciones, null)
+  assert.equal(validateProductionInput({ ...base, observaciones: 'cosecha de maíz' }).details.length, 0)
+  const hundredWords = Array(100).fill('a').join(' ')
+  assert.equal(validateProductionInput({ ...base, observaciones: hundredWords }).details.length, 0)
+  assert.ok(validateProductionInput({ ...base, observaciones: `${hundredWords} b` })
+    .details.some(e => e.field === 'observaciones' && e.message.includes('100 palabras')))
+})

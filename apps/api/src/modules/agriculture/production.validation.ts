@@ -50,10 +50,15 @@ export function validateProductionInput(body: unknown): { data?: ProductionInput
   }
   let observaciones: string | null = null
   if (source.observaciones !== undefined && source.observaciones !== null && source.observaciones !== '') {
-    if (typeof source.observaciones !== 'string' || source.observaciones.length > 2000 ||
+    if (typeof source.observaciones !== 'string' || source.observaciones.length > 500 ||
       /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(source.observaciones)) {
-      details.push({ field: 'observaciones', message: 'Las observaciones no son válidas (máximo 2000 caracteres).' })
-    } else observaciones = source.observaciones.normalize('NFC').trim() || null
+      details.push({ field: 'observaciones', message: 'Las observaciones no son válidas (máximo 500 caracteres).' })
+    } else {
+      const normalized = source.observaciones.normalize('NFC').trim()
+      if ((normalized.match(/\S+/gu)?.length ?? 0) > 100) {
+        details.push({ field: 'observaciones', message: 'Las observaciones permiten un máximo de 100 palabras.' })
+      } else observaciones = normalized || null
+    }
   }
   if (details.length) return { details }
   return { data: { cicloCultivoId, fechaCosecha, cantidad: cantidad as string, unidadMedidaId, observaciones }, details }
