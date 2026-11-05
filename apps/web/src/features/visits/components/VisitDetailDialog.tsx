@@ -1,4 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { Link } from 'react-router'
+import { useAuth } from '@/features/auth/AuthProvider'
+import { canViewPath } from '@/features/auth/screenPermissions'
+import { valorEstimadoCapturaQ } from '@/features/visits/services/visitProduction'
 import { CalendarDays, ChevronLeft, ChevronRight, Clock3, CloudSun, ImageOff, Leaf, MapPin, Maximize2, Minimize2, UserRound, ClipboardCheck, History, Sprout, Camera } from 'lucide-react'
 import Dialog from '@/components/ui/Dialog'
 import Button from '@/components/ui/Button'
@@ -21,6 +25,8 @@ function Section({ title, icon, children }: { title: string; icon: ReactNode; ch
 }
 
 export default function VisitDetailDialog({ visit, onClose, extra }: { visit: VisitListItem | null; onClose: () => void; extra?: ReactNode }) {
+  const { usuario } = useAuth()
+  const canReadHarvest = Boolean(usuario && canViewPath(usuario, '/gestion-agricola/produccion'))
   const [index, setIndex] = useState(0)
   const [zoom, setZoom] = useState(false)
   const [localUrls, setLocalUrls] = useState<string[]>([])
@@ -73,7 +79,20 @@ export default function VisitDetailDialog({ visit, onClose, extra }: { visit: Vi
         </Section>
       </div>
       {!images.length && visit.status === 'REALIZADA' && <div className="flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-3 text-xs text-slate-500 dark:bg-slate-800/60"><ImageOff size={16}/> Sin evidencia fotográfica</div>}
-      {crops.length > 0 && <Section title="Cultivos" icon={<Sprout size={17}/> }><div className="grid gap-3 md:grid-cols-2">{crops.map((crop, i) => <div key={`${crop.cicloCultivoId ?? crop.name}-${i}`} className="rounded-xl border border-slate-200 p-3.5 dark:border-slate-700"><p className="font-semibold text-sm text-slate-900 dark:text-white">{crop.name}</p><div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span>Etapa: {crop.stage || '—'}</span><span>Calidad: {crop.quality || '—'}</span>{crop.plants !== null && <span>Plantas: {crop.plants}</span>}</div>{filled(crop.observacionesCultivo) && <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">{crop.observacionesCultivo}</p>}{crop.findings?.length > 0 && <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">{crop.findings.length} hallazgo(s)</p>}</div>)}</div></Section>}
+      {crops.length > 0 && <Section title="Cultivos" icon={<Sprout size={17}/> }><div className="grid gap-3 md:grid-cols-2">{crops.map((crop, i) => <div key={`${crop.cicloCultivoId ?? crop.name}-${i}`} className="rounded-xl border border-slate-200 p-3.5 dark:border-slate-700">
+            <p className="font-semibold text-sm text-slate-900 dark:text-white">{crop.name}</p>
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500"><span>Etapa: {crop.stage || '—'}</span><span>Calidad: {crop.quality || '—'}</span>{crop.plants !== null && <span>Plantas: {crop.plants}</span>}</div>
+            {crop.production === true && <div className="mt-3 rounded-lg bg-slate-50 p-3 text-xs dark:bg-slate-800/70">
+              <p className="font-semibold text-slate-800 dark:text-slate-100">Producción estimada · visita técnica</p>
+              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-slate-600 dark:text-slate-300">
+                <span>Unidades: {crop.units ?? '—'}</span><span>Kilogramos: {crop.kg ?? '—'}</span>
+                <span>Valor estimado: {valorEstimadoCapturaQ(crop) === null ? '—' : `Q ${valorEstimadoCapturaQ(crop)?.toFixed(2)}`}</span>
+              </div>
+              {canReadHarvest && crop.cicloCultivoId && <Link to={`/gestion-agricola/produccion?cicloId=${crop.cicloCultivoId}`} className="mt-2 inline-block text-brand-600 underline dark:text-brand-400">Consultar cosechas reales</Link>}
+            </div>}
+            {filled(crop.observacionesCultivo) && <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">{crop.observacionesCultivo}</p>}
+            {crop.findings?.length > 0 && <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">{crop.findings.length} hallazgo(s)</p>}
+          </div>)}</div></Section>}
       {commitments.length > 0 && <Section title="Compromisos" icon={<ClipboardCheck size={17}/> }><div className="grid gap-2 sm:grid-cols-2">{commitments.map((item,i) => <div key={item.id ?? i} className="rounded-xl bg-slate-50 p-3.5 dark:bg-slate-800/70"><div className="flex flex-wrap items-center gap-2 text-xs text-slate-500"><span className="font-semibold">{item.status === 'CUMPLIDO' ? 'Cumplido' : item.status === 'NO_CUMPLIDO' ? 'No cumplido' : 'Pendiente'}</span>{item.due && <span>· {dateLabel(item.due)}</span>}</div><p className="mt-1.5 text-sm text-slate-800 dark:text-slate-100">{item.text}</p></div>)}</div></Section>}
       {Boolean(visit.reprogramaciones?.length) && <Section title="Reprogramaciones" icon={<History size={17}/> }><ol className="space-y-2">{visit.reprogramaciones?.map(item => <li key={item.id} className="flex flex-wrap items-center gap-2 text-sm text-slate-700 dark:text-slate-200"><span>{item.oldDate ? dateLabel(item.oldDate) : '—'} → {dateLabel(item.newDate)}</span>{item.reason && <span className="text-slate-500">· {item.reason}</span>}</li>)}</ol></Section>}
       {extra}

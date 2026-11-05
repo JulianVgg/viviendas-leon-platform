@@ -24,7 +24,8 @@ export type CropCapture = {
   observacionesCultivo?: string
   name: string; stage: string; quality: string; plants: number | null
   findings: { type: 'plaga' | 'enfermedad'; name: string; damage: string }[]
-  production: boolean; perPlantUnits: number | null; perPlantKg: number | null
+  production: boolean; origenProduccion?: 'ESTIMACION_VISITA' // Capturas antiguas no incluyen el marcador.
+  perPlantUnits: number | null; perPlantKg: number | null
   units: number | null; kg: number | null; priceQ: number | null; priceUSD: number | null
   priceBasis: 'unidad' | 'kg'
 }

@@ -48,8 +48,9 @@ export function visitCycleProblem(cycle: CycleForVisit | null, input: {
   if (cycle.estado !== 'ACTIVO') return 'INACTIVE_CYCLE'
   if (!cycle.cultivo.activo) return 'INACTIVE_CROP'
   if (cycle.cultivo.nombre !== input.nombreCultivo) return 'CROP_MISMATCH'
-  const start = [day(cycle.fechaSiembra), day(cycle.fechaTrasplante)]
-    .filter((date): date is string => date !== null).sort().at(-1)
+  // La siembra inicia el ciclo; el trasplante puede ser posterior a una visita.
+  // Si no se registró siembra, usar trasplante como inicio de referencia.
+  const start = day(cycle.fechaSiembra) ?? day(cycle.fechaTrasplante)
   if (!start || start > input.fechaVisita) return 'NOT_PLANTED_YET'
   if (cycle.fechaFin && day(cycle.fechaFin)! < input.fechaVisita) return 'CYCLE_ENDED'
   return null

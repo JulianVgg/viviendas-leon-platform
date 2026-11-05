@@ -31,7 +31,22 @@ test('CIR-04: no enlaza evaluación a huerto, ciclo ni cultivo inactivo', () => 
 })
 test('CIR-04: valida nombre real del catálogo y fechas de plantación', () => {
   assert.equal(visitCycleProblem(cycle(), { ...input(), nombreCultivo: 'Pepino' }), 'CROP_MISMATCH')
-  assert.equal(visitCycleProblem(cycle(), { ...input(), fechaVisita: '2026-10-19' }), 'NOT_PLANTED_YET')
+  assert.equal(visitCycleProblem(cycle(), { ...input(), fechaVisita: '2026-10-09' }), 'NOT_PLANTED_YET')
   assert.equal(visitCycleProblem({ ...cycle(), fechaFin: d('2026-10-20') }, input()), 'CYCLE_ENDED')
   assert.equal(visitCycleProblem({ ...cycle(), fechaSiembra: null, fechaTrasplante: null }, input()), 'NOT_PLANTED_YET')
+})
+
+test('CIR-06: permite evaluar un ciclo sembrado aunque su trasplante sea futuro', () => {
+  const frijol = { ...cycle(), fechaSiembra: d('2026-11-04'), fechaTrasplante: d('2027-01-12') }
+  const lechuga = { ...cycle(), fechaSiembra: d('2026-10-21'), fechaTrasplante: d('2026-12-25') }
+  const visit = { ...input(), fechaVisita: '2026-11-05' }
+  assert.equal(visitCycleProblem(frijol, visit), null)
+  assert.equal(visitCycleProblem(lechuga, visit), null)
+  assert.equal(visitCycleProblem(frijol, { ...visit, fechaVisita: '2026-11-03' }), 'NOT_PLANTED_YET')
+})
+
+test('CIR-06: para ciclos sin siembra utiliza el trasplante como fecha inicial', () => {
+  const onlyTransplant = { ...cycle(), fechaSiembra: null, fechaTrasplante: d('2026-11-06') }
+  assert.equal(visitCycleProblem(onlyTransplant, { ...input(), fechaVisita: '2026-11-05' }), 'NOT_PLANTED_YET')
+  assert.equal(visitCycleProblem(onlyTransplant, { ...input(), fechaVisita: '2026-11-06' }), null)
 })
