@@ -3,7 +3,7 @@ import { getPrismaClient } from '../../config/prisma.js'
 import { Prisma } from '../../generated/prisma/client.js'
 import { requireAuth } from '../auth/auth.middleware.js'
 import { requirePermission } from '../auth/require-permission.middleware.js'
-import { parseCropId, validateCropInput, type CropInput, type CropFieldError } from './crops.validation.js'
+import { cropNameKey, parseCropId, validateCropInput, type CropInput, type CropFieldError } from './crops.validation.js'
 
 export const cropsRouter = Router()
 cropsRouter.use(requireAuth)
@@ -34,15 +34,14 @@ function handleError(error: unknown, res: Response, next: NextFunction) {
 }
 
 async function ensureUniqueName(tx: Prisma.TransactionClient, nombre: string, exceptId?: number) {
-  // Serializa los registros con nombres equivalentes, sin importar mayúsculas.
-  const key = `cultivo:${nombre.toLocaleLowerCase('es')}`
-  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`
-  const exists = await tx.cultivo.findFirst({
-    where: { nombre: { equals: nombre, mode: 'insensitive' }, ...(exceptId ? { id: { not: exceptId } } : {}) },
-    select: { id: true },
-  })
-  if (exists) throw new CropError(409, 'DUPLICATE_CROP', 'Ya existe un cultivo con ese nombre.',
-    [{ field: 'nombre', message: 'Utiliza un nombre diferente.' }])
+  const key = cropNameKey(nombre)
+  // Bloqueo transaccional por nombre canónico para evitar dos altas concurrentes.
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`cultivo:${key}`}, 0))`
+  const records = await tx.cultivo.findMany({ select: { id: true, nombre: true } })
+  if (records.some(crop => crop.id !== exceptId && cropNameKey(crop.nombre) === key)) {
+    throw new CropError(409, 'DUPLICATE_CROP', 'Ya existe un cultivo con ese nombre o una variante ortográfica.',
+      [{ field: 'nombre', message: 'Utiliza el cultivo existente en el catálogo.' }])
+  }
 }
 
 // Para AGR-03: solo cultivos activos son opciones para registrar NUEVOS ciclos.
