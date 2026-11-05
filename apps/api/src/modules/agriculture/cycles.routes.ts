@@ -4,6 +4,7 @@ import { Prisma } from '../../generated/prisma/client.js'
 import { requireAuth } from '../auth/auth.middleware.js'
 import { requirePermission } from '../auth/require-permission.middleware.js'
 import { parseCycleId, validateCycleInput } from './cycles.validation.js'
+import { plantingDates, duplicatePlantingFilter } from './cycles.relations.js'
 import { parseEvaluationObservations } from './followup-format.js'
 
 export const cyclesRouter = Router()
@@ -118,7 +119,7 @@ cyclesRouter.post('/', requirePermission('CICLOS_WRITE'), async (req, res, next)
     const result = await getPrismaClient().$transaction(async tx => {
       // Asegurar las condiciones de las relaciones incluso si otro usuario intenta desactivarlas.
       const gardens = await tx.$queryRaw<Array<{ id: number; estado: string }>>`
-        SELECT id, estado FROM huerto WHERE id = ${input.huertoId} FOR SHARE
+        SELECT id, estado FROM huerto WHERE id = ${input.huertoId} FOR UPDATE
       `
       if (!gardens.length) return { status: 404 as const, code: 'GARDEN_NOT_FOUND', message: 'El huerto no existe.' }
       if (gardens[0].estado !== 'ACTIVO') return { status: 409 as const, code: 'GARDEN_NOT_ACTIVE', message: 'El huerto debe estar activo para registrar una siembra.' }
@@ -127,7 +128,15 @@ cyclesRouter.post('/', requirePermission('CICLOS_WRITE'), async (req, res, next)
       `
       if (!crops.length) return { status: 404 as const, code: 'CROP_NOT_FOUND', message: 'El cultivo no existe.' }
       if (!crops[0].activo) return { status: 409 as const, code: 'CROP_NOT_ACTIVE', message: 'El cultivo seleccionado está desactivado.' }
-      const date = (raw: string | null) => raw ? new Date(`${raw}T00:00:00.000Z`) : null
+      // CIR-04: impedir duplicar una misma siembra (cultivo + huerto + fechas).
+      // Bloquear el huerto FOR UPDATE serializa dos altas simultáneas del mismo huerto.
+      // La misma variedad puede sembrarse otra vez en fechas diferentes.
+      const existing = await tx.cicloCultivo.findFirst({
+        where: duplicatePlantingFilter(input), select: { id: true },
+      })
+      if (existing) return { status: 409 as const, code: 'DUPLICATE_CYCLE',
+        message: 'Ya existe una siembra de este cultivo con las mismas fechas en el huerto.' }
+      const date = (raw: string | null) => plantingDates(raw)
       const created = await tx.cicloCultivo.create({
         data: { huertoId: input.huertoId, cultivoId: input.cultivoId,
           fechaSiembra: date(input.fechaSiembra), fechaTrasplante: date(input.fechaTrasplante),

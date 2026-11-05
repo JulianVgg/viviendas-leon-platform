@@ -129,7 +129,10 @@ export default function VisitRegisterPage() {
     const key = `visits:cycles:v1:user:${usuario.id}:family:${familyId}`
     listCycles({ familiaId: Number(familyId) }, controller.signal).then(records => {
       if (controller.signal.aborted) return
-      setAvailableCycles(records.filter(record => record.estado === 'ACTIVO'))
+      // CIR-04: no ofrecer siembras futuras ni huertos/cultivos inactivos.
+      setAvailableCycles(records.filter(record => record.estado === 'ACTIVO' && record.huerto.familiaId === Number(familyId) &&
+        record.huerto.estado === 'ACTIVO' && record.cultivo.activo &&
+        [record.fechaSiembra, record.fechaTrasplante].filter(Boolean).sort().at(-1)! <= todayLocal()))
       void saveOfflineData(key, records).catch(() => {})
     }).catch(async (reason: unknown) => {
       if (reason instanceof CyclesApiError && [401, 403].includes(reason.status)) {
@@ -139,7 +142,9 @@ export default function VisitRegisterPage() {
       try {
         const cached = await getOfflineData<Cycle[]>(key)
         if (!controller.signal.aborted) {
-          setAvailableCycles((cached?.data ?? []).filter(record => record.estado === 'ACTIVO'))
+          setAvailableCycles((cached?.data ?? []).filter(record => record.estado === 'ACTIVO' &&
+            record.huerto.familiaId === Number(familyId) && record.huerto.estado === 'ACTIVO' &&
+            record.cultivo.activo && [record.fechaSiembra, record.fechaTrasplante].filter(Boolean).sort().at(-1)! <= todayLocal()))
           setCyclesWarning('No se pudieron actualizar los ciclos: comprueba que las siembras estén sincronizadas antes de evaluar.')
         }
       } catch { if (!controller.signal.aborted) setCyclesWarning('No se pudieron consultar ciclos agrícolas.') }
