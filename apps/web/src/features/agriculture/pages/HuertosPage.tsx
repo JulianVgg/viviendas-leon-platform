@@ -13,7 +13,9 @@ import LoadingState from '@/components/ui/LoadingState'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { canWriteGardens } from '@/features/auth/screenPermissions'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
-import { createGarden, gardenImageUrl, listGardenFamilies, listGardens, uploadGardenImage, type FamilyOption, type Garden } from '../services/gardens'
+import { createGarden, gardenImageUrl, listGardenFamilies, listGardens, uploadGardenImage, type FamilyOption, type Garden, type GardenClassification } from '../services/gardens'
+import { GardenClassificationFields, entornoLabels, modalidadLabels } from '../components/GardenClassificationFields'
+import EditGardenClassification from '../components/EditGardenClassification'
 
 const typeLabels: Record<string, string> = { FAMILIAR: 'Familiar', COMUNITARIO: 'Comunitario' }
 const statusLabels: Record<string, string> = { PLANIFICADO: 'Planificado', ACTIVO: 'Activo', INACTIVO: 'Inactivo' }
@@ -24,6 +26,7 @@ export default function HuertosPage() {
   const [error, setError] = useState('')
   const [reload, setReload] = useState(0)
   const [uploadingId, setUploadingId] = useState<number | null>(null)
+  const [editingId, setEditingId] = useState<number | null>(null)
   const [notice, setNotice] = useState('')
   const [params] = useSearchParams()
   const { usuario } = useAuth()
@@ -68,10 +71,19 @@ export default function HuertosPage() {
       {!loading && !error && <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{gardens.map((garden) => <article key={garden.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-theme-xs dark:border-slate-800 dark:bg-slate-900">
         {gardenImageUrl(garden) ? <img className="h-44 w-full object-cover" src={gardenImageUrl(garden)!} alt={`Vista satelital de ${garden.nombre || `huerto ${garden.id}`}`} loading="lazy" /> : <div className="flex h-44 items-center justify-center bg-slate-100 text-slate-400 dark:bg-slate-800"><ImagePlus size={36} aria-label="Sin imagen satelital" /></div>}
         <div className="space-y-3 p-5"><div className="flex items-start justify-between gap-2"><h3 className="font-semibold text-slate-900 dark:text-white">{garden.nombre || `Huerto #${garden.id}`}</h3><Badge>{statusLabels[garden.estado] || garden.estado}</Badge></div>
-        <p className="text-sm text-slate-600 dark:text-slate-300">{typeLabels[garden.tipo || ''] || 'Tipo no indicado'} · {garden.fechaInicio || 'Sin fecha'}</p>
+        <p className="text-sm text-slate-600 dark:text-slate-300">{typeLabels[garden.tipo || ''] || 'Tipo sin clasificar'} · {garden.fechaInicio || 'Sin fecha'}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">Entorno: {garden.entornoCultivo ? entornoLabels[garden.entornoCultivo] : 'Sin clasificar'}</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">Modalidad: {garden.modalidadesProductivas.length ? garden.modalidadesProductivas.map(m => modalidadLabels[m]).join(', ') : 'Sin clasificar'}</p>
+        {garden.entornoCultivo === 'OTRO' && garden.detalleEntorno && <p className="text-xs text-slate-500">{garden.detalleEntorno}</p>}
         <p className="text-sm"><Link to={`/familias/${garden.familiaId}`} className="text-brand-600 underline dark:text-brand-300">{garden.familia.nombreReferencia}</Link><span className="block text-xs text-slate-500">{garden.familia.comunidad.nombre}</span></p>
         {garden.observaciones && <p className="line-clamp-3 whitespace-pre-wrap text-sm text-slate-500 dark:text-slate-400">{garden.observaciones}</p>}
+        {canCreate && <button type="button" disabled={!online} onClick={() => setEditingId(current => current === garden.id ? null : garden.id)}
+          className="layout-focus inline-flex min-h-10 items-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-brand-600 disabled:opacity-50 dark:border-slate-700">
+          {editingId === garden.id ? 'Cerrar clasificación' : 'Editar clasificación'}
+        </button>}
         {canCreate && <label className={`layout-focus relative inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:text-slate-300 ${!online || uploadingId !== null ? 'opacity-50' : 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800'}`}><ImagePlus size={17} />{uploadingId === garden.id ? 'Guardando...' : garden.tieneImagen ? 'Reemplazar imagen' : 'Añadir imagen'}<input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" aria-label={`Imagen satelital del huerto ${garden.nombre || garden.id}`} disabled={!online || uploadingId !== null} onChange={(event) => void changeImage(garden.id, event)} /></label>}
+        {canCreate && editingId === garden.id && <EditGardenClassification key={garden.id} garden={garden} onCancel={() => setEditingId(null)}
+          onSaved={updated => { setGardens(current => current.map(item => item.id === updated.id ? updated : item)); setEditingId(null); setNotice('Clasificación actualizada.') }} />}
         </div>
       </article>)}</div>}
     </ComponentCard>
@@ -89,7 +101,9 @@ export function CreateGardenPage() {
   const lockedFamilyId = params.get('familiaId')
   const [familyId, setFamilyId] = useState(lockedFamilyId || '')
   const [nombre, setNombre] = useState('')
-  const [tipo, setTipo] = useState('FAMILIAR')
+  const [classification, setClassification] = useState<GardenClassification>({
+    tipo: 'FAMILIAR', entornoCultivo: null, detalleEntorno: null, modalidadesProductivas: [],
+  })
   const [fechaInicio, setFechaInicio] = useState('')
   const [estado, setEstado] = useState('ACTIVO')
   const [observaciones, setObservaciones] = useState('')
@@ -122,7 +136,7 @@ export function CreateGardenPage() {
     }
     setSaving(true)
     try {
-      const garden = await createGarden({ familiaId: Number(familyId), nombre: nombre.trim() || null, tipo: tipo || null, fechaInicio: fechaInicio || null, estado, observaciones: observaciones.trim() || null })
+      const garden = await createGarden({ familiaId: Number(familyId), nombre: nombre.trim() || null, ...classification, fechaInicio: fechaInicio || null, estado, observaciones: observaciones.trim() || null })
       if (file) {
         try { await uploadGardenImage(garden.id, file) }
         catch { navigate(params.has('familiaId') ? `/familias/${garden.familiaId}?tab=gardens&creado=1&imagenError=${garden.id}` : `/gestion-agricola/huertos?imagenError=${garden.id}`); return }
@@ -143,10 +157,10 @@ export function CreateGardenPage() {
         <FormGrid>
           <FormField label="Familia beneficiaria" required hint="El huerto quedará asociado a esta familia."><select className={formControlClassName} required disabled={loading || saving || !canCreate || Boolean(lockedFamilyId)} value={familyId} onChange={(event) => setFamilyId(event.target.value)}><option value="">Seleccionar familia...</option>{families.map((f) => <option key={f.id} value={f.id}>{f.nombreReferencia} · {f.comunidad.nombre} ({f.estado})</option>)}</select></FormField>
           <FormField label="Nombre del huerto" hint="Opcional según la base de datos."><input className={formControlClassName} maxLength={120} value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej. Huerto principal" /></FormField>
-          <FormField label="Tipo de huerto"><select className={formControlClassName} value={tipo} onChange={(e) => setTipo(e.target.value)}><option value="">No especificado</option><option value="FAMILIAR">Familiar</option><option value="COMUNITARIO">Comunitario</option></select></FormField>
+          <GardenClassificationFields value={classification} onChange={setClassification} disabled={saving || !canCreate} />
           <FormField label="Fecha de inicio"><input className={formControlClassName} type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} /></FormField>
           <FormField label="Estado" required><select className={formControlClassName} required value={estado} onChange={(e) => setEstado(e.target.value)}><option value="PLANIFICADO">Planificado</option><option value="ACTIVO">Activo</option><option value="INACTIVO">Inactivo</option></select></FormField>
-          <div className="sm:col-span-2"><FormField label="Observaciones" hint="Describe, por ejemplo, si se trabaja a campo abierto o en macrotúnel."><textarea className={`${formControlClassName} min-h-28 h-auto`} rows={4} maxLength={2000} value={observaciones} onChange={(e) => setObservaciones(e.target.value)} placeholder="Detalles del terreno, estructura y condiciones iniciales" /></FormField></div>
+          <div className="sm:col-span-2"><FormField label="Observaciones"><textarea className={`${formControlClassName} min-h-28 h-auto`} rows={4} maxLength={2000} value={observaciones} onChange={(e) => setObservaciones(e.target.value)} placeholder="Detalles del terreno, estructura y condiciones iniciales" /></FormField></div>
         </FormGrid>
       </ComponentCard>
       <ComponentCard title="Imagen satelital o fotografía del espacio" description="Almacenamiento local temporal de la API; admite JPG, PNG y WebP (máximo 5 MB).">
