@@ -47,6 +47,8 @@ model Familia {
   fechaIngreso     DateTime? @map("fecha_ingreso") @db.Date
   estado           String
   observaciones    String?
+  latitud          Float?    @db.DoublePrecision
+  longitud         Float?    @db.DoublePrecision
 
   comunidad Comunidad @relation(fields: [comunidadId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 

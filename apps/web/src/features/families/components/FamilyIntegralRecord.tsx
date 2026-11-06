@@ -17,6 +17,7 @@ import FamilyMemberDialog from './FamilyMemberDialog'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import FamilyProgramHistory from './FamilyProgramHistory'
 import FamilyGardensSection from '@/features/agriculture/components/FamilyGardensSection'
+import FamilyCoordinatesPanel from './FamilyCoordinatesPanel'
 
 const tabs = [
   { id: 'general', label: 'Información general' },
@@ -114,6 +115,7 @@ export default function FamilyIntegralRecord({ family, onRefresh }: { family: In
           <div className="min-w-0 border-b border-slate-100 pb-4 dark:border-slate-800"><dt className="text-xs font-medium text-slate-500 dark:text-slate-400">Estado</dt><dd className="mt-2"><Badge variant={familyStateVariant(family.estado)} className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere]">{familyStateLabel(family.estado)}</Badge></dd></div>
           <div className="min-w-0 sm:col-span-2"><dt className="text-xs font-medium text-slate-500 dark:text-slate-400">Observaciones</dt><dd className="mt-2 whitespace-pre-wrap break-words text-sm leading-7 text-slate-700 [overflow-wrap:anywhere] dark:text-slate-300">{family.observaciones || 'Sin observaciones'}</dd></div>
         </dl></CardBody></Card>
+        {canManage && selected === 'general' && isOnline && <div className="mt-4"><FamilyCoordinatesPanel family={family} onRefresh={onRefresh} /></div>}
       </section>
       <section role="tabpanel" id={panelId('members')} aria-labelledby={tabId('members')} hidden={selected !== 'members'} tabIndex={0} className="layout-focus min-w-0 rounded-2xl">
         <Card><CardHeader title="Integrantes" description="Personas activas e inactivas asociadas a esta familia." actions={canManage ? <Button type="button" size="sm" onClick={() => { setMemberNotice(undefined); setMemberDialog({}) }}><Plus size={16} />Agregar integrante</Button> : undefined} /><CardBody>{canManage && !isOnline && <Alert variant="warning" title="Sin conexión" className="mb-4">Las escrituras están deshabilitadas hasta recuperar conexión con el servidor.</Alert>}{memberNotice && <Alert variant="success" title="Expediente actualizado" className="mb-4">{memberNotice}</Alert>}{memberError && <Alert variant="error" title="No se pudo cambiar el estado" className="mb-4">{memberError}</Alert>}{memberRows.length ? <DataTableContainer columns={['Nombre completo', 'Fecha de nacimiento', 'Sexo', 'Parentesco', 'Teléfono', 'Estado', 'Acciones']} rows={memberRows} caption="Integrantes de la familia" /> : <EmptyState title="Sin integrantes registrados" description="Esta familia no tiene integrantes asociados en el expediente consultado." action={canManage ? <Button type="button" onClick={() => setMemberDialog({})}>Agregar integrante</Button> : undefined} />}</CardBody></Card>

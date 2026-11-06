@@ -6,6 +6,7 @@ import type {
   ValidationDetail,
 } from './families.types.js'
 import { MAX_DATABASE_INTEGER, MAX_OBSERVATIONS_LENGTH, MAX_REFERENCE_NAME_LENGTH } from './families.validation.js'
+import { validateCoordinates } from './family-coordinates.rules.js'
 
 const MEMBER_NAME_MAX = 150
 const PHONE_MAX = 30
@@ -82,7 +83,7 @@ function optionValue(value: unknown, field: string, options: string[], details: 
 
 export function validateFamilyUpdate(body: unknown): { data?: FamilyUpdateInput; details: ValidationDetail[] } {
   const details: ValidationDetail[] = []
-  const allowed = ['nombreReferencia', 'comunidadId', 'fechaIngreso', 'observaciones', 'version']
+  const allowed = ['nombreReferencia', 'comunidadId', 'fechaIngreso', 'observaciones', 'latitud', 'longitud', 'version']
   const input = objectInput(body, allowed, details)
   if (!input) return { details }
   const data: FamilyUpdateInput = { version: versionValue(input.version, details) }
@@ -90,6 +91,9 @@ export function validateFamilyUpdate(body: unknown): { data?: FamilyUpdateInput;
   if (has(input, 'comunidadId')) data.comunidadId = positiveId(input.comunidadId, 'comunidadId', details)
   if (has(input, 'fechaIngreso')) data.fechaIngreso = dateValue(input.fechaIngreso, 'fechaIngreso', details, true)
   if (has(input, 'observaciones')) data.observaciones = nullableText(input.observaciones, 'observaciones', MAX_OBSERVATIONS_LENGTH, details)
+  const coordinates = validateCoordinates(input)
+  details.push(...coordinates.details)
+  if (coordinates.data) Object.assign(data, coordinates.data)
   if (!allowed.slice(0, -1).some((field) => has(input, field))) details.push({ field: 'body', message: 'Incluye al menos un campo para actualizar.' })
   return details.length ? { details } : { data, details }
 }

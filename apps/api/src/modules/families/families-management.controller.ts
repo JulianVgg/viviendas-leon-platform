@@ -22,6 +22,7 @@ export async function patchFamily(req: Request, res: Response) {
   if (id === null) return invalidId(res)
   const result = validateFamilyUpdate(req.body)
   if (!result.data) return validationError(res, result.details)
+  res.setHeader('Cache-Control', 'private, no-store')
   try {
     const family = await updateFamily(id, result.data, req.session.userId!)
     return res.json({ data: family })

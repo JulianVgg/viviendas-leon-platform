@@ -61,6 +61,8 @@ export type FamilyUpdateInput = {
   comunidadId?: number
   fechaIngreso?: string | null
   observaciones?: string | null
+  latitud?: number | null
+  longitud?: number | null
 }
 
 export type FamilyMemberRecord = IntegralFamilyRecord['integrantes'][number]

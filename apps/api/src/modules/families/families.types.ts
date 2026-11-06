@@ -3,6 +3,8 @@ export type FamilyCreateInput = {
   comunidadId: number
   fechaIngreso: Date | null
   observaciones: string | null
+  latitud?: number | null
+  longitud?: number | null
 }
 
 export type ValidationDetail = { field: string; message: string }

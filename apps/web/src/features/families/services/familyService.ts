@@ -50,6 +50,13 @@ export async function fetchIntegralFamily(id: string, signal?: AbortSignal) {
   return requestData<IntegralFamilyRecord>(`v1/familias/${encodeURIComponent(id)}/expediente`, { signal, cache: 'no-store' })
 }
 
+export type FamilyCoordinates = { latitud: number | null; longitud: number | null }
+
+// Ubicación sensible: solo por petición expresa de usuarios con FAMILIAS_WRITE.
+export function fetchFamilyCoordinates(id: number, signal?: AbortSignal) {
+  return requestData<FamilyCoordinates>(`v1/familias/${id}/ubicacion`, { signal, cache: 'no-store' })
+}
+
 export function fetchFamilyProgramOptions(signal?: AbortSignal) {
   return requestData<FamilyProgramOption[]>('v1/familias/opciones/programas', { signal, cache: 'no-store' })
 }
