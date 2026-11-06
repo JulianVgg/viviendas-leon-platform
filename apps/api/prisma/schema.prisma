@@ -129,6 +129,10 @@ model Huerto {
   familiaId     Int       @map("familia_id")
   nombre        String?
   tipo          String?
+  // CIR-08: tipo familiar/comunitario != entorno de cultivo ni modalidades productivas.
+  entornoCultivo        String?  @map("entorno_cultivo")
+  detalleEntorno        String?  @map("detalle_entorno")
+  modalidadesProductivas String[] @default([]) @map("modalidades_productivas")
   fechaInicio   DateTime? @map("fecha_inicio") @db.Date
   estado        String
   observaciones String?

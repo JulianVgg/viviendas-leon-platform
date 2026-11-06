@@ -10,6 +10,7 @@ import { useAuth } from '@/features/auth/AuthProvider'
 import { canViewPath, canWriteGardens, isDireccionGeneral } from '@/features/auth/screenPermissions'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { gardenImageUrl, listGardens, type Garden } from '../services/gardens'
+import { entornoLabels, modalidadLabels } from './GardenClassificationFields'
 import { listCycles, type Cycle } from '../services/cyclesService'
 import RegisterSowingDialog from './RegisterSowingDialog'
 import CicloEvaluacionesSection from './CicloEvaluacionesSection'
@@ -26,7 +27,7 @@ function GardenCover({ garden }: { garden: Garden }) {
       ? <img src={imageUrl} alt={`Imagen del huerto ${garden.nombre || garden.id}`} loading="lazy"
           onError={() => setFailedImage(true)} className="h-full w-full object-cover" />
       : <div aria-hidden="true" className="flex h-full flex-col items-center justify-center gap-2 text-emerald-700/70 dark:text-emerald-300/60">
-          <Sprout size={42} strokeWidth={1.5} /><span className="text-xs font-medium">Huerto familiar</span>
+          <Sprout size={42} strokeWidth={1.5} /><span className="text-xs font-medium">{garden.tipo === 'COMUNITARIO' ? 'Huerto comunitario' : garden.tipo === 'FAMILIAR' ? 'Huerto familiar' : 'Huerto'}</span>
         </div>}
   </div>
 }
@@ -146,7 +147,7 @@ export default function FamilyGardensSection({ familyId }: { familyId: number })
                     <h4 className="min-w-0 break-words text-sm font-semibold text-gray-900 dark:text-white">{garden.nombre || `Huerto #${garden.id}`}</h4>
                     {currentGarden?.id === garden.id && <Check aria-label="Seleccionado" size={17} className="shrink-0 text-brand-600" />}
                   </div>
-                  <div className="flex flex-wrap items-center gap-2"><Badge variant={garden.estado === 'ACTIVO' ? 'success' : 'neutral'}>{garden.estado}</Badge><span className="text-xs text-gray-500">{garden.tipo || 'Tipo no indicado'}</span></div>
+                  <div className="flex flex-wrap items-center gap-2"><Badge variant={garden.estado === 'ACTIVO' ? 'success' : 'neutral'}>{garden.estado}</Badge><span className="text-xs text-gray-500">{garden.tipo || 'Tipo sin clasificar'}</span></div>
                   <p className="text-xs text-gray-500">Inicio: {formatAgriculturalDate(garden.fechaInicio)}</p>
                   <span className="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400">Explorar huerto <ChevronRight aria-hidden="true" size={14} /></span>
                 </div>
@@ -164,6 +165,8 @@ export default function FamilyGardensSection({ familyId }: { familyId: number })
             <h3 className="min-w-0 break-words text-base font-semibold text-gray-800 dark:text-white">{currentGarden.nombre || `Huerto #${currentGarden.id}`}</h3>
             <Badge variant={currentGarden.estado === 'ACTIVO' ? 'success' : 'neutral'}>{currentGarden.estado}</Badge>
           </div>
+          <p className="text-sm text-gray-600 dark:text-gray-300">Entorno: {currentGarden.entornoCultivo ? entornoLabels[currentGarden.entornoCultivo] : 'Sin clasificar'} · Modalidad: {currentGarden.modalidadesProductivas.length ? currentGarden.modalidadesProductivas.map(m => modalidadLabels[m]).join(', ') : 'Sin clasificar'}</p>
+          {currentGarden.entornoCultivo === 'OTRO' && currentGarden.detalleEntorno && <p className="text-sm text-gray-600 dark:text-gray-300">{currentGarden.detalleEntorno}</p>}
           {currentGarden.observaciones && <p className="whitespace-pre-wrap break-words text-sm text-gray-600 dark:text-gray-300">{currentGarden.observaciones}</p>}
           {!canReadCycles ? <Alert variant="warning">No tienes permiso para consultar los ciclos agrícolas de este huerto.</Alert> : <>
             <div className="space-y-3">

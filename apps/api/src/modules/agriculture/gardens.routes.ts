@@ -6,14 +6,15 @@ import { getPrismaClient } from '../../config/prisma.js'
 import { Prisma } from '../../generated/prisma/client.js'
 import { requireAuth } from '../auth/auth.middleware.js'
 import { requirePermission } from '../auth/require-permission.middleware.js'
-import { parseGardenId, validateGardenInput } from './gardens.validation.js'
+import { parseGardenId, validateGardenClassification, validateGardenInput } from './gardens.validation.js'
 
 export const gardensRouter = Router()
 const storageDir = path.resolve(process.env.HUERTO_IMAGE_DIR ?? path.join(process.cwd(), 'storage', 'huertos'))
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 const gardenSelect = {
-  id: true, familiaId: true, nombre: true, tipo: true, fechaInicio: true,
+  id: true, familiaId: true, nombre: true, tipo: true, entornoCultivo: true,
+  detalleEntorno: true, modalidadesProductivas: true, fechaInicio: true,
   estado: true, observaciones: true, imagenRuta: true, imagenActualizadaEn: true,
   familia: { select: { id: true, nombreReferencia: true, comunidad: { select: { nombre: true } } } },
 } satisfies Prisma.HuertoSelect
@@ -81,6 +82,9 @@ gardensRouter.post('/', requirePermission('HUERTOS_WRITE'), async (req, res, nex
           familiaId: input.familiaId,
           nombre: input.nombre,
           tipo: input.tipo,
+          entornoCultivo: input.entornoCultivo,
+          detalleEntorno: input.detalleEntorno,
+          modalidadesProductivas: input.modalidadesProductivas,
           fechaInicio: input.fechaInicio ? new Date(`${input.fechaInicio}T00:00:00.000Z`) : null,
           estado: input.estado,
           observaciones: input.observaciones,
@@ -95,6 +99,36 @@ gardensRouter.post('/', requirePermission('HUERTOS_WRITE'), async (req, res, nex
     })
     if (!created) { res.status(404).json(errorResponse('FAMILY_NOT_FOUND', 'La familia seleccionada no existe.')); return }
     res.status(201).location(`/api/v1/huertos?familiaId=${created.familiaId}`).json({ data: serializeGarden(created) })
+  } catch (error) { next(error) }
+})
+
+// CIR-08: actualiza solo la clasificación. No altera familia, ciclos, cosechas ni fotografía.
+gardensRouter.patch('/:id/clasificacion', requirePermission('HUERTOS_WRITE'), async (req, res, next) => {
+  const id = parseGardenId(req.params.id)
+  if (id === null) { res.status(400).json(errorResponse('VALIDATION_ERROR', 'Identificador de huerto no válido.')); return }
+  const result = validateGardenClassification(req.body)
+  if (!result.data) {
+    res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Revisa la clasificación del huerto.', details: result.details } })
+    return
+  }
+  try {
+    const updated = await getPrismaClient().$transaction(async (tx) => {
+      const previous = await tx.huerto.findUnique({ where: { id }, select: gardenSelect })
+      if (!previous) return null
+      const garden = await tx.huerto.update({ where: { id }, data: result.data!, select: gardenSelect })
+      const classification = (item: GardenRecord) => ({
+        tipo: item.tipo, entornoCultivo: item.entornoCultivo, detalleEntorno: item.detalleEntorno,
+        modalidadesProductivas: item.modalidadesProductivas,
+      })
+      await tx.bitacora.create({ data: {
+        usuarioId: req.session.userId!, entidad: 'huerto', registroId: String(id), accion: 'UPDATE', fecha: new Date(),
+        datosAnteriores: JSON.stringify(classification(previous)), datosNuevos: JSON.stringify(classification(garden)),
+        descripcion: 'Clasificación productiva de huerto actualizada.',
+      } })
+      return garden
+    })
+    if (!updated) { res.status(404).json(errorResponse('GARDEN_NOT_FOUND', 'El huerto no existe.')); return }
+    res.json({ data: serializeGarden(updated) })
   } catch (error) { next(error) }
 })
 

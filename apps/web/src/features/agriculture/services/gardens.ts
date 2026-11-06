@@ -1,10 +1,16 @@
 const API = (import.meta.env.VITE_API_URL?.trim() || '/api').replace(/\/$/, '')
 
-export type Garden = {
+export type GardenClassification = {
+  tipo: 'FAMILIAR' | 'COMUNITARIO' | null
+  entornoCultivo: 'CAMPO_ABIERTO' | 'MACROTUNEL' | 'MIXTO' | 'OTRO' | null
+  detalleEntorno: string | null
+  modalidadesProductivas: Array<'AGRICOLA' | 'AGROFORESTAL' | 'SILVOPASTORIL'>
+}
+
+export type Garden = GardenClassification & {
   id: number
   familiaId: number
   nombre: string | null
-  tipo: string | null
   fechaInicio: string | null
   estado: string
   observaciones: string | null
@@ -14,10 +20,9 @@ export type Garden = {
   familia: { id: number; nombreReferencia: string; comunidad: { nombre: string } }
 }
 export type FamilyOption = { id: number; nombreReferencia: string; estado: string; comunidad: { nombre: string } }
-export type GardenInput = {
+export type GardenInput = GardenClassification & {
   familiaId: number
   nombre: string | null
-  tipo: string | null
   fechaInicio: string | null
   estado: string
   observaciones: string | null
@@ -40,6 +45,12 @@ export function listGardens(familiaId?: number, signal?: AbortSignal) {
 
 export function listGardenFamilies(signal?: AbortSignal) {
   return api<FamilyOption[]>('/familias-opciones', { signal })
+}
+
+export function updateGardenClassification(id: number, input: GardenClassification) {
+  return api<Garden>(`/${id}/clasificacion`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+  })
 }
 
 export function createGarden(input: GardenInput) {

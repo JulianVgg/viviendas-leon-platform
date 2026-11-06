@@ -1,7 +1,19 @@
-export type GardenInput = {
+export const GARDEN_ENTORNOS = ['CAMPO_ABIERTO', 'MACROTUNEL', 'MIXTO', 'OTRO'] as const
+export const GARDEN_MODALIDADES = ['AGRICOLA', 'AGROFORESTAL', 'SILVOPASTORIL'] as const
+
+type EntornoCultivo = typeof GARDEN_ENTORNOS[number]
+type ModalidadProductiva = typeof GARDEN_MODALIDADES[number]
+
+export type GardenClassification = {
+  tipo: 'FAMILIAR' | 'COMUNITARIO' | null
+  entornoCultivo: EntornoCultivo | null
+  detalleEntorno: string | null
+  modalidadesProductivas: ModalidadProductiva[]
+}
+
+export type GardenInput = GardenClassification & {
   familiaId: number
   nombre: string | null
-  tipo: 'FAMILIAR' | 'COMUNITARIO' | null
   fechaInicio: string | null
   estado: 'PLANIFICADO' | 'ACTIVO' | 'INACTIVO'
   observaciones: string | null
@@ -31,6 +43,54 @@ function validDay(day: string) {
   return Number.isFinite(date.getTime()) && date.toISOString().startsWith(`${day}T`)
 }
 
+// La ausencia de un dato no implica ninguna modalidad: no inventar clasificación histórica.
+function parseClassification(source: Record<string, unknown>, details: ValidationDetail[]): GardenClassification {
+  const tipoValue = source.tipo === undefined || source.tipo === null || source.tipo === '' ? null : source.tipo
+  if (tipoValue !== null && tipoValue !== 'FAMILIAR' && tipoValue !== 'COMUNITARIO') {
+    details.push({ field: 'tipo', message: 'El tipo debe ser familiar o comunitario.' })
+  }
+  const entornoValue = source.entornoCultivo === undefined || source.entornoCultivo === null || source.entornoCultivo === ''
+    ? null : source.entornoCultivo
+  if (entornoValue !== null && !GARDEN_ENTORNOS.includes(entornoValue as EntornoCultivo)) {
+    details.push({ field: 'entornoCultivo', message: 'Selecciona un entorno de cultivo válido.' })
+  }
+  const detalleEntorno = optionalString(source.detalleEntorno, 'detalleEntorno', 180, details)
+  if (entornoValue === 'OTRO' && !detalleEntorno) {
+    details.push({ field: 'detalleEntorno', message: 'Describe la estructura o entorno seleccionado.' })
+  } else if (entornoValue !== 'OTRO' && detalleEntorno) {
+    details.push({ field: 'detalleEntorno', message: 'El detalle solo se usa cuando el entorno es Otro.' })
+  }
+  const rawModalidades = source.modalidadesProductivas === undefined ? [] : source.modalidadesProductivas
+  if (!Array.isArray(rawModalidades) || rawModalidades.length > GARDEN_MODALIDADES.length ||
+    rawModalidades.some(value => typeof value !== 'string' || !GARDEN_MODALIDADES.includes(value as ModalidadProductiva)) ||
+    new Set(rawModalidades).size !== rawModalidades.length) {
+    details.push({ field: 'modalidadesProductivas', message: 'Selecciona modalidades válidas, sin repetirlas.' })
+  }
+  return {
+    tipo: tipoValue === 'FAMILIAR' || tipoValue === 'COMUNITARIO' ? tipoValue : null,
+    entornoCultivo: GARDEN_ENTORNOS.find(item => item === entornoValue) ?? null,
+    detalleEntorno: entornoValue === 'OTRO' ? detalleEntorno : null,
+    modalidadesProductivas: Array.isArray(rawModalidades)
+      ? GARDEN_MODALIDADES.filter(item => rawModalidades.includes(item)) : [],
+  }
+}
+
+export function validateGardenClassification(body: unknown): { data: GardenClassification | null; details: ValidationDetail[] } {
+  const details: ValidationDetail[] = []
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return { data: null, details: [{ field: 'body', message: 'Debes enviar un objeto JSON.' }] }
+  }
+  const source = body as Record<string, unknown>
+  // PATCH reemplaza únicamente clasificación: exigir todos sus campos evita borrar datos por omisión.
+  for (const field of ['tipo', 'entornoCultivo', 'detalleEntorno', 'modalidadesProductivas']) {
+    if (!Object.prototype.hasOwnProperty.call(source, field)) {
+      details.push({ field, message: 'Incluye este campo en la clasificación.' })
+    }
+  }
+  const classification = parseClassification(source, details)
+  return details.length ? { data: null, details } : { data: classification, details: [] }
+}
+
 export function validateGardenInput(body: unknown): { data: GardenInput | null; details: ValidationDetail[] } {
   const details: ValidationDetail[] = []
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
@@ -42,10 +102,7 @@ export function validateGardenInput(body: unknown): { data: GardenInput | null; 
   if (familiaId === null) details.push({ field: 'familiaId', message: 'Selecciona una familia existente.' })
   const nombre = optionalString(source.nombre, 'nombre', 120, details)
   const observaciones = optionalString(source.observaciones, 'observaciones', 2000, details)
-  const tipo = source.tipo === undefined || source.tipo === null || source.tipo === '' ? null : source.tipo
-  if (tipo !== null && tipo !== 'FAMILIAR' && tipo !== 'COMUNITARIO') {
-    details.push({ field: 'tipo', message: 'El tipo debe ser familiar o comunitario.' })
-  }
+  const classification = parseClassification(source, details)
   const estado = source.estado
   if (estado !== 'PLANIFICADO' && estado !== 'ACTIVO' && estado !== 'INACTIVO') {
     details.push({ field: 'estado', message: 'Selecciona un estado válido.' })
@@ -54,9 +111,9 @@ export function validateGardenInput(body: unknown): { data: GardenInput | null; 
   if (fechaInicio !== null && (typeof fechaInicio !== 'string' || !validDay(fechaInicio))) {
     details.push({ field: 'fechaInicio', message: 'Ingresa una fecha válida (AAAA-MM-DD).' })
   }
-  if (details.length || familiaId === null || (tipo !== null && tipo !== 'FAMILIAR' && tipo !== 'COMUNITARIO') ||
+  if (details.length || familiaId === null ||
     (estado !== 'PLANIFICADO' && estado !== 'ACTIVO' && estado !== 'INACTIVO') ||
     (fechaInicio !== null && typeof fechaInicio !== 'string')) return { data: null, details }
 
-  return { data: { familiaId, nombre, tipo, fechaInicio, estado, observaciones }, details: [] }
+  return { data: { familiaId, nombre, ...classification, fechaInicio, estado, observaciones }, details: [] }
 }
