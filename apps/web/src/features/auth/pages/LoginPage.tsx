@@ -1,5 +1,5 @@
 
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { useAuth } from '../AuthProvider'
 import BrandMark from '@/components/common/BrandMark'
@@ -14,11 +14,17 @@ export default function LoginPage() {
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState('')
   const [mostrarAviso, setMostrarAviso] = useState(false)
+  const [saliendo, setSaliendo] = useState(false)
+  const temporizadorSalida = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => {
+    if (temporizadorSalida.current !== null) clearTimeout(temporizadorSalida.current)
+  }, [])
 
   async function iniciarSesion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
-    if (cargando) return
+    if (cargando || saliendo) return
 
     setError('')
     setCargando(true)
@@ -58,8 +64,15 @@ export default function LoginPage() {
       // Limpiar la contraseña del formulario.
       setPassword('')
 
-      // Entrar al panel únicamente con una sesión válida.
-      navigate('/', { replace: true })
+      // La transición de salida solo se ejecuta tras validar la sesión.
+      // No se retrasa el acceso cuando el dispositivo prefiere reducir movimiento.
+      const destino = { replace: true, state: { fromLogin: true } }
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        navigate('/', destino)
+      } else {
+        setSaliendo(true)
+        temporizadorSalida.current = window.setTimeout(() => navigate('/', destino), 320)
+      }
     } catch {
       setError('No fue posible conectar con el servidor.')
     } finally {
@@ -68,10 +81,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-dvh bg-white dark:bg-slate-950">
+    <div className={`flex min-h-dvh bg-white dark:bg-slate-950 ${saliendo ? 'login-screen-exit' : ''}`}>
       {/* Logotipo visible también en móviles; acceso y sesión intactos. */}
       <main className="flex w-full items-center justify-center px-6 py-12 lg:w-1/2">
-        <div className="w-full max-w-md">
+        <div className="login-form-enter w-full max-w-md">
           <div className="mb-10 flex items-center gap-3 lg:hidden">
             <BrandMark decorative className="size-12 shadow-theme-sm" />
             <div><p className="text-lg font-bold text-slate-900 dark:text-white">ViviendasLeón</p><p className="text-xs text-slate-500 dark:text-slate-400">Sustaining Rural Communities</p></div>
@@ -103,7 +116,7 @@ export default function LoginPage() {
                 value={correo}
                 onChange={(event) => setCorreo(event.target.value)}
                 placeholder="correo@ejemplo.com"
-                className="w-full rounded-lg border border-slate-300 bg-transparent px-4 py-3 text-slate-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:text-white"
+                className="w-full rounded-lg border border-slate-300 bg-transparent px-4 py-3 text-slate-900 outline-none transition-[border-color,box-shadow] duration-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 motion-reduce:transition-none dark:border-slate-700 dark:text-white"
               />
             </div>
 
@@ -125,7 +138,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder="Ingresa tu contraseña"
-                  className="w-full rounded-lg border border-slate-300 bg-transparent px-4 py-3 pr-24 text-slate-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-slate-700 dark:text-white"
+                  className="w-full rounded-lg border border-slate-300 bg-transparent px-4 py-3 pr-24 text-slate-900 outline-none transition-[border-color,box-shadow] duration-200 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 motion-reduce:transition-none dark:border-slate-700 dark:text-white"
                 />
 
                 <button
@@ -177,8 +190,8 @@ export default function LoginPage() {
             {/* Botón de inicio de sesión */}
             <button
               type="submit"
-              disabled={cargando}
-              className="w-full rounded-lg bg-brand-500 px-4 py-3 font-semibold text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={cargando || saliendo}
+              className="w-full rounded-lg bg-brand-500 px-4 py-3 font-semibold text-white transition-[background-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:bg-brand-600 hover:shadow-theme-sm active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 motion-reduce:transform-none motion-reduce:transition-none"
             >
               {cargando ? 'Iniciando sesión...' : 'Iniciar sesión'}
             </button>
@@ -188,10 +201,10 @@ export default function LoginPage() {
 
       {/* Panel institucional, sin imágenes externas: funciona en modo PWA. */}
       <aside className="relative hidden min-h-dvh w-1/2 items-center justify-center overflow-hidden bg-brand-900 px-8 lg:flex">
-        <div aria-hidden="true" className="pointer-events-none absolute -right-36 -top-36 size-[420px] rounded-full border border-white/10 bg-white/5" />
-        <div aria-hidden="true" className="pointer-events-none absolute -bottom-40 -left-40 size-[520px] rounded-full border border-white/10 bg-white/5" />
-        <div className="relative flex max-w-md flex-col items-center text-center">
-          <div className="rounded-3xl border border-white/20 bg-white/10 p-5 shadow-theme-lg backdrop-blur-sm">
+        <div aria-hidden="true" className="login-orbit-float pointer-events-none absolute -right-36 -top-36 size-[420px] rounded-full border border-white/10 bg-white/5" />
+        <div aria-hidden="true" className="login-orbit-float-delayed pointer-events-none absolute -bottom-40 -left-40 size-[520px] rounded-full border border-white/10 bg-white/5" />
+        <div className="login-side-enter relative flex max-w-md flex-col items-center text-center">
+          <div className="login-brand-enter rounded-3xl border border-white/20 bg-white/10 p-5 shadow-theme-lg backdrop-blur-sm">
             <BrandMark decorative className="size-28 rounded-xl shadow-theme-lg" />
           </div>
           <h2 className="mt-8 text-4xl font-bold tracking-tight text-white">Viviendas León</h2>

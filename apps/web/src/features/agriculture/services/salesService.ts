@@ -13,6 +13,8 @@ export type Sale = {
   } } }
   precioUnitario: string | null; moneda: SaleCurrency | null; totalVenta: string | null
   tipoImporte: 'VENTA_REAL'; esDatoPrueba: boolean
+  conversionPendiente: boolean
+  equivalencia: { tipoCambioId: number; totalGTQ: string; totalUSD: string; fechaTasa: string; quetzalesPorDolar: string; fuente: string; referencia: string } | null
 }
 export type SaleInput = { registroProduccionId: number; fechaVenta: string; cantidad: string; unidadMedidaId: number
   monedaId: number; precioUnitario: string; observaciones: string | null }
@@ -35,7 +37,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!body || !('data' in body)) throw new Error('El servidor devolvió una respuesta incompleta.')
   return body.data as T
 }
-export const listSales = (signal?: AbortSignal) => request<Sale[]>('', { signal })
+export const listSales = (signal?: AbortSignal, cicloCultivoId?: number) =>
+  request<Sale[]>(cicloCultivoId ? `?cicloCultivoId=${cicloCultivoId}` : '', { signal })
 export const listSaleCurrencies = (signal?: AbortSignal) => request<SaleCurrency[]>('/monedas', { signal })
 export const saleAvailability = (registroProduccionId: number, signal?: AbortSignal) =>
   request<SaleAvailability>(`/disponibilidad?registroProduccionId=${registroProduccionId}`, { signal })

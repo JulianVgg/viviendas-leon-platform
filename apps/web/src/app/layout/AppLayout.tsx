@@ -11,7 +11,9 @@ import Backdrop from './Backdrop'
 
 function LayoutContent() {
   const { isExpanded, isHovered, isMobileOpen, closeMobileSidebar } = useSidebar()
-  const { pathname } = useLocation()
+  const location = useLocation()
+  const { pathname } = location
+  const entrandoDesdeLogin = pathname === '/' && location.state?.fromLogin === true
   const { usuario } = useAuth()
 
   useEffect(() => {
@@ -19,7 +21,7 @@ function LayoutContent() {
   }, [pathname, closeMobileSidebar])
 
   return (
-    <div className="min-h-dvh bg-gray-50 text-gray-700 dark:bg-gray-950 dark:text-gray-300 xl:flex">
+    <div className={cn('min-h-dvh bg-gray-50 text-gray-700 dark:bg-gray-950 dark:text-gray-300 xl:flex', entrandoDesdeLogin && 'app-login-enter')}>
       <a href="#main-content" className="layout-focus fixed start-4 top-4 z-60 -translate-y-24 rounded-lg bg-white px-4 py-3 text-sm font-medium text-brand-600 shadow-theme-lg focus:translate-y-0 dark:bg-gray-900 dark:text-brand-300">
         Saltar al contenido
       </a>

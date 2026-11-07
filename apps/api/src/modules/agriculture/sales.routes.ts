@@ -7,8 +7,12 @@ import { availableToSell, guatemalaToday, officialCurrency, saleMoney } from './
 import { validateSaleInput } from './sales.validation.js'
 import { requireProductionRead } from './production.access.js'
 import { harvestUnitKind, isOfficialHarvestUnit } from './production.units.js'
+import { exchangeRatesRouter } from './exchange-rates.routes.js'
+import { convertSaleTotal } from './exchange-rates.rules.js'
+import { BANGUAT_REFERENCE_URL, fetchBanguatRates } from './banguat-rates.js'
 
 export const salesRouter = Router()
+salesRouter.use('/tipos-cambio', exchangeRatesRouter)
 const errorBody = (code: string, message: string, details?: unknown) => ({ error: { code, message, ...(details ? { details } : {}) } })
 const day = (value: Date) => value.toISOString().slice(0, 10)
 
@@ -25,18 +29,27 @@ const saleSelect = {
 } satisfies Prisma.RegistroVentaSelect
 
 type SaleRow = Prisma.RegistroVentaGetPayload<{ select: typeof saleSelect }>
-function serializeSale(sale: SaleRow) {
+type RateRow = { id: number; fecha: Date; quetzalesPorDolar: Prisma.Decimal; fuente: string; referencia: string }
+function serializeSale(sale: SaleRow, rate?: RateRow) {
   // Un registro antiguo con varios precios no debe atribuir un importe arbitrario.
   const precio = sale.precios.length === 1 && officialCurrency({ ...sale.precios[0].moneda, activo: true })
     ? sale.precios[0] : undefined
+  const totalVenta = precio ? saleMoney(sale.cantidadVendida.toString(), precio.precioUnitario.toString()) : null
+  const conversion = totalVenta && rate && precio
+    ? convertSaleTotal(totalVenta, precio.moneda.codigo, rate.quetzalesPorDolar.toString()) : null
   return {
+    // Las equivalencias no se contabilizan como ingresos adicionales.
+    equivalencia: conversion && rate ? { ...conversion, tipoCambioId: rate.id, fechaTasa: day(rate.fecha),
+      quetzalesPorDolar: rate.quetzalesPorDolar.toString(), fuente: rate.fuente,
+      referencia: rate.referencia } : null,
+    conversionPendiente: Boolean(totalVenta && precio && ['GTQ', 'USD'].includes(precio.moneda.codigo) && !conversion),
     id: sale.id, registroProduccionId: sale.registroProduccionId, visitaOrigenId: sale.visitaOrigenId, fechaVenta: sale.fecha ? day(sale.fecha) : null,
     cantidad: sale.cantidadVendida.toString(), unidadMedida: sale.unidadMedida,
     observaciones: sale.observaciones,
     cicloCultivo: sale.registroProduccion.cicloCultivo,
     precioUnitario: precio?.precioUnitario.toString() ?? null,
     moneda: precio?.moneda ?? null,
-    totalVenta: precio ? saleMoney(sale.cantidadVendida.toString(), precio.precioUnitario.toString()) : null,
+    totalVenta,
     tipoImporte: 'VENTA_REAL' as const,
     esDatoPrueba: sale.unidadMedida.codigo.startsWith('SYN-') || !precio,
   }
@@ -75,13 +88,49 @@ salesRouter.get('/disponibilidad', requireProductionRead, async (req, res, next)
 
 salesRouter.get('/', requireProductionRead, async (req, res, next) => {
   const productionId = req.query.registroProduccionId === undefined ? undefined : parseProductionId(req.query.registroProduccionId)
-  if (productionId === null) { res.status(400).json(errorBody('VALIDATION_ERROR', 'Selecciona una cosecha válida.')); return }
+  const cycleId = req.query.cicloCultivoId === undefined ? undefined : parseProductionId(req.query.cicloCultivoId)
+  if (productionId === null || cycleId === null) {
+    res.status(400).json(errorBody('VALIDATION_ERROR', 'Selecciona una cosecha o un ciclo válido.')); return
+  }
   try {
     const records = await getPrismaClient().registroVenta.findMany({
-      where: productionId ? { registroProduccionId: productionId } : undefined,
+      where: {
+        ...(productionId ? { registroProduccionId: productionId } : {}),
+        ...(cycleId ? { registroProduccion: { cicloCultivoId: cycleId } } : {}),
+      },
       select: saleSelect, orderBy: [{ fecha: 'desc' }, { id: 'desc' }], take: 500,
     })
-    res.json({ data: records.map(serializeSale) })
+    // Solo una tasa documentada para la fecha EXACTA de la venta.
+    // No se usa "ultima tasa" ni un valor del dia actual para ventas antiguas.
+    const dates = [...new Set(records.filter(row => row.fecha).map(row => day(row.fecha!)))]
+    const prisma = getPrismaClient()
+    const selectRate = { id: true, fecha: true, quetzalesPorDolar: true, fuente: true, referencia: true } as const
+    let rates = dates.length ? await prisma.tipoCambio.findMany({
+      where: { fecha: { in: dates.map(date => new Date(`${date}T00:00:00.000Z`)) } },
+      select: selectRate,
+    }) : []
+    const knownDates = new Set(rates.map(row => day(row.fecha)))
+    const missing = dates.filter(date => !knownDates.has(date))
+    if (missing.length) {
+      const received = await fetchBanguatRates(missing)
+      if (received.length) {
+        try {
+          await prisma.tipoCambio.createMany({ data: received.map(item => ({
+            fecha: new Date(`${item.fecha}T00:00:00.000Z`),
+            quetzalesPorDolar: new Prisma.Decimal(item.quetzalesPorDolar),
+            fuente: 'Banco de Guatemala', referencia: BANGUAT_REFERENCE_URL,
+          })), skipDuplicates: true })
+          rates = await prisma.tipoCambio.findMany({
+            where: { fecha: { in: dates.map(date => new Date(`${date}T00:00:00.000Z`)) } },
+            select: selectRate,
+          })
+        } catch {
+          // Si la importación de tasas falla, no se pierden las ventas ni se inventa su equivalencia.
+        }
+      }
+    }
+    const byDay = new Map(rates.map(row => [day(row.fecha), row]))
+    res.json({ data: records.map(row => serializeSale(row, row.fecha ? byDay.get(day(row.fecha)) : undefined)) })
   } catch (error) { next(error) }
 })
 

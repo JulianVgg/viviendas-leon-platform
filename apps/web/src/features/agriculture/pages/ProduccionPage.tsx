@@ -9,7 +9,6 @@ import Alert from '@/components/ui/Alert'
 import Dialog from '@/components/ui/Dialog'
 import FormField, { formControlClassName } from '@/components/ui/FormField'
 import LoadingState from '@/components/ui/LoadingState'
-import SalesPanel from '../components/SalesPanel'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { canViewPath, canWriteProduction } from '@/features/auth/screenPermissions'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
@@ -223,7 +222,6 @@ export default function ProduccionPage() {
         <Link to="/gestion-agricola/ciclos" className="mt-3 inline-block text-sm text-brand-600 underline">Ver ciclos agrícolas</Link>
       </CardBody>
     </Card>
-    <SalesPanel records={records} canCreate={canCreate} online={online} loadingProductions={loading} />
     <Dialog open={modalOpen} title="Registrar cosecha" description="Asocia la cantidad cosechada a un ciclo y su unidad de medida." onClose={closeRegistration}>
       <form className="space-y-4" onSubmit={(event) => void submit(event)}>
         {submitError && <Alert variant="error" title="No se pudo registrar">{submitError}</Alert>}

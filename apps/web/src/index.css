@@ -330,6 +330,73 @@
   }
 }
 
+/* Transición de acceso: login sale antes de presentar la aplicación autenticada. */
+@keyframes login-screen-out {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-10px); }
+}
+@keyframes app-after-login-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.login-screen-exit { animation: login-screen-out 320ms ease-in both; pointer-events: none; }
+.app-login-enter { animation: app-after-login-in 460ms cubic-bezier(.2,.8,.25,1) both; }
+
+/* Tarjeta institucional de bienvenida, sobria y adaptable al tema. */
+.dashboard-welcome-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: min(48%, 460px);
+  background: radial-gradient(circle at 100% 0%, rgb(60 110 142 / 13%), transparent 72%);
+  pointer-events: none;
+}
+.dashboard-welcome-card::after {
+  content: '';
+  position: absolute;
+  top: -125px;
+  right: -85px;
+  width: 295px;
+  height: 295px;
+  border: 1px solid rgb(60 110 142 / 13%);
+  border-radius: 50%;
+  box-shadow: 0 0 0 42px rgb(60 110 142 / 4%), 0 0 0 84px rgb(60 110 142 / 2%);
+  pointer-events: none;
+}
+
+/* Inicio de sesión: entrada ligera inspirada en las transiciones de TailAdmin. */
+@keyframes login-form-show {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes login-side-show {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes login-brand-show {
+  from { opacity: 0; transform: scale(.94); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes login-orbit-drift {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(16px); }
+}
+.login-form-enter { animation: login-form-show 460ms cubic-bezier(.2,.8,.25,1) both; }
+.login-side-enter { animation: login-side-show 620ms cubic-bezier(.2,.8,.25,1) 100ms both; }
+.login-brand-enter { animation: login-brand-show 520ms cubic-bezier(.2,.8,.25,1) 180ms both; }
+.login-orbit-float { animation: login-orbit-drift 12s ease-in-out infinite; }
+.login-orbit-float-delayed { animation: login-orbit-drift 16s ease-in-out -7s infinite reverse; }
+@keyframes dashboard-welcome-show {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.dashboard-welcome-enter { animation: dashboard-welcome-show 510ms cubic-bezier(.16,1,.3,1) 90ms both; }
+@media (prefers-reduced-motion: reduce) {
+  .login-screen-exit, .app-login-enter,
+  .login-form-enter, .login-side-enter, .login-brand-enter,
+  .login-orbit-float, .login-orbit-float-delayed, .dashboard-welcome-enter { animation: none; }
+}
+
 /* Entrada de página consistente con diálogos y tarjetas del sistema. */
 @keyframes dashboard-page-show {
   from { opacity: 0; transform: translateY(12px); }
@@ -339,8 +406,8 @@
   from { opacity: 0; transform: translateY(9px) scale(.992); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
-.dashboard-page-enter { animation: dashboard-page-show 260ms cubic-bezier(.2,.8,.25,1) both; }
-.dashboard-content-enter { animation: dashboard-content-show 340ms cubic-bezier(.2,.8,.25,1) both; }
+.dashboard-page-enter { animation: dashboard-page-show 390ms cubic-bezier(.2,.8,.25,1) both; }
+.dashboard-content-enter { animation: dashboard-content-show 480ms cubic-bezier(.2,.8,.25,1) 140ms both; }
 @media (prefers-reduced-motion: reduce) {
   .dashboard-page-enter, .dashboard-content-enter { animation: none; }
 }

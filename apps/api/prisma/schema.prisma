@@ -224,6 +224,22 @@ model Moneda {
   @@map("moneda")
 }
 
+// CIR-10: tasas historicas expresadas en quetzales por un dolar.
+// Los registros son inmutables desde la API; no se inventan cotizaciones.
+model TipoCambio {
+  id                   Int      @id @default(autoincrement())
+  fecha                DateTime @unique @db.Date
+  quetzalesPorDolar     Decimal  @map("quetzales_por_dolar") @db.Decimal(18, 6)
+  fuente               String   @db.VarChar(120)
+  referencia           String   @db.VarChar(250)
+  usuarioRegistroId    Int?     @map("usuario_registro_id")
+  creadoEn             DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+
+  usuarioRegistro Usuario? @relation(fields: [usuarioRegistroId], references: [id], onDelete: SetNull)
+
+  @@map("tipo_cambio")
+}
+
 // ============================================================
 // PRODUCCIÓN Y VENTAS
 // ============================================================
@@ -883,6 +899,7 @@ model Usuario {
   eventosParticipante EventoInstitucionalParticipante[]
   capacitacionesAsignadas Capacitacion[] @relation("CapacitacionesAsignadas")
   solicitudesAnalisisIa AnalisisIaSolicitud[]
+  tiposCambioRegistrados TipoCambio[]
 
   @@map("usuario")
 }
