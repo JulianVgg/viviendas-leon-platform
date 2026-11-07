@@ -6,6 +6,7 @@ import { requirePermission } from '../auth/require-permission.middleware.js'
 import { parseCycleId, validateCycleInput } from './cycles.validation.js'
 import { plantingDates, duplicatePlantingFilter } from './cycles.relations.js'
 import { parseEvaluationObservations } from './followup-format.js'
+import { estimacionDeCaptura } from './visit-estimate.js'
 
 export const cyclesRouter = Router()
 cyclesRouter.use(requireAuth)
@@ -91,6 +92,14 @@ cyclesRouter.get('/:id/seguimientos', requirePermission('PANTALLA_CICLOS'), asyn
         skip: (page - 1) * limit, take: limit,
       }),
     ])
+    // Las evaluaciones AGR-06 se relacionan con la visita; las cifras estimadas
+    // siguen en visita_captura. Leerlas sin alterar cosechas o ventas reales.
+    const visitaIds = [...new Set(evaluations.map(record => record.visitaId))]
+    const capturas = visitaIds.length ? await prisma.$queryRaw<Array<{ visitaId: number; datos: unknown }>>`
+      SELECT visita_id AS "visitaId", datos FROM visita_captura
+      WHERE visita_id IN (${Prisma.join(visitaIds)})
+    ` : []
+    const capturasPorVisita = new Map(capturas.map(capture => [capture.visitaId, capture.datos]))
     res.setHeader('Cache-Control', 'no-store')
     res.json({ data: {
       items: evaluations.map(record => ({
@@ -102,6 +111,7 @@ cyclesRouter.get('/:id/seguimientos', requirePermission('PANTALLA_CICLOS'), asyn
         etapa: record.etapaCultivo?.nombre ?? null,
         calidad: record.calidad?.nombre ?? null,
         ...parseEvaluationObservations(record.observaciones),
+        estimacion: estimacionDeCaptura(capturasPorVisita.get(record.visitaId), id),
       })),
       pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
     } })

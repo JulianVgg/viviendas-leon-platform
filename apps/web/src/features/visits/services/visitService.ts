@@ -1,3 +1,4 @@
+import type { MovimientoVisita } from './visitEconomics'
 import type { ConfigRecordatorios } from '@/features/notifications/services/remindersService'
 import { getOfflineData, saveOfflineData } from '@/db/offlineDb'
 import { getConnectivitySnapshot } from '@/services/connectivity'
@@ -22,6 +23,7 @@ export type CropCapture = {
   // Optional for backwards compatibility with unsynchronised VIS-03/VIS-04 captures.
   cicloCultivoId?: number
   observacionesCultivo?: string
+  movimientoReal?: MovimientoVisita
   name: string; stage: string; quality: string; plants: number | null
   findings: { type: 'plaga' | 'enfermedad'; name: string; damage: string }[]
   production: boolean; origenProduccion?: 'ESTIMACION_VISITA' // Capturas antiguas no incluyen el marcador.

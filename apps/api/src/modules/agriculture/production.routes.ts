@@ -5,12 +5,15 @@ import { requireAuth } from '../auth/auth.middleware.js'
 import { requirePermission } from '../auth/require-permission.middleware.js'
 import { parseProductionId, validateProductionInput } from './production.validation.js'
 import { harvestQuantityError, harvestUnitKind, isOfficialHarvestUnit } from './production.units.js'
+import { salesRouter } from './sales.routes.js'
+import { requireProductionRead } from './production.access.js'
 
 export const productionRouter = Router()
 productionRouter.use(requireAuth)
+productionRouter.use('/ventas', salesRouter)
 
 const productionSelect = {
-  id: true, cicloCultivoId: true, fechaInicioPeriodo: true, fechaFinPeriodo: true, observaciones: true,
+  id: true, cicloCultivoId: true, visitaOrigenId: true, fechaInicioPeriodo: true, fechaFinPeriodo: true, observaciones: true,
   cicloCultivo: { select: {
     id: true, estado: true,
     cultivo: { select: { id: true, nombre: true } },
@@ -46,7 +49,7 @@ function handleError(error: unknown, res: Response, next: NextFunction) {
 }
 
 // Unidades activas para nuevos registros; el historial conserva unidades inactivas.
-productionRouter.get('/unidades', requirePermission('PANTALLA_PRODUCCION'), async (_req, res, next) => {
+productionRouter.get('/unidades', requireProductionRead, async (_req, res, next) => {
   try {
     const units = await getPrismaClient().unidadMedida.findMany({
       where: { activo: true, NOT: { codigo: { startsWith: 'SYN-' } } },
@@ -59,7 +62,7 @@ productionRouter.get('/unidades', requirePermission('PANTALLA_PRODUCCION'), asyn
 })
 
 // Información estructurada y vinculada al ciclo; se conserva para reportes futuros.
-productionRouter.get('/', requirePermission('PANTALLA_PRODUCCION'), async (req, res, next) => {
+productionRouter.get('/', requireProductionRead, async (req, res, next) => {
   const cicloCultivoId = req.query.cicloCultivoId === undefined ? undefined : parseProductionId(req.query.cicloCultivoId)
   if (cicloCultivoId === null) {
     res.status(400).json(issue('VALIDATION_ERROR', 'Selecciona un ciclo válido.'))

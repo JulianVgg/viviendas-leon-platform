@@ -4,6 +4,7 @@ export type ProductionUnit = { id: number; codigo: string; nombre: string; abrev
 export type Production = {
   id: number
   origenProduccion: 'COSECHA_REAL'
+  visitaOrigenId?: number | null
   cicloCultivoId: number
   fechaInicioPeriodo: string
   fechaFinPeriodo: string

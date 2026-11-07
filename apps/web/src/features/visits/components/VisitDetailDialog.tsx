@@ -90,6 +90,12 @@ export default function VisitDetailDialog({ visit, onClose, extra }: { visit: Vi
               </div>
               {canReadHarvest && crop.cicloCultivoId && <Link to={`/gestion-agricola/produccion?cicloId=${crop.cicloCultivoId}`} className="mt-2 inline-block text-brand-600 underline dark:text-brand-400">Consultar cosechas reales</Link>}
             </div>}
+            {crop.movimientoReal && <div className="mt-2 rounded-lg border border-slate-200 p-3 text-xs dark:border-slate-700">
+              <p className="font-semibold">Movimiento real · {pending ? 'Pendiente de sincronización' : 'Confirmado en Producción'}</p>
+              {crop.movimientoReal.cosecha && <p>Cosecha: {crop.movimientoReal.cosecha.cantidad} · {crop.movimientoReal.cosecha.fechaCosecha}</p>}
+              {crop.movimientoReal.venta && <p>Venta: {crop.movimientoReal.venta.cantidad} · {crop.movimientoReal.venta.fechaVenta}</p>}
+              {canReadHarvest && !pending && <Link to="/gestion-agricola/produccion" className="underline text-brand-600">Consultar Producción</Link>}
+            </div>}
             {filled(crop.observacionesCultivo) && <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">{crop.observacionesCultivo}</p>}
             {crop.findings?.length > 0 && <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">{crop.findings.length} hallazgo(s)</p>}
           </div>)}</div></Section>}

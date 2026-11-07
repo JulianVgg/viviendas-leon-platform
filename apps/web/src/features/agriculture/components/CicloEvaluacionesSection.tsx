@@ -83,6 +83,16 @@ export default function CicloEvaluacionesSection({ cicloId }: { cicloId: number 
             <div><dt className="text-xs text-gray-500">Calidad</dt><dd className="mt-1"><Badge variant={qualityVariant(item.calidad)}>{item.calidad || 'No registrada'}</Badge></dd></div>
             <div className="col-span-2"><dt className="text-xs text-gray-500">Plantas observadas</dt><dd className="mt-1 text-sm font-medium text-gray-800 dark:text-white">{item.cantidadPlantasObservadas ?? 'Sin registro'}</dd></div>
           </dl>
+          {item.estimacion && <section aria-label="Producción estimada de la visita" className="mt-3 rounded-lg border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
+            <p className="text-xs font-semibold text-gray-800 dark:text-gray-200">Producción estimada de la visita</p>
+            <dl className="mt-2 grid grid-cols-2 gap-2 text-xs text-gray-600 dark:text-gray-300">
+              <div><dt>Unidades estimadas</dt><dd className="font-medium">{item.estimacion.unidades ?? 'Sin registro'}</dd></div>
+              <div><dt>Kilogramos estimados</dt><dd className="font-medium">{item.estimacion.kg ?? 'Sin registro'}</dd></div>
+              {item.estimacion.precioReferenciaQ !== null && <div><dt>Precio de referencia (Q/{item.estimacion.precioPor})</dt><dd className="font-medium">{item.estimacion.precioReferenciaQ.toFixed(2)}</dd></div>}
+              {item.estimacion.valorEstimadoQ !== null && <div><dt>Valor estimado</dt><dd className="font-medium">Q {item.estimacion.valorEstimadoQ.toFixed(2)}</dd></div>}
+            </dl>
+            <p className="mt-2 text-xs text-gray-500">No representa cosecha ni venta confirmada.</p>
+          </section>}
           {item.observaciones && <p className="mt-3 whitespace-pre-wrap break-words rounded-lg bg-white p-3 text-sm text-gray-600 dark:bg-gray-900 dark:text-gray-300">{item.observaciones}</p>}
           <div className="mt-3 flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400"><UserRound aria-hidden="true" size={14} /><span className="break-words">{item.responsable || 'Responsable no indicado'}</span></div>
         </article>
