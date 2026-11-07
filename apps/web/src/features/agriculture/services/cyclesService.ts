@@ -47,6 +47,10 @@ export type CycleSeguimiento = {
   fecha: string; usuarioResponsableId: number; responsable: string
   etapa: string | null; calidad: string | null
   cantidadPlantasObservadas: number | null; observaciones: string | null
+  estimacion: {
+    unidades: number | null; kg: number | null
+    precioReferenciaQ: number | null; precioPor: 'unidad' | 'kg'; valorEstimadoQ: number | null
+  } | null
 }
 export type CycleSeguimientosPage = {
   items: CycleSeguimiento[]

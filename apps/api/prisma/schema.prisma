@@ -234,13 +234,16 @@ model RegistroProduccion {
   fechaInicioPeriodo DateTime @map("fecha_inicio_periodo") @db.Date
   fechaFinPeriodo    DateTime @map("fecha_fin_periodo") @db.Date
   observaciones      String?
+  visitaOrigenId     Int?     @map("visita_origen_id")
 
+  visitaOrigen Visita? @relation("CosechasVisita", fields: [visitaOrigenId], references: [id], onDelete: SetNull)
   cicloCultivo CicloCultivo @relation(fields: [cicloCultivoId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   detalles DetalleProduccion[]
   ventas   RegistroVenta[]
 
   @@index([cicloCultivoId])
+  @@index([visitaOrigenId])
   @@index([fechaInicioPeriodo, fechaFinPeriodo])
   @@map("registro_produccion")
 }
@@ -265,15 +268,18 @@ model RegistroVenta {
   registroProduccionId Int       @map("registro_produccion_id")
   fecha                DateTime? @db.Date
   cantidadVendida      Decimal   @map("cantidad_vendida")
+  visitaOrigenId        Int?      @map("visita_origen_id")
   unidadMedidaId       Int       @map("unidad_medida_id")
   observaciones        String?
 
   registroProduccion RegistroProduccion @relation(fields: [registroProduccionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  visitaOrigen Visita? @relation("VentasVisita", fields: [visitaOrigenId], references: [id], onDelete: SetNull)
   unidadMedida       UnidadMedida       @relation(fields: [unidadMedidaId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   precios PrecioVenta[]
 
   @@index([registroProduccionId])
+  @@index([visitaOrigenId])
   @@index([unidadMedidaId])
   @@index([fecha])
   @@map("registro_venta")
@@ -326,6 +332,8 @@ model Visita {
   usuarioResponsable Usuario             @relation(fields: [usuarioResponsableId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   condicionClimatica CondicionClimatica? @relation(fields: [condicionClimaticaId], references: [id], onDelete: SetNull, onUpdate: Cascade)
 
+  cosechasOrigen RegistroProduccion[] @relation("CosechasVisita")
+  ventasOrigen RegistroVenta[] @relation("VentasVisita")
   captura      VisitaCaptura?
   reprogramaciones VisitaReprogramacion[]
   compromisosVisita SeguimientoVisita[]

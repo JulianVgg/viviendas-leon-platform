@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto'
+import { Prisma } from '../../generated/prisma/client.js'
+import { registrarMovimientoVisita, validarMovimientoVisita } from './visit-economics.js'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -103,7 +105,12 @@ function validate(input: unknown, operationId: unknown): { capturedAt?: string; 
       if (!positive(c[name])) return null
     }
     if (c.plants !== null && c.plants !== undefined && c.plants !== '' && !Number.isSafeInteger(c.plants)) return null
+    const movimiento = c.movimientoReal === undefined ? undefined :
+      (typeof c.cicloCultivoId === 'number' && v.status === 'REALIZADA'
+        ? validarMovimientoVisita(c.movimientoReal, c.cicloCultivoId) : null)
+    if (movimiento === null) return null
     crops.push({
+      ...(movimiento ? { movimientoReal: movimiento } : {}),
       ...(c.cicloCultivoId !== undefined ? { cicloCultivoId: c.cicloCultivoId } : {}),
       ...(c.observacionesCultivo !== undefined ? { observacionesCultivo: clean(c.observacionesCultivo, 2000) } : {}),
       name: clean(c.name,80), stage: clean(c.stage,60), quality: clean(c.quality,60),
@@ -283,6 +290,12 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
   if (typeof operationId !== 'string' || !uuid.test(operationId) || req.body?.kind !== 'visits.create.v1' || !payload) {
     res.status(400).json({ error: 'Datos de visita no válidos.' }); return
   }
+  if (payload.crops.some(crop => crop.movimientoReal)) {
+    const user = await getAuthenticatedUser(userId)
+    if (!user?.permisos.includes('PRODUCCION_WRITE') && !esDireccionGeneral(user?.roles ?? [])) {
+      res.status(403).json({ error: 'No tienes permiso para registrar cosechas o ventas reales.' }); return
+    }
+  }
   const normalizedId = operationId.toLowerCase()
   // VIS-03 legacy: conservar el mismo hash que guardó el backend anterior.
   // Permite reintentar fotografías de visitas creadas antes de VIS-04.
@@ -460,6 +473,10 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
               calidadId: quality?.id ?? null,
               observaciones: buildEvaluationObservations(crop.plants, crop.observacionesCultivo),
             } })
+            if (crop.movimientoReal) await registrarMovimientoVisita(tx, {
+              movimiento: crop.movimientoReal as NonNullable<ReturnType<typeof validarMovimientoVisita>>,
+              cicloCultivoId: cycleId, familiaId: payload.familyId, visitaId, fechaVisita: payload.date, usuarioId: userId,
+            })
           }
         }
         if (payload.scheduledVisitId) {
@@ -487,7 +504,7 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
           ], tx)
         }
         return visitaId
-      })
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
       return { conflict: false, visitId: created, duplicate: false }
     }
     let result
@@ -500,6 +517,12 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
     if (!result || result.conflict) { res.status(409).json({ error: 'Identificador utilizado por otra operación.' }); return }
     res.status(result.duplicate ? 200 : 201).json({ operationId: normalizedId, accepted: true, duplicate: result.duplicate, visitId: result.visitId })
   } catch (error) {
+    if (error instanceof Error && error.message.startsWith('INVALID_VISIT_ECONOMICS:')) {
+      res.status(409).json({ error: error.message.slice('INVALID_VISIT_ECONOMICS:'.length) }); return
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+      res.status(409).json({ error: 'Otra operación cambió el saldo de la cosecha. Reintenta la sincronización.' }); return
+    }
     if (error instanceof Error && error.message === 'INVALID_VISIT_CYCLE') { res.status(409).json({ error: 'La siembra seleccionada no está disponible para esta familia, cultivo o fecha. Actualiza la agenda agrícola.' }); return }
     if (error instanceof Error && error.message === 'DUPLICATE_VISIT_CYCLE') { res.status(409).json({ error: 'Una misma siembra no puede evaluarse dos veces en una visita.' }); return }
     if (error instanceof Error && error.message === 'SCHEDULE_PAST_DATE') { res.status(422).json({ error: 'No puedes agendar visitas en fechas anteriores a hoy.' }); return }
