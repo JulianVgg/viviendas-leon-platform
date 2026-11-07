@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router'
-import { AlertCircle, CalendarDays, Filter, RotateCcw, ChartNoAxesCombined, CheckCircle2, GraduationCap, Leaf, RefreshCw, Sprout, UsersRound } from 'lucide-react'
+import { AlertCircle, CalendarDays, Filter, RotateCcw, CheckCircle2, GraduationCap, Leaf, RefreshCw, Sprout, UsersRound } from 'lucide-react'
 import PageMeta from '@/components/common/PageMeta'
+import { useAuth } from '@/features/auth/AuthProvider'
 import { consultarDashboard, consultarFamiliasProgramas, consultarIndicadoresVisitasCapacitaciones, consultarIndicadoresAgricolas, consultarOpcionesFiltrosDashboard, type OpcionesFiltrosDashboard, type IndicadoresAgricolas, type ResumenDashboard, type ResumenFamiliasProgramas, type IndicadoresVisitasCapacitaciones, type TipoDetalleIndicador } from '@/features/dashboard/services/dashboardSummaryService'
 import FamiliasProgramasPanel from '@/features/dashboard/pages/FamiliasProgramasPanel'
 import VisitasCapacitacionesPanel from '@/features/dashboard/pages/VisitasCapacitacionesPanel'
@@ -38,6 +39,8 @@ function GraficaActividad({ datos }: { datos: ResumenDashboard['actividadMensual
 }
 
 export default function DashboardPage() {
+  const { usuario } = useAuth()
+  const nombreUsuario = usuario?.nombre.trim()
   const [meses, setMeses] = useState<3 | 6 | 12>(6)
   const [actualizacion, setActualizacion] = useState(0)
   const [comunidadId, setComunidadId] = useState<number | undefined>()
@@ -160,9 +163,15 @@ export default function DashboardPage() {
     </div>
   </>
   return <main className="dashboard-page-enter mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6">
-    <PageMeta title="Dashboard | Viviendas León" description="Indicadores de actividades y programas" />
-    <div className="flex flex-wrap items-center justify-between gap-4">
-      <div><h1 className="flex items-center gap-2 text-2xl font-semibold text-gray-900 dark:text-white"><ChartNoAxesCombined size={25} className="text-brand-600"/> Dashboard</h1><p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{institucional ? 'Resumen institucional' : 'Mi actividad'}</p></div>
+    <PageMeta title="Inicio | Viviendas León" description="Indicadores de actividades y programas" />
+    <section aria-label="Bienvenida" className="dashboard-welcome-enter dashboard-welcome-card relative isolate overflow-hidden rounded-2xl border border-gray-200 bg-white px-6 py-6 shadow-theme-xs dark:border-gray-800 dark:bg-gray-900 sm:px-8 sm:py-7">
+      <div className="relative z-10">
+        <h1 className="text-2xl font-semibold tracking-tight text-gray-900 dark:text-white sm:text-3xl">
+          Bienvenido de nuevo{nombreUsuario ? <>,{' '}<span className="text-brand-600 dark:text-brand-300">{nombreUsuario}</span></> : null}
+        </h1>
+      </div>
+    </section>
+    <div className="flex flex-wrap items-center justify-end gap-4">
       <div className="flex flex-wrap items-center gap-2">
         {institucional && <span className="mr-1 inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400"><Filter size={15}/> Filtros</span>}
         <label htmlFor="dashboard-meses" className="sr-only">Período</label>

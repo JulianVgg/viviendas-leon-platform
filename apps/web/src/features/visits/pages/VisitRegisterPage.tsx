@@ -13,6 +13,9 @@ import { CyclesApiError, listCycles, type Cycle } from '@/features/agriculture/s
 import { CropsApiError, listAvailableCrops } from '@/features/agriculture/services/cropsService'
 import { addCivilDays, DIAS_CICLO_VISITA } from '@/features/visits/services/visitPlanning'
 import { productionEstimate, estimatedSaleQ } from '@/features/visits/services/visitProduction'
+import VisitEconomicsFields from '@/features/visits/components/VisitEconomicsFields'
+import { validarMovimientoParaVisita, type MovimientoVisita } from '@/features/visits/services/visitEconomics'
+import { canWriteProduction } from '@/features/auth/screenPermissions'
 import { isVisitCycleAvailable } from '@/features/visits/services/visitCycleAvailability'
 import { saveVisitCapture, todayInGuatemala, type VisitCapture, type CropCapture, type VisitPhotoFile, type VisitTimeSlot } from '@/features/visits/services/visitService'
 import SearchableSelect, { catalogOptions } from '@/features/visits/components/SearchableSelect'
@@ -27,6 +30,7 @@ type CropEntry = {
   findings: Finding[]; production: boolean; perPlantUnits: string; perPlantKg: string
   units: string; kg: string; priceQ: string; priceBasis: 'unidad' | 'kg'
   observacionesCultivo: string
+  movimientoReal?: MovimientoVisita
 }
 type Commitment = { id: string; text: string; due: string; nextVisit: boolean; category: string }
 const steps = ['Información general', 'Evaluación de cultivos', 'Compromisos y observaciones']
@@ -285,8 +289,17 @@ export default function VisitRegisterPage() {
     if (cropsState.some(c => c.observacionesCultivo.length > 2000)) {
       setError('Las observaciones del cultivo no pueden superar 2000 caracteres.'); setStep(1); return
     }
+    const movimientoInvalido = cropsState.find(c => c.movimientoReal &&
+      (!c.cicloCultivoId || validarMovimientoParaVisita(c.movimientoReal, date)))
+    if (movimientoInvalido) {
+      setError(!movimientoInvalido.cicloCultivoId
+        ? 'Vincula el cultivo a un ciclo antes de registrar una cosecha o venta.'
+        : validarMovimientoParaVisita(movimientoInvalido.movimientoReal, date) ?? 'Revisa la cosecha o venta real.')
+      setStep(1); return
+    }
     const cropsCapture: CropCapture[] = cropsState.map(c => ({
       ...(c.cicloCultivoId ? { cicloCultivoId: c.cicloCultivoId } : {}),
+      ...(c.movimientoReal ? { movimientoReal: c.movimientoReal } : {}),
       name: c.name, stage: c.stage, quality: c.quality, plants: numberOrNull(c.plants),
       ...(c.observacionesCultivo.trim() ? { observacionesCultivo: c.observacionesCultivo.trim() } : {}),
       findings: c.findings.map(f => ({ type: f.type, name: f.name, damage: f.damage })),
@@ -429,6 +442,7 @@ export default function VisitRegisterPage() {
                 if (found && cropsState.some(item => item.id !== crop.id && item.cicloCultivoId === found.id)) return
                 updateCrop(crop.id, { cicloCultivoId: found?.id ?? null, name: found?.cultivo.nombre ?? '',
                   ...(found?.id === crop.cicloCultivoId ? {} : {
+                    movimientoReal: undefined,
                     stage: '', plants: '', quality: '', findings: [], production: false,
                     perPlantUnits: '', perPlantKg: '', units: '', kg: '', priceQ: '', priceBasis: 'unidad',
                     observacionesCultivo: '',
@@ -455,7 +469,7 @@ export default function VisitRegisterPage() {
               <Button type="button" variant="secondary" size="sm" onClick={() => updateCrop(crop.id, {findings: crop.findings.filter(item => item.id !== f.id)})}>Quitar</Button>
             </div>)}<Button type="button" variant="secondary" size="sm" onClick={()=>updateCrop(crop.id,{findings:[...crop.findings,{id:crypto.randomUUID(),type:'plaga',name:'',damage:''}]})}>+ Añadir hallazgo</Button></div>
           </details>
-          <details className="mt-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700" open={crop.production || undefined}><summary className="cursor-pointer font-medium text-slate-900 dark:text-white">Producción estimada</summary>
+          <details className="mt-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700" open={crop.production || Boolean(crop.movimientoReal) || undefined}><summary className="cursor-pointer font-medium text-slate-900 dark:text-white">Producción agrícola</summary>
             <div className="mt-4 space-y-4"><label className="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={crop.production} onChange={e=>updateCrop(crop.id,{production:e.target.checked})}/> Registrar estimación</label>
               {crop.production && <div className="space-y-4 rounded-xl bg-slate-50/70 p-4 dark:bg-slate-800/40">
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -471,6 +485,19 @@ export default function VisitRegisterPage() {
                   <div className="text-sm text-slate-700 dark:text-slate-200">Valor estimado: <strong className="text-base text-slate-900 dark:text-white">Q {currencyTotal(crop)}</strong></div>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">No representa cosecha ni venta efectiva.</p>
+              </div>}
+              {crop.cicloCultivoId && usuario && canWriteProduction(usuario) && <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <input type="checkbox" checked={Boolean(crop.movimientoReal)} onChange={event => updateCrop(crop.id, {
+                    movimientoReal: event.target.checked
+                      ? { cosecha: { fechaCosecha: date, cantidad: '', unidadMedidaId: 0 } }
+                      : undefined,
+                  })} /> Registrar cosecha o venta real
+                </label>
+                {crop.movimientoReal && <div className="mt-3">
+                  <VisitEconomicsFields cycleId={crop.cicloCultivoId} date={date} userId={usuario.id}
+                    value={crop.movimientoReal} onChange={value => updateCrop(crop.id, { movimientoReal: value })}/>
+                </div>}
               </div>}
             </div>
           </details>

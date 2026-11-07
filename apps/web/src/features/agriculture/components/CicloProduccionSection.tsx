@@ -8,6 +8,7 @@ import LoadingState from '@/components/ui/LoadingState'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { canViewPath, canWriteProduction } from '@/features/auth/screenPermissions'
 import { listProductions, type Production } from '../services/productionService'
+import { listSales, type Sale } from '../services/salesService'
 import { formatAgriculturalDate } from './agriculturalDate'
 
 /** AGR-05: cosechas registradas; las estimaciones de visitas no se incluyen. */
@@ -17,18 +18,27 @@ export default function CicloProduccionSection({ cicloId }: { cicloId: number })
   const canRegister = Boolean(usuario && canWriteProduction(usuario))
   const [retry, setRetry] = useState(0)
   const requestKey = `${cicloId}:${retry}:${usuario?.id ?? 'anon'}`
-  const [loaded, setLoaded] = useState<{ key: string; records: Production[]; error: string }>({ key: '', records: [], error: '' })
+  const [loaded, setLoaded] = useState<{ key: string; records: Production[]; sales: Sale[]; error: string; salesError: string }>({ key: '', records: [], sales: [], error: '', salesError: '' })
   const loading = canRead && loaded.key !== requestKey
   const records = loaded.key === requestKey ? loaded.records.filter(record => record.cicloCultivoId === cicloId) : []
+  const sales = loaded.key === requestKey ? loaded.sales.filter(record => record.cicloCultivo.id === cicloId) : []
   const error = loaded.key === requestKey ? loaded.error : ''
+  const salesError = loaded.key === requestKey ? loaded.salesError : ''
 
   useEffect(() => {
     if (!canRead) return
     const controller = new AbortController()
-    listProductions(cicloId, controller.signal)
-      .then(data => { if (!controller.signal.aborted) setLoaded({ key: requestKey, records: data, error: '' }) })
+    Promise.all([listProductions(cicloId, controller.signal),
+      listSales(controller.signal, cicloId).then(sales => ({ sales, salesError: '' })).catch(() => ({
+        sales: [] as Sale[], salesError: 'No fue posible consultar las ventas del ciclo.',
+      })),
+    ])
+      .then(([records, salesResult]) => { if (!controller.signal.aborted) setLoaded({
+        key: requestKey, records, ...salesResult, error: '',
+      }) })
       .catch((cause: unknown) => {
-        if (!controller.signal.aborted) setLoaded({ key: requestKey, records: [], error: cause instanceof Error ? cause.message : 'No se pudo consultar las cosechas.' })
+        if (!controller.signal.aborted) setLoaded({ key: requestKey, records: [], sales: [], salesError: '',
+          error: cause instanceof Error ? cause.message : 'No se pudieron consultar las cosechas.' })
       })
     return () => controller.abort()
   }, [cicloId, canRead, requestKey])
@@ -47,6 +57,7 @@ export default function CicloProduccionSection({ cicloId }: { cicloId: number })
       <Button type="button" variant="secondary" className="mt-3" onClick={() => setRetry(n => n + 1)}>Reintentar</Button>
     </Alert>}
     {loading && <LoadingState label="Consultando cosechas reales..." />}
+    {!loading && salesError && <Alert variant="warning">{salesError}</Alert>}
     {!loading && !error && records.length === 0 && <div className="rounded-xl border border-dashed border-gray-200 px-4 py-7 text-center dark:border-gray-800">
       <PackageCheck aria-hidden="true" size={28} className="mx-auto mb-2 text-gray-400" />
       <p className="text-sm font-medium text-gray-800 dark:text-white">Sin cosechas registradas</p>
@@ -68,8 +79,21 @@ export default function CicloProduccionSection({ cicloId }: { cicloId: number })
           {record.detalles.length === 0 && <span className="text-sm text-gray-500">Sin cantidades detalladas.</span>}
         </div>
         {record.observaciones && <p className="mt-3 whitespace-pre-wrap break-words text-sm text-gray-600 dark:text-gray-300">{record.observaciones}</p>}
+        {sales.filter(sale => sale.registroProduccionId === record.id).length > 0 && <section className="mt-4 border-t border-gray-200 pt-3 dark:border-gray-700" aria-label={`Ventas de cosecha ${record.id}`}>
+          <p className="mb-2 text-xs font-semibold text-gray-800 dark:text-gray-200">Ventas registradas</p>
+          <ul className="space-y-2">{sales.filter(sale => sale.registroProduccionId === record.id).map(sale => <li key={sale.id} className="rounded-lg bg-gray-50 px-3 py-2 text-sm dark:bg-gray-800/60">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <span className="font-medium text-gray-900 dark:text-white">{sale.fechaVenta ? formatAgriculturalDate(sale.fechaVenta) : 'Sin fecha'} · {sale.cantidad} {sale.unidadMedida.abreviatura || sale.unidadMedida.nombre}</span>
+              <span className="font-semibold text-gray-900 dark:text-white">{sale.totalVenta !== null && sale.moneda ? `${sale.moneda.simbolo || sale.moneda.codigo} ${sale.totalVenta}` : 'Importe no disponible'}</span>
+            </div>
+            {sale.precioUnitario && sale.moneda && <p className="mt-1 text-xs text-gray-600 dark:text-gray-300">Precio unitario: {sale.moneda.simbolo || sale.moneda.codigo} {sale.precioUnitario} · Venta #{sale.id}</p>}
+            {sale.visitaOrigenId && <p className="mt-1 text-xs text-gray-500">Registrada en visita #{sale.visitaOrigenId}</p>}
+            {sale.esDatoPrueba && <p className="mt-1 text-xs text-amber-700">Registro de prueba o incompleto</p>}
+            {sale.observaciones && <p className="mt-1 whitespace-pre-wrap break-words text-xs text-gray-500">{sale.observaciones}</p>}
+          </li>)}</ul>
+        </section>}
       </li>)}
     </ul>}
-    {!loading && !error && records.length > 0 && <p className="mt-4 text-xs text-gray-500">Se muestran hasta 500 registros recientes. Las unidades se conservan tal como fueron registradas y no se suman entre sí.</p>}
+    {!loading && !error && records.length > 0 && <p className="mt-4 text-xs text-gray-500">Se muestran hasta 500 cosechas y ventas recientes del ciclo. Las unidades y monedas se mantienen separadas.</p>}
   </CardBody></Card>
 }
