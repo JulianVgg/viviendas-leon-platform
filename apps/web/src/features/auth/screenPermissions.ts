@@ -38,7 +38,7 @@ export const SCREEN_PERMISSIONS: Record<string, string> = {
   '/voluntariado': 'PANTALLA_VOLUNTARIADO',
   '/reportes': 'PANTALLA_REPORTES',
   '/reportes/reportes': 'PANTALLA_REPORTES_LISTA',
-  '/reportes/indicadores': 'PANTALLA_INDICADORES',
+  '/reportes/analisis-asistido': 'PANTALLA_REPORTES_LISTA',
   '/reportes/alertas': 'PANTALLA_ALERTAS',
   '/administracion': 'PANTALLA_ADMINISTRACION',
   '/administracion/comunidades': 'PANTALLA_COMUNIDADES',
@@ -97,6 +97,7 @@ export function canViewPath(usuario: PermissionUser, path: string): boolean {
   // La captura técnica queda reservada a personal operativo, incluso para Dirección.
   if (path === '/visitas/nueva' && esSupervisorCalendario(usuario)) return false
   if (isDireccionGeneral(usuario)) return true
+  if (path === '/reportes/indicadores') return canViewPath(usuario, '/')
   if (path === '/calendario') return esSupervisorCalendario(usuario)
   // Bandeja personal disponible para cualquier usuario autenticado.
   if (path === '/' || path === '/mi-perfil' || path === '/notificaciones' || path === '/mi-agenda') return true

@@ -77,6 +77,7 @@ export type IndicadoresAgricolas = {
     registrosProduccion:number; produccionKg:number; produccionUnidades:number; produccionManojos:number; unidadesNoComparables:number; plantasSinDato:number; cantidadesInvalidas:number
   }
   visitasConProduccion:number
+  conciliacion: { criterio: 'CIR-11'; excluidasPrueba: number; excluidasCrucePeriodo: number; datosIncompletos: number; posiblesDuplicados: number }
   porCultivo:Array<{id:number;nombre:string;ciclos:number;activos:number;plantas:number;kg:number;unidades:number;manojos:number}>
   porComunidad:Array<{nombre:string;familias:number;ciclosActivos:number}>
   produccionMensual:Array<{mes:string;kg:number;unidades:number;manojos:number;registros:number}>

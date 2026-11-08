@@ -8,6 +8,7 @@ import AppSidebar from './AppSidebar'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { canViewPath } from '@/features/auth/screenPermissions'
 import Backdrop from './Backdrop'
+import { obtenerRetornoDashboard } from '@/features/dashboard/lib/dashboardReturn'
 
 function LayoutContent() {
   const { isExpanded, isHovered, isMobileOpen, closeMobileSidebar } = useSidebar()
@@ -15,6 +16,7 @@ function LayoutContent() {
   const { pathname } = location
   const entrandoDesdeLogin = pathname === '/' && location.state?.fromLogin === true
   const { usuario } = useAuth()
+  const volviendoAlDashboard = pathname === '/' && !entrandoDesdeLogin && Boolean(obtenerRetornoDashboard(usuario?.id))
 
   useEffect(() => {
     closeMobileSidebar()
@@ -31,7 +33,7 @@ function LayoutContent() {
         <AppHeader />
         <ConnectivitySyncBridge />
         <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-screen-2xl p-4 outline-none md:p-6 xl:p-8">
-          <div key={pathname} className="page-route-enter">
+          <div key={pathname} className={volviendoAlDashboard ? undefined : "page-route-enter"}>
             {usuario && !canViewPath(usuario, pathname) ? (
               <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
                 <h1 className="text-lg font-semibold">Acceso restringido</h1>

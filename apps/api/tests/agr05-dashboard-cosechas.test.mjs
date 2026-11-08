@@ -35,10 +35,10 @@ test('AGR-05: el desglose pagina registros de cosecha reales, no capturas de vis
   assert.equal(llamadas[1][1].where.fechaFinPeriodo.lte.toISOString().slice(0,10), '2026-10-31')
 })
 
-test('AGR-05: las unidades que no pueden sumarse como kg o piezas conservan su categoría', async () => {
+test('AGR-05/CIR-16: los manojos conservan su categoría propia y no se suman a kg o unidades', async () => {
   const db={registroProduccion:{count:async()=>1,findMany:async()=>[cosecha(1,'MANOJO','manojos','8')]}}
   const respuesta=await obtenerCosechasDashboard(6,1,10,db,new Date('2026-10-31T17:00:00Z'))
-  assert.equal(respuesta.registros[0].cantidades[0].tipo,'otra')
+  assert.equal(respuesta.registros[0].cantidades[0].tipo,'manojos')
   assert.equal(respuesta.registros[0].cantidades[0].cantidad,'8')
 })
 

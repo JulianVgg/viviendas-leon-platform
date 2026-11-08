@@ -23,3 +23,32 @@ export function nombreArchivoReporte(filtros: FiltrosReporte) {
     ? `${filtros.desde}_${filtros.hasta}` : `${filtros.anio}_S${filtros.semestre}`
   return `Producciones_Agricolas_${periodo}${alcance}.xlsx`
 }
+
+
+// CIR-16: comparación con Dashboard usando exactamente las mismas fechas y comunidad.
+// El enlace no concede permisos: Reportes mantiene sus controles en API.
+export type EnlaceDashboard = { desde: string; hasta: string; comunidadId?: number }
+
+export function construirEnlaceReportesDashboard(filtros: EnlaceDashboard): string {
+  const params = new URLSearchParams({ modo: 'rango', desde: filtros.desde, hasta: filtros.hasta })
+  if (filtros.comunidadId) params.set('comunidadId', String(filtros.comunidadId))
+  return `/reportes/reportes?${params.toString()}`
+}
+
+export function leerEnlaceReportesDashboard(query: string): EnlaceDashboard | null {
+  const params = new URLSearchParams(query)
+  if (params.get('modo') !== 'rango') return null
+  const desde = params.get('desde') ?? ''
+  const hasta = params.get('hasta') ?? ''
+  const fechaValida = (valor: string) => {
+    if (!/^20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/.test(valor)) return false
+    const fecha = new Date(`${valor}T00:00:00Z`)
+    return !Number.isNaN(fecha.getTime()) && fecha.toISOString().slice(0, 10) === valor
+  }
+  if (!fechaValida(desde) || !fechaValida(hasta)) return null
+  const dias = (Date.parse(`${hasta}T00:00:00Z`) - Date.parse(`${desde}T00:00:00Z`)) / 86_400_000
+  if (dias < 0 || dias > 730) return null
+  const comunidad = params.get('comunidadId')
+  const comunidadId = comunidad && /^[1-9]\d{0,8}$/.test(comunidad) ? Number(comunidad) : undefined
+  return { desde, hasta, ...(comunidadId ? { comunidadId } : {}) }
+}
