@@ -84,5 +84,7 @@ export function nombreArchivoProduccionExcel(informe: InformeSemestralExcel): st
   const { anio, semestre } = informe.periodo
   const { comunidadId, familiaId } = informe.filtros
   const sufijo = `${comunidadId ? `_C${comunidadId}` : ''}${familiaId ? `_F${familiaId}` : ''}`
-  return `Producciones_Agricolas_${anio}_S${semestre}${sufijo}.xlsx`
+  const periodoArchivo = informe.periodo.personalizado
+    ? `${informe.periodo.desde}_${informe.periodo.hasta}` : `${anio}_S${semestre}`
+  return `Producciones_Agricolas_${periodoArchivo}${sufijo}.xlsx`
 }

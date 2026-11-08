@@ -40,6 +40,6 @@ test('CIR-12: el XLSX se puede abrir, conserva encabezados y fórmulas de totale
     assert.match(hoja.getCell('J10').value.formula, /^SUM\(J9:J9\)$/)
     assert.equal(hoja.pageSetup.printArea, 'A1:L10')
     assert.equal(hoja.getCell('A12').value, null) // sin notas técnicas bajo los totales
-    assert.ok(!hoja.headerFooter.oddFooter)
+    assert.ok(!hoja.headerFooter?.oddFooter)
     assert.equal(hoja.pageSetup.orientation, 'landscape')
   })

@@ -117,5 +117,4 @@ test('CIR-11: movimientos con distintos IDs pero contenidos idénticos quedan ma
   assert.equal(out.resumen.posiblesDuplicados,2)
   assert.ok(out.advertencias.some(a=>a.codigo==='POSIBLE_COSECHA_DUPLICADA'))
   assert.ok(out.advertencias.some(a=>a.codigo==='POSIBLE_VENTA_DUPLICADA'))
-  assert.equal(out.estadoValidacion,'PRELIMINAR')
 })

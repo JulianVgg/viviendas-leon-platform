@@ -6,7 +6,8 @@ const API = (import.meta.env.VITE_API_URL?.trim() || '/api').replace(/\/$/, '')
 
 export type InformeSemestral = {
   periodo: { anio: number; semestre: 1 | 2; desde: string; hasta: string }
-  estadoValidacion: 'PRELIMINAR' | string
+  detalleCosechas: Array<{ id: number; fechaInicio: string; unidad: string; cantidad: string; cultivo: string }>
+  detalleVentas: Array<{ id: number; fecha: string; moneda: string | null; importe: string | null; cultivo: string }>
   resumen: {
     cosechas: number; ventas: number; ventasConImporte: number
     cantidades: { kg: string; unidades: string; manojos: string }

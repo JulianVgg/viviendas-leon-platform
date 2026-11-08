@@ -33,8 +33,8 @@ const borde = {
   left: { style: 'thin' as const, color: { argb: GRIS_BORDE } },
   right: { style: 'thin' as const, color: { argb: GRIS_BORDE } },
 }
-const periodoTexto = (semestre: 1 | 2, anio: number) =>
-  `${semestre === 1 ? 'ENERO-JUNIO' : 'JULIO-DICIEMBRE'} ${anio}`
+const periodoTexto = (semestre: 1 | 2, anio: number, desde?: string, hasta?: string) =>
+  desde && hasta ? `DEL ${desde} AL ${hasta}` : `${semestre === 1 ? 'ENERO-JUNIO' : 'JULIO-DICIEMBRE'} ${anio}`
 const numero = (texto: string): number => Number(texto)
 
 /** Devuelve el Excel institucional. No registra cosechas, ventas ni tipos de cambio. */
@@ -42,7 +42,7 @@ export async function construirExcelSemestral(informe: InformeSemestralExcel): P
   const libro = new ExcelJS.Workbook()
   libro.creator = 'ViviendasLeón Guatemala'
   libro.subject = 'Producciones agrícolas semestrales'
-  libro.title = `Producciones agrícolas — ${periodoTexto(informe.periodo.semestre, informe.periodo.anio)}`
+  libro.title = `Producciones agrícolas — ${periodoTexto(informe.periodo.semestre, informe.periodo.anio, informe.periodo.personalizado ? informe.periodo.desde : undefined, informe.periodo.personalizado ? informe.periodo.hasta : undefined)}`
   libro.created = new Date()
   libro.calcProperties.fullCalcOnLoad = true
 
@@ -73,18 +73,14 @@ export async function construirExcelSemestral(informe: InformeSemestralExcel): P
 
   hoja.mergeCells('A4:L4')
   const periodo = hoja.getCell('A4')
-  periodo.value = periodoTexto(informe.periodo.semestre, informe.periodo.anio)
+  periodo.value = periodoTexto(informe.periodo.semestre, informe.periodo.anio, informe.periodo.personalizado ? informe.periodo.desde : undefined, informe.periodo.personalizado ? informe.periodo.hasta : undefined)
   periodo.font = { name: 'PT Sans', size: 12, bold: true, color: { argb: 'FFFFFFFF' } }
   periodo.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AZUL_INSTITUCIONAL } }
   periodo.alignment = { horizontal: 'center', vertical: 'middle' }
   hoja.getRow(4).height = 25
 
-  hoja.mergeCells('A5:L5')
-  const estado = hoja.getCell('A5')
-  estado.value = 'PRELIMINAR — Pendiente de validación institucional'
-  estado.font = { name: 'PT Sans', size: 10, bold: true, color: { argb: 'FF8C412F' } }
-  estado.alignment = { horizontal: 'center', vertical: 'middle' }
-  hoja.getRow(5).height = 20
+  // Sin flujo de aprobación: el informe se genera directamente desde el período elegido.
+  hoja.getRow(5).height = 8
 
   const { comunidadId, familiaId } = informe.filtros
   const alcance = [comunidadId ? `Comunidad ID ${comunidadId}` : 'Todas las comunidades',
@@ -197,7 +193,7 @@ function agregarHojaTrazabilidad(libro: ExcelJS.Workbook, informe: InformeSemest
   detalle.getCell('A3').value = `Período: ${informe.periodo.desde} a ${informe.periodo.hasta} · Generado: ${fechaGeneracion.toISOString().replace('T', ' ').slice(0, 19)} UTC`
   detalle.getCell('A3').font = { name: 'PT Sans', size: 11, color: { argb: AZUL_OSCURO } }
   detalle.mergeCells('A4:U4')
-  detalle.getCell('A4').value = `Filtro: comunidad ${informe.filtros.comunidadId ?? 'todas'} · familia ${informe.filtros.familiaId ?? 'todas'} · Estado: PRELIMINAR`
+  detalle.getCell('A4').value = `Filtro: comunidad ${informe.filtros.comunidadId ?? 'todas'} · familia ${informe.filtros.familiaId ?? 'todas'}`
   detalle.mergeCells('A5:U5')
   detalle.getCell('A5').value = 'Cosechas por fecha de cosecha; ventas por fecha de venta. Importes en moneda original, sin sumar GTQ y USD.'
   detalle.getRow(6).height = 10

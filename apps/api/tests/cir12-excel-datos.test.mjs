@@ -87,5 +87,4 @@ test('CIR-12: nombres de archivo dependen exclusivamente de filtros validados', 
 test('CIR-12: reporte sin datos se puede representar sin inventar totales', () => {
   const data = informe([], [])
   assert.deepEqual(prepararFilasProduccionExcel(data), [])
-  assert.equal(data.estadoValidacion, 'PRELIMINAR')
 })

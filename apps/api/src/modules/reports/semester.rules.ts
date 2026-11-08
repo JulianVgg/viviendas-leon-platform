@@ -3,9 +3,9 @@
 export type TipoCosechaUnidad = 'kg' | 'unidades' | 'manojos' | 'otra'
 export type MonedaReporte = 'GTQ' | 'USD'
 
-export type FiltrosSemestrales = { anio: number; semestre: 1 | 2; comunidadId?: number; familiaId?: number }
+export type FiltrosSemestrales = { anio: number; semestre: 1 | 2; comunidadId?: number; familiaId?: number; desde?: string; hasta?: string }
 export type PeriodoSemestral = {
-  anio: number; semestre: 1 | 2; desde: string; hasta: string; hastaExclusivo: string
+  anio: number; semestre: 1 | 2; desde: string; hasta: string; hastaExclusivo: string; personalizado?: boolean
 }
 export type CosechaFuente = {
   id: number; cicloId: number; cultivoId: number; cultivo: string; familiaId: number; familia: string
@@ -32,16 +32,41 @@ const parseId = (value: unknown): number | undefined => {
   if (!Number.isSafeInteger(id)) throw Error('Identificador de filtro inválido.')
   return id
 }
+const validarFecha = (value: unknown): string => {
+  if (typeof value !== 'string' || !/^20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/.test(value)) {
+    throw Error('Fecha inválida. Utiliza YYYY-MM-DD.')
+  }
+  const fecha = new Date(`${value}T00:00:00.000Z`)
+  if (Number.isNaN(fecha.getTime()) || fecha.toISOString().slice(0, 10) !== value) {
+    throw Error('La fecha seleccionada no existe en el calendario.')
+  }
+  return value
+}
+
 export function validarFiltrosSemestrales(query: Record<string, unknown>): FiltrosSemestrales {
   if (typeof query.anio !== 'string' || !/^20\d{2}$/.test(query.anio)) throw Error('Selecciona un año entre 2000 y 2099.')
   if (query.semestre !== '1' && query.semestre !== '2') throw Error('Selecciona el primer o segundo semestre.')
+  const personalizado = query.desde !== undefined || query.hasta !== undefined
+  let rango: { desde?: string; hasta?: string } = {}
+  if (personalizado) {
+    const desde = validarFecha(query.desde)
+    const hasta = validarFecha(query.hasta)
+    const diferencia = (Date.parse(`${hasta}T00:00:00Z`) - Date.parse(`${desde}T00:00:00Z`)) / 86_400_000
+    if (diferencia < 0 || diferencia > 730) throw Error('Selecciona un rango de 1 a 731 días, con inicio anterior al fin.')
+    rango = { desde, hasta }
+  }
   return {
     anio: Number(query.anio), semestre: query.semestre === '1' ? 1 : 2,
     ...(parseId(query.comunidadId) ? { comunidadId: parseId(query.comunidadId) } : {}),
     ...(parseId(query.familiaId) ? { familiaId: parseId(query.familiaId) } : {}),
+    ...rango,
   }
 }
-export function definirPeriodo({ anio, semestre }: FiltrosSemestrales): PeriodoSemestral {
+export function definirPeriodo({ anio, semestre, desde, hasta }: FiltrosSemestrales): PeriodoSemestral {
+  if (desde && hasta) {
+    const hastaExclusivo = new Date(Date.parse(`${hasta}T00:00:00.000Z`) + 86_400_000).toISOString().slice(0, 10)
+    return { anio, semestre, desde, hasta, hastaExclusivo, personalizado: true }
+  }
   const inicio = semestre === 1 ? '01-01' : '07-01'
   const fin = semestre === 1 ? '06-30' : '12-31'
   return {
@@ -237,7 +262,6 @@ export function consolidarSemestre(periodo: PeriodoSemestral, cosechas: CosechaF
       ventas: detalleVentas.length, ventasConImporte, cantidades: mostrarTotales(totales),
       totalVentasOriginalGTQ: expresarImporte(gtq), totalVentasOriginalUSD: expresarImporte(usd),
       excluidasPrueba, excluidasCrucePeriodo, datosIncompletos, posiblesDuplicados },
-    estadoValidacion: 'PRELIMINAR' as const,
     porCultivo, detalleCosechas, detalleVentas, advertencias,
     notas: [
       'Solo cosechas reales, nunca estimaciones de visitas.',

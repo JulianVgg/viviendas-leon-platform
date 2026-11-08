@@ -2,8 +2,11 @@ import { Router } from 'express'
 import { getPrismaClient } from '../../config/prisma.js'
 import { requireAuth } from '../auth/auth.middleware.js'
 import { requirePermission } from '../auth/require-permission.middleware.js'
-import { obtenerProduccionSemestral } from './semester.service.js'
+import { getAuthenticatedUser } from '../auth/auth.service.js'
+import type { Request, Response, NextFunction } from 'express'
+import { esCoordinacionReportes } from './semester.access.js'
 import { validarFiltrosSemestrales } from './semester.rules.js'
+import { obtenerProduccionSemestral } from './semester.service.js'
 import { construirExcelSemestral } from './semester.excel.js'
 import { nombreArchivoProduccionExcel } from './semester.excel-data.js'
 
@@ -40,8 +43,19 @@ semesterReportsRouter.get('/produccion-semestral', requirePermission('PANTALLA_R
   } catch (cause) { next(cause) }
 })
 
-// CIR-12: descarga del mismo snapshot y filtros de CIR-11, protegida por los mismos permisos.
-semesterReportsRouter.get('/produccion-semestral.xlsx', requirePermission('PANTALLA_REPORTES_LISTA'), async (req, res, next) => {
+// Coordinación genera el Excel; Dirección conserva acceso a la visualización de reportes.
+async function soloCoordinacion(req: Request, res: Response, next: NextFunction) {
+  try {
+    const actor = await getAuthenticatedUser(req.session.userId!)
+    if (!actor) { res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Sesión no válida.' } }); return }
+    if (!esCoordinacionReportes(actor.roles)) {
+      res.status(403).json({ error: { code: 'FORBIDDEN', message: 'La exportación está reservada a Coordinación.' } }); return
+    }
+    next()
+  } catch (error) { next(error) }
+}
+
+semesterReportsRouter.get('/produccion-semestral.xlsx', requirePermission('PANTALLA_REPORTES_LISTA'), soloCoordinacion, async (req, res, next) => {
   let filtros
   try { filtros = validarFiltrosSemestrales(req.query) }
   catch (cause) {
