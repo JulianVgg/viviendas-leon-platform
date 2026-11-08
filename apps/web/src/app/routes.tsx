@@ -4,6 +4,7 @@ import AppLayout from '@/app/layout/AppLayout'
 import DashboardPage from '@/app/pages/DashboardPage'
 import MiAgendaPage from '@/features/dashboard/pages/MiAgendaPage'
 import IndicadoresFamiliasPage from '@/features/dashboard/pages/IndicadoresFamiliasPage'
+import ProduccionSemestralReportPage from '@/features/reports/pages/ProduccionSemestralReportPage'
 import ModulePage from '@/components/common/ModulePage'
 
 import FamilyListPage from '@/features/families/pages/FamilyListPage'
@@ -272,23 +273,8 @@ export default function AppRoutes() {
           />
 
           {/* Reportes */}
-          <Route
-            path="reportes"
-            element={module(
-              'Reportes',
-              'Espacio base para reportes y futuras exportaciones.',
-              ['Reporte', 'Módulo', 'Estado'],
-            )}
-          />
-
-          <Route
-            path="reportes/reportes"
-            element={module(
-              'Reportes',
-              'Vista base para reportes operativos.',
-              ['Reporte', 'Periodo', 'Estado'],
-            )}
-          />
+          <Route path="reportes" element={<Navigate to="/reportes/reportes" replace />} />
+          <Route path="reportes/reportes" element={<ProduccionSemestralReportPage />} />
 
           <Route
             path="reportes/indicadores"

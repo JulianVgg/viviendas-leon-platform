@@ -900,6 +900,9 @@ model Usuario {
   capacitacionesAsignadas Capacitacion[] @relation("CapacitacionesAsignadas")
   solicitudesAnalisisIa AnalisisIaSolicitud[]
   tiposCambioRegistrados TipoCambio[]
+  informesRevisados ReporteSemestralRevision[] @relation("RevisionReportesUsuario")
+  informesValidados ReporteSemestralRevision[] @relation("ValidacionReportesUsuario")
+  eventosRevision ReporteSemestralEvento[]
 
   @@map("usuario")
 }
@@ -961,6 +964,47 @@ model RolPermiso {
   @@id([rolId, permisoId])
   @@index([permisoId])
   @@map("rol_permiso")
+}
+
+// CIR-15: estados históricos y eventos de validación de informes semestrales.
+model ReporteSemestralRevision {
+  id              Int       @id @default(autoincrement())
+  clave           String    @unique @db.VarChar(100)
+  anio            Int
+  semestre        Int
+  comunidadId     Int?      @map("comunidad_id")
+  familiaId       Int?      @map("familia_id")
+  estado          String    @db.VarChar(20)
+  huella          String    @db.VarChar(64)
+  comentario      String?   @db.VarChar(1000)
+  revisadoPorId   Int?      @map("revisado_por_id")
+  revisadoEn      DateTime? @map("revisado_en") @db.Timestamptz(6)
+  validadoPorId   Int?      @map("validado_por_id")
+  validadoEn      DateTime? @map("validado_en") @db.Timestamptz(6)
+  actualizadoEn   DateTime  @updatedAt @map("actualizado_en") @db.Timestamptz(6)
+
+  revisadoPor Usuario? @relation("RevisionReportesUsuario", fields: [revisadoPorId], references: [id], onDelete: SetNull)
+  validadoPor Usuario? @relation("ValidacionReportesUsuario", fields: [validadoPorId], references: [id], onDelete: SetNull)
+  eventos ReporteSemestralEvento[]
+
+  @@index([anio, semestre])
+  @@map("reporte_semestral_revision")
+}
+
+model ReporteSemestralEvento {
+  id            Int      @id @default(autoincrement())
+  revisionId    Int      @map("revision_id")
+  usuarioId     Int      @map("usuario_id")
+  accion        String   @db.VarChar(24)
+  huella        String   @db.VarChar(64)
+  comentario    String?  @db.VarChar(1000)
+  registradoEn  DateTime @default(now()) @map("registrado_en") @db.Timestamptz(6)
+
+  revision ReporteSemestralRevision @relation(fields: [revisionId], references: [id], onDelete: Restrict)
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@index([revisionId, registradoEn])
+  @@map("reporte_semestral_evento")
 }
 
 // ============================================================
