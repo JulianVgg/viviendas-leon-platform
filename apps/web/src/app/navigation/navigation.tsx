@@ -111,7 +111,7 @@ export const navigationGroups: { id: string; name: string; items: NavigationItem
     items: [
       { id: 'reports', name: 'Reportes', path: '/reportes', icon: icons.reports, roles: ['coordination', 'operationsDirector'], children: [
         { id: 'reports-list', name: 'Reportes', path: '/reportes/reportes', icon: icons.reports },
-        { id: 'indicators', name: 'Indicadores', path: '/reportes/indicadores', icon: icons.reports },
+        { id: 'analysis', name: 'Análisis asistido', path: '/reportes/analisis-asistido', icon: icons.reports },
         { id: 'alerts', name: 'Alertas', path: '/reportes/alertas', icon: icons.alerts },
       ] },
       { id: 'admin', name: 'Administración', path: '/administracion', icon: icons.admin, roles: ['administration', 'coordination'], children: [

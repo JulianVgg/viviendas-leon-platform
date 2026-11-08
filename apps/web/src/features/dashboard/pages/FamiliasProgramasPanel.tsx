@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { ArrowUpRight, CheckCircle2, UsersRound } from 'lucide-react'
+import { ArrowUpRight, UsersRound } from 'lucide-react'
 import { ProBarChart, ProDonutChart } from '../charts/TailAdminCharts'
 import { seriesCobertura, seriesProgramas, seriesComunidadesFamilias } from '../lib/chartSeries'
 import type { ResumenFamiliasProgramas } from '../services/dashboardSummaryService'
@@ -30,7 +30,7 @@ export default function FamiliasProgramasPanel({ datos }: { datos: ResumenFamili
       <div className={tarjeta}>
         <div className="mb-4 flex items-center justify-between gap-3">
           <h3 className="text-sm font-semibold text-gray-800 dark:text-white">Participación</h3>
-          <span className="rounded-full bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">{programa ? programa.nombre : 'Institucional'}</span>
+          {programa && <span className="rounded-full bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700 dark:bg-brand-500/10 dark:text-brand-300">{programa.nombre}</span>}
         </div>
         <div className="flex flex-wrap items-center justify-center gap-5 sm:gap-8">
           <div className="min-w-0 flex-1" style={{ minWidth: 220 }}>
@@ -63,7 +63,7 @@ export default function FamiliasProgramasPanel({ datos }: { datos: ResumenFamili
       </div>
     </div>
     <div className={tarjeta}>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><h3 className="text-sm font-semibold text-gray-800 dark:text-white">Familias por comunidad</h3><span className="flex items-center gap-1.5 text-xs text-gray-500"><CheckCircle2 size={14}/> Registros vigentes</span></div>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><h3 className="text-sm font-semibold text-gray-800 dark:text-white">Familias por comunidad</h3></div>
       {datos.comunidades.length > 0 && <ProBarChart
         labels={comunidades.labels} series={comunidades.series}
         ariaLabel="Familias registradas y participantes por comunidad" horizontal

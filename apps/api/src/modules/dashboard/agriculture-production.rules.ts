@@ -1,5 +1,6 @@
 import { harvestUnitKind } from '../agriculture/production.units.js'
 import { periodoDashboard } from './dashboard-summary.rules.js'
+import { decimalEscalado, expresarCantidad, type consolidarSemestre } from '../reports/semester.rules.js'
 
 export type CicloAgricola = {
   id: number
@@ -102,4 +103,60 @@ export function contarVisitasConProduccion(capturas: Array<{datos: unknown}>): n
     const cultivos = (datos as {crops?: unknown}).crops
     return Array.isArray(cultivos) && cultivos.some(c=>c && typeof c==='object' && (c as {production?:unknown}).production===true)
   }).length
+}
+
+// CIR-16: la producción de MON-04 reutiliza la consolidación de CIR-11.
+// Los ciclos/siembras permanecen como indicadores operativos, no semestrales.
+type ConsolidadoInstitucional = ReturnType<typeof consolidarSemestre>
+
+export function aplicarConsolidadoInstitucional(
+  base: ReturnType<typeof resumirAgricultura>,
+  consolidado: ConsolidadoInstitucional,
+  claves: string[],
+) {
+  const porCultivo = new Map(consolidado.porCultivo.map(item => [item.cultivoId, item]))
+  const meses = new Map(claves.map(mes => [mes, {
+    mes, kg: 0n, unidades: 0n, manojos: 0n, cosechas: new Set<number>(),
+  }]))
+  for (const detalle of consolidado.detalleCosechas) {
+    if (typeof detalle.fechaFin !== 'string' || typeof detalle.unidad !== 'string' ||
+        typeof detalle.cantidad !== 'string' || typeof detalle.cosechaId !== 'number') continue
+    const mes = meses.get(detalle.fechaFin.slice(0, 7))
+    const cantidad = decimalEscalado(detalle.cantidad, 3)
+    if (!mes || cantidad === null || cantidad < 0n) continue
+    if (detalle.unidad === 'kg' || detalle.unidad === 'unidades' || detalle.unidad === 'manojos') {
+      mes[detalle.unidad] += cantidad
+      mes.cosechas.add(detalle.cosechaId)
+    }
+  }
+  const total = consolidado.resumen.cantidades
+  return {
+    ...base,
+    indicadores: {
+      ...base.indicadores,
+      registrosProduccion: consolidado.resumen.cosechas,
+      produccionKg: Number(total.kg),
+      produccionUnidades: Number(total.unidades),
+      produccionManojos: Number(total.manojos),
+      unidadesNoComparables: consolidado.advertencias.filter(a => a.codigo === 'UNIDAD_O_CANTIDAD_INVALIDA').length,
+      cantidadesInvalidas: consolidado.resumen.datosIncompletos,
+    },
+    porCultivo: base.porCultivo.map(item => {
+      const oficial = porCultivo.get(item.id)
+      return { ...item, kg: Number(oficial?.kg ?? '0'), unidades: Number(oficial?.unidades ?? '0'),
+        manojos: Number(oficial?.manojos ?? '0') }
+    }),
+    produccionMensual: [...meses.values()].map(mes => ({
+      mes: mes.mes, kg: Number(expresarCantidad(mes.kg)),
+      unidades: Number(expresarCantidad(mes.unidades)),
+      manojos: Number(expresarCantidad(mes.manojos)), registros: mes.cosechas.size,
+    })),
+    conciliacion: {
+      criterio: 'CIR-11' as const,
+      excluidasPrueba: consolidado.resumen.excluidasPrueba,
+      excluidasCrucePeriodo: consolidado.resumen.excluidasCrucePeriodo,
+      datosIncompletos: consolidado.resumen.datosIncompletos,
+      posiblesDuplicados: consolidado.resumen.posiblesDuplicados,
+    },
+  }
 }

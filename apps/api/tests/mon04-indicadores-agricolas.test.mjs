@@ -8,9 +8,16 @@ const ciclo = (id, cultivar, estado, plantas, familia=1, comunidad='Paxub')=>({
   id,estado,cantidadPlantas:plantas,cultivo:{id:cultivar,nombre:cultivar===1?'Tomate':'Lechuga'},
   huerto:{familia:{id:familia,comunidad:{nombre:comunidad}}},
 })
-const prod = (id, dia, cultivar, detalles)=>({
-  id,fechaFinPeriodo:date(dia),cicloCultivo:{cultivo:{id:cultivar,nombre:cultivar===1?'Tomate':'Lechuga'}},
-  detalles:detalles.map(([cantidad,codigo,abreviatura=null])=>({cantidadTotal:{toString:()=>String(cantidad)},unidadMedida:{codigo,abreviatura}})),
+const prod = (id, dia, cultivar, detalles)=>( {
+  id, fechaInicioPeriodo:date(dia), fechaFinPeriodo:date(dia), visitaOrigenId:null,
+  observaciones:null,
+  cicloCultivo:{id:1,cantidadPlantas:45,
+    cultivo:{id:cultivar,nombre:cultivar===1?'Tomate':'Lechuga'},
+    huerto:{id:1,nombre:'Huerto ejemplo',familia:{id:1,nombreReferencia:'Familia ejemplo',
+      comunidad:{id:1,nombre:'Paxub'}}}},
+  detalles:detalles.map(([cantidad,codigo,abreviatura=null],i)=>({
+    id:id*10+i,cantidadTotal:{toString:()=>String(cantidad)},
+    unidadMedida:{codigo,nombre:codigo,abreviatura}})),
 })
 
 test('MON-04 distingue unidades no equivalentes (kg vs unidad vs manojos)',()=>{

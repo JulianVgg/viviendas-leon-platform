@@ -6,7 +6,7 @@ import {
   type VentaFuente,
 } from './semester.rules.js'
 
-const cosechaSelect = {
+export const cosechaSelect = {
   id: true, fechaInicioPeriodo: true, fechaFinPeriodo: true, observaciones: true, visitaOrigenId: true,
   cicloCultivo: { select: {
     id: true, cantidadPlantas: true, cultivo: { select: { id: true, nombre: true } },
@@ -40,7 +40,7 @@ const esDatoPrueba = (cultivo: string, familia: string, comunidad: string, unida
   /^SYN-/i.test(unidadCodigo) || /sint[eé]tic/i.test(`${cultivo} ${familia} ${comunidad}`) ||
   /de prueba/i.test(comunidad)
 
-const convertirCosecha = (item: CosechaDb): CosechaFuente => {
+export const convertirCosecha = (item: CosechaDb): CosechaFuente => {
   const ciclo = item.cicloCultivo
   const familia = ciclo.huerto.familia
   return {

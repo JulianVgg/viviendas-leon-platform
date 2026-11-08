@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 import {
   ArrowUpRight, CalendarRange, Download, RefreshCw,
   AlertTriangle, Sprout, PackageCheck, Coins,
@@ -18,7 +18,7 @@ import {
   type InformeSemestral,
 } from '../services/semesterReportService'
 import { prepararGraficasReporte } from '../services/semesterReportCharts'
-import { familiasDeComunidad, querySemestral, type FiltrosReporte, type OpcionesReporte } from '../services/semesterReportFilters'
+import { familiasDeComunidad, leerEnlaceReportesDashboard, querySemestral, type FiltrosReporte, type OpcionesReporte } from '../services/semesterReportFilters'
 
 const selector = 'h-11 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-800 focus:border-brand-500 focus:outline-none focus:ring-3 focus:ring-brand-500/10 disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100'
 const numero = (valor: number | string) => new Intl.NumberFormat('es-GT', { maximumFractionDigits: 3 }).format(Number(valor))
@@ -36,12 +36,14 @@ export default function ProduccionSemestralReportPage() {
   const coordinacion = Boolean(usuario?.roles.some(rol => ['coordinadora del programa agroforestal', 'coordinador del programa agroforestal', 'coordinacion'].includes(
     rol.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase(),
   )))
-  const [modo, setModo] = useState<'semestre' | 'rango'>('semestre')
-  const [anio, setAnio] = useState(anioCerrado)
-  const [semestre, setSemestre] = useState<1 | 2>(semestreCerrado)
-  const [desde, setDesde] = useState(`${anioActual}-01-01`)
-  const [hasta, setHasta] = useState(new Date().toISOString().slice(0, 10))
-  const [comunidadId, setComunidadId] = useState<number | undefined>()
+  const [searchParams] = useSearchParams()
+  const [rangoDashboard] = useState(() => leerEnlaceReportesDashboard(searchParams.toString()))
+  const [modo, setModo] = useState<'semestre' | 'rango'>(rangoDashboard ? 'rango' : 'semestre')
+  const [anio, setAnio] = useState(rangoDashboard ? Number(rangoDashboard.desde.slice(0, 4)) : anioCerrado)
+  const [semestre, setSemestre] = useState<1 | 2>(rangoDashboard ? (Number(rangoDashboard.desde.slice(5, 7)) <= 6 ? 1 : 2) : semestreCerrado)
+  const [desde, setDesde] = useState(rangoDashboard?.desde ?? `${anioActual}-01-01`)
+  const [hasta, setHasta] = useState(rangoDashboard?.hasta ?? new Date().toISOString().slice(0, 10))
+  const [comunidadId, setComunidadId] = useState<number | undefined>(rangoDashboard?.comunidadId)
   const [familiaId, setFamiliaId] = useState<number | undefined>()
   const [opciones, setOpciones] = useState<OpcionesReporte>({ comunidades: [], familias: [] })
   const [errorOpciones, setErrorOpciones] = useState('')

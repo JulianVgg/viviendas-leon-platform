@@ -3,7 +3,8 @@ import { Navigate, Route, Routes } from 'react-router'
 import AppLayout from '@/app/layout/AppLayout'
 import DashboardPage from '@/app/pages/DashboardPage'
 import MiAgendaPage from '@/features/dashboard/pages/MiAgendaPage'
-import IndicadoresFamiliasPage from '@/features/dashboard/pages/IndicadoresFamiliasPage'
+import AnalisisAsistidoPage from '@/features/reports/pages/AnalisisAsistidoPage'
+import AlertasReportesPage from '@/features/reports/pages/AlertasReportesPage'
 import ProduccionSemestralReportPage from '@/features/reports/pages/ProduccionSemestralReportPage'
 import ModulePage from '@/components/common/ModulePage'
 
@@ -276,19 +277,9 @@ export default function AppRoutes() {
           <Route path="reportes" element={<Navigate to="/reportes/reportes" replace />} />
           <Route path="reportes/reportes" element={<ProduccionSemestralReportPage />} />
 
-          <Route
-            path="reportes/indicadores"
-            element={<IndicadoresFamiliasPage />}
-          />
-
-          <Route
-            path="reportes/alertas"
-            element={module(
-              'Alertas',
-              'Vista base para alertas y seguimiento.',
-              ['Alerta', 'Prioridad', 'Estado'],
-            )}
-          />
+          <Route path="reportes/indicadores" element={<Navigate to="/" replace />} />
+          <Route path="reportes/analisis-asistido" element={<AnalisisAsistidoPage />} />
+          <Route path="reportes/alertas" element={<AlertasReportesPage />} />
 
           {/* Administración general */}
           <Route

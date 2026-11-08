@@ -48,7 +48,6 @@ const GRUPOS: Grupo[] = [
   { titulo: 'Reportes', pantallas: [
     { codigo: 'PANTALLA_REPORTES', nombre: 'Vista general de reportes', ruta: '/reportes' },
     { codigo: 'PANTALLA_REPORTES_LISTA', nombre: 'Reportes', ruta: '/reportes/reportes' },
-    { codigo: 'PANTALLA_INDICADORES', nombre: 'Indicadores', ruta: '/reportes/indicadores' },
     { codigo: 'PANTALLA_ALERTAS', nombre: 'Alertas', ruta: '/reportes/alertas' },
   ] },
   { titulo: 'Administración', pantallas: [
