@@ -24,6 +24,7 @@ export type CropCapture = {
   cicloCultivoId?: number
   observacionesCultivo?: string
   movimientoReal?: MovimientoVisita
+  aplicaciones?: number[] // Insumos aplicados a la evaluación; opcional para capturas antiguas.
   name: string; stage: string; quality: string; plants: number | null
   findings: { type: 'plaga' | 'enfermedad'; name: string; damage: string }[]
   production: boolean; origenProduccion?: 'ESTIMACION_VISITA' // Capturas antiguas no incluyen el marcador.
@@ -46,9 +47,15 @@ export type VisitListItem = {
   id: number | null; operationId: string | null; date: string; status: string; responsibleName?: string; responsibleUserId?: number
   familyId: number; familyName: string; community: string
   capture: VisitCapture | null; evidences?: VisitEvidence[]; localPhotos?: VisitPhotoFile[]
+  treatments?: Array<{
+    cicloCultivoId: number; insumoId: number; nombre: string; categoria: string
+    fecha: string | null; cantidad: string | null; unidad: string | null; observaciones: string | null
+  }>
   reprogramaciones?: RescheduleHistory[]
   followUps?: { id: string; text: string; status: string; due: string | null; category: string }[]
   syncStatus?: 'pending' | 'syncing' | 'failed' | 'synced'
+  syncError?: string
+  syncAttempts?: number
 }
 
 const cacheKey = (userId: number) => `visits:list:v1:user:${userId}`
@@ -83,6 +90,8 @@ export async function getVisitList(userId: number): Promise<{ items: VisitListIt
         ? (operation?.payload as OwnedVisitCapture | undefined)?.photos
         : undefined,
       syncStatus: outstanding ? operation.status : undefined,
+      syncError: outstanding && operation.status === 'failed' ? operation.lastError : undefined,
+      syncAttempts: outstanding ? operation.attempts : undefined,
     }
   })
   const syncedIds = new Set(rows.map(r => r.operationId))
@@ -94,6 +103,7 @@ export async function getVisitList(userId: number): Promise<{ items: VisitListIt
       id: null, operationId: o.id, date: p.capture.date, status: p.capture.status, responsibleUserId: userId,
       familyId: p.capture.familyId, familyName: p.familyName, community: p.community,
       capture: p.capture, localPhotos: p.photos, syncStatus: o.status,
+      syncError: o.status === 'failed' ? o.lastError : undefined, syncAttempts: o.attempts,
     } satisfies VisitListItem
   })
   return { items: [...rows, ...extras].sort((a,b)=>b.date.localeCompare(a.date)), local }

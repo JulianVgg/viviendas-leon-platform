@@ -11,10 +11,13 @@ import { useAuth } from '@/features/auth/AuthProvider'
 import { esSupervisorCalendario } from '@/features/auth/calendarAccess'
 import { CyclesApiError, listCycles, type Cycle } from '@/features/agriculture/services/cyclesService'
 import { CropsApiError, listAvailableCrops } from '@/features/agriculture/services/cropsService'
+import { listAvailableInsumos, type DisponibleInsumo } from '@/features/agriculture/services/insumosService'
+import { listarSanidadDisponible, type DatosSanidad } from '@/features/agriculture/services/sanidadService'
 import { addCivilDays, DIAS_CICLO_VISITA } from '@/features/visits/services/visitPlanning'
-import { productionEstimate, estimatedSaleQ } from '@/features/visits/services/visitProduction'
-import VisitEconomicsFields from '@/features/visits/components/VisitEconomicsFields'
-import { validarMovimientoParaVisita, type MovimientoVisita } from '@/features/visits/services/visitEconomics'
+import { registroIniciado, totalProduccion, validarProduccion, movimientoProduccion } from '@/features/visits/services/visitConfirmedProduction'
+import { validarMovimientoParaVisita } from '@/features/visits/services/visitEconomics'
+import { listProductionUnits, type ProductionUnit } from '@/features/agriculture/services/productionService'
+import { listSaleCurrencies, type SaleCurrency } from '@/features/agriculture/services/salesService'
 import { canWriteProduction } from '@/features/auth/screenPermissions'
 import { isVisitCycleAvailable } from '@/features/visits/services/visitCycleAvailability'
 import { saveVisitCapture, todayInGuatemala, type VisitCapture, type CropCapture, type VisitPhotoFile, type VisitTimeSlot } from '@/features/visits/services/visitService'
@@ -22,15 +25,15 @@ import SearchableSelect, { catalogOptions } from '@/features/visits/components/S
 import { getVisitFollowUps, getVisitList, type VisitListItem, type VisitFollowUp, type FollowUpStatus } from '@/features/visits/services/visitService'
 import VisitEvidencePicker from '@/features/visits/components/VisitEvidencePicker'
 import type { FamilyListItem } from '@/features/families/types/family'
-import { stages, qualities, weatherOptions, diseases, pests, damage } from '@/features/visits/data/visitCatalogs'
+import { stages, qualities, weatherOptions, damage } from '@/features/visits/data/visitCatalogs'
 
 type Finding = { id: string; type: 'plaga' | 'enfermedad'; name: string; damage: string }
 type CropEntry = {
-  id: string; cicloCultivoId: number | null; name: string; stage: string; plants: string; quality: string
-  findings: Finding[]; production: boolean; perPlantUnits: string; perPlantKg: string
-  units: string; kg: string; priceQ: string; priceBasis: 'unidad' | 'kg'
+  id: string; cicloCultivoId: number | null; name: string; stage: string; quality: string
+  findings: Finding[]; plantasVendidas: string; perPlantUnits: string; perPlantKg: string
+  priceQ: string; priceBasis: 'unidad' | 'kg'
   observacionesCultivo: string
-  movimientoReal?: MovimientoVisita
+  aplicaciones: number[]
 }
 type Commitment = { id: string; text: string; due: string; nextVisit: boolean; category: string }
 const steps = ['Información general', 'Evaluación de cultivos', 'Compromisos y observaciones']
@@ -38,11 +41,37 @@ const input = `${formControlClassName} w-full`
 const area = `${formControlClassName} h-auto min-h-24 resize-y`
 const card = 'rounded-2xl border border-slate-200 bg-white p-4 shadow-theme-xs dark:border-slate-800 dark:bg-slate-900 md:p-6'
 const todayLocal = todayInGuatemala
-const newCrop = (): CropEntry => ({ id: crypto.randomUUID(), cicloCultivoId: null, name: '', stage: '', plants: '', quality: '', findings: [], production: false, perPlantUnits: '', perPlantKg: '', units: '', kg: '', priceQ: '', priceBasis: 'unidad', observacionesCultivo: '' })
+const newCrop = (): CropEntry => ({ id: crypto.randomUUID(), cicloCultivoId: null, name: '', stage: '', quality: '', findings: [], plantasVendidas: '', perPlantUnits: '', perPlantKg: '', priceQ: '', priceBasis: 'unidad', observacionesCultivo: '', aplicaciones: [] })
 const newCommitment = (): Commitment => ({ id: crypto.randomUUID(), text: '', due: '', nextVisit: true, category: 'Familia' })
 const currencyTotal = (entry: CropEntry) => {
-  const total = estimatedSaleQ(entry)
+  const total = totalProduccion(entry)
   return total === null ? '—' : total.toLocaleString('es-GT', { maximumFractionDigits: 2, minimumFractionDigits: 2 })
+}
+
+// Selector de tratamientos con el mismo patrón de búsqueda de plagas y enfermedades.
+function TreatmentRow({ cropId, index, insumoId, insumos, selectedIds, onChange, onRemove }: {
+  cropId: string; index: number; insumoId: number; insumos: DisponibleInsumo[]
+  selectedIds: number[]; onChange: (id: number) => void; onRemove: () => void
+}) {
+  const selected = insumos.find(item => item.id === insumoId)
+  const categorias = [...new Set(insumos.map(item => item.categoriaInsumo.nombre))].sort((a, b) => a.localeCompare(b, 'es'))
+  const [tipoElegido, setTipoElegido] = useState(selected?.categoriaInsumo.nombre ?? categorias[0] ?? '')
+  const tipo = selected?.categoriaInsumo.nombre ?? tipoElegido
+  const disponibles = insumos.filter(item => item.categoriaInsumo.nombre === tipo &&
+    (!selectedIds.includes(item.id) || item.id === insumoId))
+  return <div className="grid gap-2 rounded-lg bg-slate-50 p-3 dark:bg-slate-800/40 md:grid-cols-[190px_minmax(0,1fr)_auto] md:items-end">
+    <FormField id={`treatment-type-${cropId}-${index}`} label="Tipo">
+      <select id={`treatment-type-${cropId}-${index}`} className={input} value={tipo}
+        onChange={event => { setTipoElegido(event.target.value); onChange(0) }}>
+        {categorias.map(categoria => <option key={categoria} value={categoria}>{categoria}</option>)}
+      </select>
+    </FormField>
+    <SearchableSelect id={`treatment-${cropId}-${index}`} label="Producto aplicado"
+      value={insumoId ? String(insumoId) : ''} placeholder="Buscar o seleccionar..."
+      options={disponibles.map(item => ({ value: String(item.id), label: item.nombre }))}
+      onChange={value => onChange(value ? Number(value) : 0)} />
+    <Button type="button" variant="secondary" size="sm" onClick={onRemove}>Quitar</Button>
+  </div>
 }
 
 function Options({ items, placeholder = 'Seleccionar' }: { items: string[]; placeholder?: string }) {
@@ -73,6 +102,11 @@ export default function VisitRegisterPage() {
   const [reviewStates, setReviewStates] = useState<Record<string, FollowUpStatus>>({})
   const [cropsState, setCrops] = useState<CropEntry[]>([])
   const [catalogCrops, setCatalogCrops] = useState<string[]>([])
+  const [catalogInsumos, setCatalogInsumos] = useState<DisponibleInsumo[]>([])
+  const [salesUnits, setSalesUnits] = useState<ProductionUnit[]>([])
+  const [salesCurrencies, setSalesCurrencies] = useState<SaleCurrency[]>([])
+  const [sanidad, setSanidad] = useState<DatosSanidad>({ plagas: [], enfermedades: [] })
+  const [catalogoTecnicoAviso, setCatalogoTecnicoAviso] = useState('')
   const [catalogLoading, setCatalogLoading] = useState(true)
   const [catalogWarning, setCatalogWarning] = useState('')
   const [availableCycles, setAvailableCycles] = useState<Cycle[]>([])
@@ -122,6 +156,47 @@ export default function VisitRegisterPage() {
       }
     }).finally(() => { if (!controller.signal.aborted) setCatalogLoading(false) })
     return () => controller.abort()
+  }, [usuario?.id])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    if (!usuario) return () => controller.abort()
+    const cacheKey = `visits:technical-catalog:v1:user:${usuario.id}`
+    setCatalogoTecnicoAviso('')
+    Promise.all([listAvailableInsumos(controller.signal), listarSanidadDisponible(controller.signal)])
+      .then(([insumos, fichas]) => {
+        if (controller.signal.aborted) return
+        setCatalogInsumos(insumos)
+        setSanidad(fichas)
+        void saveOfflineData(cacheKey, { insumos, fichas }).catch(() => {})
+      })
+      .catch(async () => {
+        const cached = await getOfflineData<{ insumos: DisponibleInsumo[]; fichas: DatosSanidad }>(cacheKey).catch(() => undefined)
+        if (controller.signal.aborted) return
+        setCatalogInsumos(cached?.data.insumos ?? [])
+        setSanidad(cached?.data.fichas ?? { plagas: [], enfermedades: [] })
+        setCatalogoTecnicoAviso(cached ? 'Usando catálogos guardados; las aplicaciones se validarán al sincronizar.' :
+          'No se pudieron consultar insumos, plagas y enfermedades. Conéctate para obtener las opciones activas.')
+      })
+    return () => controller.abort()
+  }, [usuario?.id])
+
+  useEffect(() => {
+    let active = true
+    if (!usuario) return () => { active = false }
+    const key = `visits:sale-catalog:v1:user:${usuario.id}`
+    Promise.all([listProductionUnits(), listSaleCurrencies()]).then(([units, currencies]) => {
+      if (!active) return
+      setSalesUnits(units)
+      setSalesCurrencies(currencies)
+      void saveOfflineData(key, { units, currencies }).catch(() => {})
+    }).catch(async () => {
+      const cached = await getOfflineData<{ units: ProductionUnit[]; currencies: SaleCurrency[] }>(key).catch(() => undefined)
+      if (!active) return
+      setSalesUnits(cached?.data.units ?? [])
+      setSalesCurrencies(cached?.data.currencies ?? [])
+    })
+    return () => { active = false }
   }, [usuario?.id])
 
   useEffect(() => {
@@ -246,7 +321,6 @@ export default function VisitRegisterPage() {
     setError(''); setStep(s => Math.min(steps.length - 1, s + 1))
   }
 
-  const numberOrNull = (value: string) => value.trim() === '' ? null : Number(value)
   const save = async (type: 'PROGRAMADA' | 'REALIZADA') => {
     if (saving || saved) return
     if (!usuario) { setError('Tu sesión no está disponible. Inicia sesión nuevamente.'); return }
@@ -257,60 +331,56 @@ export default function VisitRegisterPage() {
     if (scheduledVisitId && !familyScheduled.some(visit => visit.id === scheduledVisitId && visit.status === 'PROGRAMADA')) {
       setError('La cita programada seleccionada ya no está disponible. Actualiza la página y vuelve a elegir.'); setStep(0); return
     }
+    if (cropsState.some(c => c.aplicaciones.length > 12 || new Set(c.aplicaciones).size !== c.aplicaciones.length ||
+      c.aplicaciones.some(id => id === 0 || !catalogInsumos.some(insumo => insumo.id === id)))) {
+      setError('Revisa los insumos seleccionados. Solo puedes usar productos activos y sin repetir.'); setStep(1); return
+    }
     const selectedCycleIds = cropsState.map(c => c.cicloCultivoId).filter((id): id is number => id !== null)
     if (new Set(selectedCycleIds).size !== selectedCycleIds.length) {
       setError('Una siembra solo puede evaluarse una vez por visita.'); setStep(1); return
     }
-    if (cropsState.some(c => !c.name || c.findings.some(f => !f.name || !f.damage))) {
+    if (cropsState.some(c => !c.name || c.findings.some(f => !f.name))) {
       setError('Completa los cultivos y los hallazgos agregados antes de guardar.'); setStep(1); return
     }
     if (commitments.some(c => !c.nextVisit && !c.due)) { setError('Selecciona la fecha de revisión del compromiso.'); setStep(2); return }
     if (commitments.some(c => !c.text.trim())) {
       setError('Completa los compromisos agregados o elimínalos.'); setStep(2); return
     }
-    const cropNumbers = cropsState.flatMap(c => [c.plants, c.perPlantUnits, c.perPlantKg, c.units, c.kg, c.priceQ])
-    if (cropNumbers.some(value => value.trim() && (!Number.isFinite(Number(value)) || Number(value) < 0)) ||
-        cropsState.some(c => c.plants.trim() && !Number.isSafeInteger(Number(c.plants)))) {
-      setError('Revisa las cantidades y precios; deben ser números positivos.'); setStep(1); return
-    }
-    if (cropsState.some(c => c.production && (['perPlantUnits', 'perPlantKg'] as const).some(key =>
-      c[key].trim() && !/^\d{1,9}(?:\.\d{1,3})?$/.test(c[key])) ||
-      c.production && c.priceQ.trim() && !/^\d{1,9}(?:\.\d{1,2})?$/.test(c.priceQ))) {
-      setError('Revisa los valores por planta (máximo tres decimales) y el precio (máximo dos).'); setStep(1); return
-    }
-    if (cropsState.some(c => c.production && (c.perPlantUnits.trim() || c.perPlantKg.trim() || c.priceQ.trim()) &&
-      (!c.plants.trim() || Number(c.plants) <= 0))) {
-      setError('Ingresa las plantas observadas para calcular la producción.'); setStep(1); return
-    }
-    if (cropsState.some(c => c.production && c.priceQ.trim() &&
-      !(c.priceBasis === 'kg' ? c.perPlantKg : c.perPlantUnits).trim())) {
-      setError('Completa la producción por planta antes de calcular el valor estimado.'); setStep(1); return
-    }
     if (cropsState.some(c => c.observacionesCultivo.length > 2000)) {
       setError('Las observaciones del cultivo no pueden superar 2000 caracteres.'); setStep(1); return
     }
-    const movimientoInvalido = cropsState.find(c => c.movimientoReal &&
-      (!c.cicloCultivoId || validarMovimientoParaVisita(c.movimientoReal, date)))
-    if (movimientoInvalido) {
-      setError(!movimientoInvalido.cicloCultivoId
-        ? 'Vincula el cultivo a un ciclo antes de registrar una cosecha o venta.'
-        : validarMovimientoParaVisita(movimientoInvalido.movimientoReal, date) ?? 'Revisa la cosecha o venta real.')
+    const invalido = cropsState.find(c => registroIniciado(c) && (!c.cicloCultivoId || validarProduccion(c)))
+    if (invalido) {
+      setError(!invalido.cicloCultivoId ? 'Selecciona una siembra para registrar producción.' :
+        validarProduccion(invalido) ?? 'Revisa los datos de producción.')
       setStep(1); return
+    }
+    const unitId = salesUnits.find(unit => unit.codigo.toUpperCase() === 'UNIDAD' && unit.activo !== false)?.id ?? 0
+    const kgId = salesUnits.find(unit => unit.codigo.toUpperCase() === 'KG' && unit.activo !== false)?.id ?? 0
+    const monedaId = salesCurrencies.find(currency => currency.codigo.toUpperCase() === 'GTQ')?.id ?? 0
+    if (cropsState.some(registroIniciado) && (!monedaId || !unitId || !kgId)) {
+      setError('No se pudieron consultar las unidades o la moneda. Revisa la conexión.'); setStep(1); return
+    }
+    let movimientos: Map<string, NonNullable<ReturnType<typeof movimientoProduccion>>>
+    try {
+      movimientos = new Map(cropsState.filter(registroIniciado).map(c => {
+        const movimiento = movimientoProduccion(c, { fecha: date, unidadId: unitId, kgId, monedaId })
+        if (!movimiento || validarMovimientoParaVisita(movimiento, date)) throw Error('Revisa los datos de producción.')
+        return [c.id, movimiento] as const
+      }))
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se pudo preparar la producción.'); setStep(1); return
     }
     const cropsCapture: CropCapture[] = cropsState.map(c => ({
       ...(c.cicloCultivoId ? { cicloCultivoId: c.cicloCultivoId } : {}),
-      ...(c.movimientoReal ? { movimientoReal: c.movimientoReal } : {}),
-      name: c.name, stage: c.stage, quality: c.quality, plants: numberOrNull(c.plants),
+      ...(movimientos.get(c.id) ? { movimientoReal: movimientos.get(c.id) } : {}),
+      name: c.name, stage: c.stage, quality: c.quality, plants: null,
       ...(c.observacionesCultivo.trim() ? { observacionesCultivo: c.observacionesCultivo.trim() } : {}),
       findings: c.findings.map(f => ({ type: f.type, name: f.name, damage: f.damage })),
-      production: c.production, ...(c.production ? { origenProduccion: 'ESTIMACION_VISITA' as const } : {}),
-      perPlantUnits: c.production ? numberOrNull(c.perPlantUnits) : null,
-      perPlantKg: c.production ? numberOrNull(c.perPlantKg) : null,
-      units: c.production ? productionEstimate(c).units : null,
-      kg: c.production ? productionEstimate(c).kg : null,
-      priceQ: c.production ? numberOrNull(c.priceQ) : null,
-      priceUSD: null, // Los importes en dólares se calcularán en reportes.
-      priceBasis: c.priceBasis,
+      ...(c.aplicaciones.length ? { aplicaciones: c.aplicaciones } : {}),
+      production: false,
+      perPlantUnits: null, perPlantKg: null, units: null, kg: null,
+      priceQ: null, priceUSD: null, priceBasis: c.priceBasis,
     }))
     const payload: VisitCapture = {
       familyId: Number(familyId), date, status: type, timeSlot: turno, capturedAt: type === 'REALIZADA' ? new Date().toISOString() : undefined, weather,
@@ -442,9 +512,8 @@ export default function VisitRegisterPage() {
                 if (found && cropsState.some(item => item.id !== crop.id && item.cicloCultivoId === found.id)) return
                 updateCrop(crop.id, { cicloCultivoId: found?.id ?? null, name: found?.cultivo.nombre ?? '',
                   ...(found?.id === crop.cicloCultivoId ? {} : {
-                    movimientoReal: undefined,
-                    stage: '', plants: '', quality: '', findings: [], production: false,
-                    perPlantUnits: '', perPlantKg: '', units: '', kg: '', priceQ: '', priceBasis: 'unidad',
+                    stage: '', quality: '', findings: [], aplicaciones: [],
+                    plantasVendidas: '', perPlantUnits: '', perPlantKg: '', priceQ: '', priceBasis: 'unidad',
                     observacionesCultivo: '',
                   }) })
               }}><option value="">Seleccionar siembra</option>
@@ -452,7 +521,6 @@ export default function VisitRegisterPage() {
               </select>
             </FormField> : <SearchableSelect label="Planta (sin vincular)" id={`crop-name-${crop.id}`} value={crop.name} onChange={name => updateCrop(crop.id,{name, cicloCultivoId: null})} options={catalogOptions(crop.name && !catalogCrops.includes(crop.name) ? [...catalogCrops, crop.name] : catalogCrops)} />}
             <FormField label="Etapa" id={`crop-stage-${crop.id}`}><select id={`crop-stage-${crop.id}`} className={input} value={crop.stage} onChange={e => updateCrop(crop.id,{stage:e.target.value})}><Options items={stages}/></select></FormField>
-            <FormField label="Plantas observadas" id={`crop-plants-${crop.id}`}><input id={`crop-plants-${crop.id}`} className={input} type="number" min="0" step="1" value={crop.plants} onChange={e=>updateCrop(crop.id,{plants:e.target.value})}/></FormField>
             <FormField label="Calidad" id={`crop-quality-${crop.id}`}><select id={`crop-quality-${crop.id}`} className={input} value={crop.quality} onChange={e=>updateCrop(crop.id,{quality:e.target.value})}><Options items={qualities}/></select></FormField>
           </div>
           <div className="mt-4">
@@ -464,43 +532,57 @@ export default function VisitRegisterPage() {
           <details className="mt-5 rounded-xl border border-slate-200 p-4 dark:border-slate-700"><summary className="cursor-pointer font-medium text-slate-900 dark:text-white">Plagas y enfermedades <span className="text-xs font-normal text-slate-500">({crop.findings.length})</span></summary>
             <div className="mt-4 space-y-3">{crop.findings.map(f => <div key={f.id} className="grid gap-2 rounded-lg bg-slate-50 p-3 dark:bg-slate-800/40 md:grid-cols-[135px_1fr_110px_auto] md:items-end">
               <FormField id={`finding-type-${f.id}`} label="Tipo"><select id={`finding-type-${f.id}`} className={input} value={f.type} onChange={e => updateFinding(crop.id,f.id,{type:e.target.value as Finding['type'],name:''})}><option value="plaga">Plaga</option><option value="enfermedad">Enfermedad</option></select></FormField>
-              <SearchableSelect id={`finding-name-${f.id}`} label="Hallazgo" value={f.name} onChange={name => updateFinding(crop.id,f.id,{name})} options={catalogOptions(f.type === 'plaga' ? pests : diseases)} />
+              <SearchableSelect id={`finding-name-${f.id}`} label="Hallazgo" value={f.name} onChange={name => updateFinding(crop.id,f.id,{name})} options={catalogOptions((f.type === 'plaga' ? sanidad.plagas : sanidad.enfermedades).map(item => item.nombre))} />
               <FormField id={`finding-damage-${f.id}`} label="Daño"><select id={`finding-damage-${f.id}`} className={input} value={f.damage} onChange={e => updateFinding(crop.id,f.id,{damage:e.target.value})}><option value="">Sin estimar</option>{damage.map(n => <option key={n} value={n}>{n}%</option>)}</select></FormField>
               <Button type="button" variant="secondary" size="sm" onClick={() => updateCrop(crop.id, {findings: crop.findings.filter(item => item.id !== f.id)})}>Quitar</Button>
             </div>)}<Button type="button" variant="secondary" size="sm" onClick={()=>updateCrop(crop.id,{findings:[...crop.findings,{id:crypto.randomUUID(),type:'plaga',name:'',damage:''}]})}>+ Añadir hallazgo</Button></div>
           </details>
-          <details className="mt-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700" open={crop.production || Boolean(crop.movimientoReal) || undefined}><summary className="cursor-pointer font-medium text-slate-900 dark:text-white">Producción agrícola</summary>
-            <div className="mt-4 space-y-4"><label className="flex cursor-pointer items-center gap-2 text-sm"><input type="checkbox" checked={crop.production} onChange={e=>updateCrop(crop.id,{production:e.target.checked})}/> Registrar estimación</label>
-              {crop.production && <div className="space-y-4 rounded-xl bg-slate-50/70 p-4 dark:bg-slate-800/40">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {([['perPlantUnits','Planta (unidades)'],['perPlantKg','Planta (kg)']] as const).map(([key,name]) =>
-                    <FormField key={key} id={`${key}-${crop.id}`} label={name}><input id={`${key}-${crop.id}`} className={input} type="number" min="0" step="any" value={crop[key]} onChange={e=>updateCrop(crop.id,{[key]:e.target.value})}/></FormField>)}
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <FormField id={`price-basis-${crop.id}`} label="Precio por"><select id={`price-basis-${crop.id}`} className={input} value={crop.priceBasis} onChange={e=>updateCrop(crop.id,{priceBasis:e.target.value as CropEntry['priceBasis']})}><option value="unidad">Unidad</option><option value="kg">Kilogramo</option></select></FormField>
-                  <FormField id={`price-q-${crop.id}`} label={`Precio de referencia (Q/${crop.priceBasis === 'kg' ? 'kg' : 'unidad'})`}><input id={`price-q-${crop.id}`} className={input} type="number" min="0" step="any" value={crop.priceQ} onChange={e=>updateCrop(crop.id,{priceQ:e.target.value})}/></FormField>
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3 dark:border-slate-700">
-                  <div className="text-xs text-slate-500 dark:text-slate-400">Producción estimada: {productionEstimate(crop).units ?? '—'} unidades · {productionEstimate(crop).kg ?? '—'} kg</div>
-                  <div className="text-sm text-slate-700 dark:text-slate-200">Valor estimado: <strong className="text-base text-slate-900 dark:text-white">Q {currencyTotal(crop)}</strong></div>
-                </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">No representa cosecha ni venta efectiva.</p>
-              </div>}
-              {crop.cicloCultivoId && usuario && canWriteProduction(usuario) && <div className="border-t border-slate-200 pt-4 dark:border-slate-700">
-                <label className="flex cursor-pointer items-center gap-2 text-sm">
-                  <input type="checkbox" checked={Boolean(crop.movimientoReal)} onChange={event => updateCrop(crop.id, {
-                    movimientoReal: event.target.checked
-                      ? { cosecha: { fechaCosecha: date, cantidad: '', unidadMedidaId: 0 } }
-                      : undefined,
-                  })} /> Registrar cosecha o venta real
-                </label>
-                {crop.movimientoReal && <div className="mt-3">
-                  <VisitEconomicsFields cycleId={crop.cicloCultivoId} date={date} userId={usuario.id}
-                    value={crop.movimientoReal} onChange={value => updateCrop(crop.id, { movimientoReal: value })}/>
-                </div>}
-              </div>}
+          <details className="mt-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+            <summary className="cursor-pointer font-medium text-slate-900 dark:text-white">Abonos y tratamientos <span className="text-xs font-normal text-slate-500">({crop.aplicaciones.length})</span></summary>
+            <div className="mt-4 space-y-3">
+              {catalogoTecnicoAviso && <p role="status" className="text-xs text-amber-700 dark:text-amber-300">{catalogoTecnicoAviso}</p>}
+              {crop.aplicaciones.map((insumoId, index) => <TreatmentRow key={`${crop.id}-${index}`} cropId={crop.id}
+                index={index} insumoId={insumoId} insumos={catalogInsumos} selectedIds={crop.aplicaciones}
+                onChange={id => updateCrop(crop.id, { aplicaciones: crop.aplicaciones.map((old, idx) => idx === index ? id : old) })}
+                onRemove={() => updateCrop(crop.id, { aplicaciones: crop.aplicaciones.filter((_, idx) => idx !== index) })} />)}
+              {!crop.cicloCultivoId && <p className="text-xs text-amber-700 dark:text-amber-300">Selecciona primero una siembra para registrar tratamientos.</p>}
+              <Button type="button" variant="secondary" size="sm" disabled={!crop.cicloCultivoId || !catalogInsumos.length || crop.aplicaciones.length >= 12 || crop.aplicaciones.length >= catalogInsumos.length}
+                onClick={() => {
+                  const first = catalogInsumos.find(item => !crop.aplicaciones.includes(item.id))
+                  if (first) updateCrop(crop.id, { aplicaciones: [...crop.aplicaciones, 0] })
+                }}>+ Añadir producto</Button>
             </div>
           </details>
+          {usuario && canWriteProduction(usuario) && <details className="mt-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+            <summary className="cursor-pointer font-medium text-slate-900 dark:text-white">Producción agrícola</summary>
+            <div className="mt-4 space-y-4 rounded-xl bg-slate-50/70 p-4 dark:bg-slate-800/40">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <FormField id={`plants-sold-${crop.id}`} label="Plantas Vendidas:">
+                  <input id={`plants-sold-${crop.id}`} className={input} type="number" min="1" step="1" value={crop.plantasVendidas}
+                    onChange={e => updateCrop(crop.id, { plantasVendidas: e.target.value })}/>
+                </FormField>
+                <FormField id={`perPlantKg-${crop.id}`} label="Por planta (kg)">
+                  <input id={`perPlantKg-${crop.id}`} className={input} type="number" min="0.001" step="0.001"
+                    value={crop.perPlantKg} onChange={e => updateCrop(crop.id, { perPlantKg: e.target.value })}/>
+                </FormField>
+                <FormField id={`price-basis-${crop.id}`} label="Precio por">
+                  <select id={`price-basis-${crop.id}`} className={input} value={crop.priceBasis}
+                    onChange={e => updateCrop(crop.id, { priceBasis: e.target.value as CropEntry['priceBasis'] })}>
+                    <option value="unidad">Unidad</option><option value="kg">Kilogramo</option>
+                  </select>
+                </FormField>
+                <FormField id={`price-q-${crop.id}`} label={`Precio de venta (Q/${crop.priceBasis === 'kg' ? 'kg' : 'unidad'})`}>
+                  <input id={`price-q-${crop.id}`} className={input} type="number" min="0.01" step="0.01" value={crop.priceQ}
+                    onChange={e => updateCrop(crop.id, { priceQ: e.target.value })}/>
+                </FormField>
+              </div>
+              <div className="flex items-center justify-end gap-3 border-t border-slate-200 pt-3 dark:border-slate-700">
+                <span className="text-sm text-slate-600 dark:text-slate-300">Valor estimado:</span>
+                <strong className="text-base text-slate-900 dark:text-white">Q {currencyTotal(crop)}</strong>
+              </div>
+            </div>
+          </details>}
+
         </article>)}
       </section>}
 

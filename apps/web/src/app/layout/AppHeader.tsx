@@ -9,6 +9,7 @@ import Button from '@/components/ui/Button'
 import SyncStatus from '@/components/ui/SyncStatus'
 import { useConnectivityStatus } from '@/hooks/useConnectivityStatus'
 import { canViewPath } from '@/features/auth/screenPermissions'
+import { esTecnicoCampo } from '@/features/auth/calendarAccess'
 
 export default function AppHeader() {
   const navigate = useNavigate()
@@ -125,12 +126,12 @@ export default function AppHeader() {
     )}
     {connectivity.status === 'server-unavailable' && (
       <p role="status" className="px-4 pb-2 text-xs text-amber-700 dark:text-amber-300">
-        La API no responde. Los registros locales no se enviarán automáticamente.
+        La API no responde. Las visitas pendientes permanecen guardadas en este dispositivo.
       </p>
     )}
-    {connectivity.status === 'connected' && connectivity.recoveredAt && (
+    {connectivity.status === 'connected' && connectivity.recoveredAt && usuario && esTecnicoCampo(usuario) && (
       <p role="status" className="px-4 pb-2 text-xs text-emerald-700 dark:text-emerald-300">
-        Conexión recuperada. La cola puede revisarse; la sincronización real aún no está habilitada.
+        Conexión recuperada. Las visitas pendientes se sincronizan automáticamente cuando la API está disponible. Consulta su estado en Historial de visitas.
       </p>
     )}
   </header>

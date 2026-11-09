@@ -1,13 +1,15 @@
 import '../visits.css'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router'
-import { RefreshCw, Search } from 'lucide-react'
+import { AlertTriangle, RefreshCw, Search } from 'lucide-react'
 import PageHeader from '@/components/common/PageHeader'
 import PageMeta from '@/components/common/PageMeta'
 import Button from '@/components/ui/Button'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { esSupervisorCalendario } from '@/features/auth/calendarAccess'
 import VisitDetailDialog from '@/features/visits/components/VisitDetailDialog'
+import { mensajeErrorSincronizacion } from '@/features/visits/services/visitSyncFeedback'
+import { useConnectivityStatus } from '@/hooks/useConnectivityStatus'
 import {
   getVisitFollowUps, getVisitList, syncPendingVisits,
   todayInGuatemala, type VisitFollowUp, type VisitListItem,
@@ -43,6 +45,7 @@ function nonComplianceCount(visit: VisitListItem, followups: VisitFollowUp[]) {
 
 export default function VisitHistoryPage() {
   const { usuario } = useAuth()
+  const connectivity = useConnectivityStatus()
   const [rows, setRows] = useState<VisitListItem[]>([])
   const [followups, setFollowups] = useState<VisitFollowUp[]>([])
   const [loading, setLoading] = useState(true)
@@ -107,12 +110,17 @@ export default function VisitHistoryPage() {
   const completed = rows.filter(row => row.status === 'REALIZADA').length
   const upcoming = rows.filter(row => row.status === 'PROGRAMADA').length
   const pending = rows.filter(row => row.syncStatus && row.syncStatus !== 'synced').length
+  const failedSyncs = rows.filter(row => row.syncStatus === 'failed').length
   const failures = rows.filter(row => nonComplianceCount(row, getFor(row)) > 0).length
   const selectedFollowUps = selected ? getFor(selected) : []
 
   return <div className="visits-enter">
     <PageMeta title="Historial de visitas | Viviendas León" description="Registro de visitas técnicas" />
     <PageHeader title="Historial de visitas" description="" actions={usuario && !esSupervisorCalendario(usuario) ? <Link to="/visitas/nueva" className="inline-flex min-h-11 items-center rounded-lg bg-brand-500 px-5 text-sm font-medium text-white hover:bg-brand-600">+ Registrar visita</Link> : undefined} />
+    {failedSyncs > 0 && <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-500/10 dark:text-amber-200">
+      <div className="flex items-center gap-2"><AlertTriangle size={18} className="shrink-0" /><span>{failedSyncs === 1 ? 'Una visita no pudo sincronizarse.' : `${failedSyncs} visitas no pudieron sincronizarse.`} Los datos siguen guardados en este dispositivo. Revisa el motivo junto a cada registro.</span></div>
+      <Button type="button" variant="secondary" size="sm" disabled={loading || connectivity.status !== 'connected'} onClick={() => void refresh()}><RefreshCw size={15} /> Reintentar sincronización</Button>
+    </div>}
     {error && <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-500/10 dark:text-red-300">{error}</div>}
     {followUpError && <p role="status" className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-200">Seguimientos: {followUpError}. No se debe interpretar una ausencia de indicadores como cumplimiento.</p>}
     {local && !error && <p className="mb-3 text-xs font-medium text-amber-700 dark:text-amber-300">Mostrando datos guardados en este dispositivo</p>}
@@ -143,7 +151,7 @@ export default function VisitHistoryPage() {
               <td className="px-5 py-4">{row.community}</td>
               <td className="px-5 py-4">{dateLabel(row.date)}</td>
               <td className="px-5 py-4">{row.responsibleName ?? (row.responsibleUserId === usuario?.id ? [usuario?.nombre, usuario?.apellido].filter(Boolean).join(' ') : '—')}</td>
-              <td className="px-5 py-4"><span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${visitStatusColor(row)}`}>{statusName(row)}</span></td>
+              <td className="px-5 py-4"><span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${visitStatusColor(row)}`}>{statusName(row)}</span>{row.syncStatus === 'failed' && <div className="mt-2 max-w-xs text-xs leading-relaxed text-red-700 dark:text-red-300"><span className="font-semibold">Motivo: </span>{mensajeErrorSincronizacion(row.syncError)}{Boolean(row.syncAttempts) && <p className="mt-1 text-slate-500 dark:text-slate-400">Intentos: {row.syncAttempts}</p>}</div>}</td>
               <td className="px-5 py-4"><div className="flex flex-wrap gap-1.5">
                 {notCompleted > 0 && <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700 dark:bg-red-500/10 dark:text-red-300">No cumplido ({notCompleted})</span>}
                 {open > 0 && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">Pendiente ({open})</span>}

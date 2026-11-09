@@ -1,3 +1,5 @@
+import { parseVisitTreatmentIds } from './visit-treatment-rules.js'
+import { tratamientosPorVisita, type TratamientoVisita } from './visit-treatment-history.js'
 import { createHash } from 'node:crypto'
 import { Prisma } from '../../generated/prisma/client.js'
 import { registrarMovimientoVisita, validarMovimientoVisita } from './visit-economics.js'
@@ -100,7 +102,11 @@ function validate(input: unknown, operationId: unknown): { capturedAt?: string; 
     if (c.observacionesCultivo !== undefined && (
       typeof c.observacionesCultivo !== 'string' || c.observacionesCultivo.length > 2000 ||
       /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(c.observacionesCultivo))) return null
-    if (c.findings.some(f => !f || typeof f !== 'object' || !['plaga','enfermedad'].includes((f as Record<string,unknown>).type as string) || !clean((f as Record<string,unknown>).name,100) || !['1','3','5','10','20'].includes(String((f as Record<string,unknown>).damage)))) return null
+    if (c.findings.some(f => !f || typeof f !== 'object' || !['plaga','enfermedad'].includes((f as Record<string,unknown>).type as string) || !clean((f as Record<string,unknown>).name,100) || !['','1','3','5','10','20'].includes(String((f as Record<string,unknown>).damage ?? '')))) return null
+    const findingKeys = c.findings.map((f: Record<string, unknown>) => `${f.type}:${clean(f.name, 100).toLocaleLowerCase('es-GT')}`)
+    if (new Set(findingKeys).size !== findingKeys.length) return null
+    const aplicaciones = parseVisitTreatmentIds(c.aplicaciones)
+    if (aplicaciones === null || (aplicaciones.length && !c.cicloCultivoId)) return null
     for (const name of ['plants','perPlantUnits','perPlantKg','units','kg','priceQ','priceUSD']) {
       if (!positive(c[name])) return null
     }
@@ -122,6 +128,7 @@ function validate(input: unknown, operationId: unknown): { capturedAt?: string; 
       findings: c.findings.map((finding: Record<string,unknown>) => ({
         type: finding.type, name: clean(finding.name,100), damage: clean(finding.damage,12),
       })),
+      ...(c.aplicaciones !== undefined ? { aplicaciones } : {}),
     })
   }
   const commitments: Record<string, unknown>[] = []
@@ -164,7 +171,7 @@ function serialize(row: {
   reprogramaciones?: { id: number; fechaAnterior: Date; fechaNueva: Date; usuarioId: number; motivo: string | null; creadoEn: Date }[];
   usuarioResponsable: { nombre: string; apellido: string | null };
   familia: { id: number; nombreReferencia: string; comunidad: { nombre: string } };
-}, captura: { operation_id: string; datos: unknown } | null, evidences: { id: number; name: string }[]) {
+}, captura: { operation_id: string; datos: unknown } | null, evidences: { id: number; name: string }[], treatments: TratamientoVisita[] = []) {
   return {
     id: row.id, operationId: captura?.operation_id ?? null,
     reprogramaciones: (row.reprogramaciones ?? []).map(h => ({ id: h.id, oldDate: h.fechaAnterior.toISOString().slice(0,10), newDate: h.fechaNueva.toISOString().slice(0,10), actorId: h.usuarioId, reason: h.motivo, at: h.creadoEn.toISOString() })),
@@ -172,7 +179,7 @@ function serialize(row: {
     responsibleUserId: row.usuarioResponsableId,
     responsibleName: [row.usuarioResponsable.nombre, row.usuarioResponsable.apellido].filter(Boolean).join(' '),
     familyId: row.familia.id, familyName: row.familia.nombreReferencia,
-    community: row.familia.comunidad.nombre, capture: marcarEstimacionesVisita(captura?.datos ?? null),
+    community: row.familia.comunidad.nombre, capture: marcarEstimacionesVisita(captura?.datos ?? null), treatments,
     evidences: evidences.map(item => ({ ...item, url: `/api/v1/visitas/${row.id}/evidencias/${item.id}` })),
   }
 }
@@ -207,8 +214,21 @@ visitsRouter.get('/', async (req: Request, res: Response) => {
     }) : []
     const byEvidence = new Map<number, { id: number; name: string }[]>()
     for (const e of evidenceRows) byEvidence.set(e.visitaId, [...(byEvidence.get(e.visitaId) ?? []), { id: e.evidencia.id, name: e.evidencia.nombreArchivo }])
+    // CIR-18: resolver nombres desde las relaciones normalizadas, incluso si el
+    // insumo fue desactivado después de la visita. Nunca consultar visitas ajenas.
+    const treatmentRows = rows.length ? await prisma.tratamientoAplicado.findMany({
+      where: { evaluacionCultivo: { visitaId: { in: rows.map(row => row.id) } } },
+      select: {
+        insumoId: true, fechaAplicacion: true, cantidad: true, observaciones: true,
+        evaluacionCultivo: { select: { visitaId: true, cicloCultivoId: true } },
+        insumo: { select: { nombre: true, categoriaInsumo: { select: { nombre: true } } } },
+        unidadMedida: { select: { abreviatura: true, nombre: true } },
+      },
+      orderBy: { id: 'asc' },
+    }) : []
+    const byTreatments = tratamientosPorVisita(treatmentRows)
     res.setHeader('Cache-Control','no-store')
-    res.json({ data: rows.map(row => serialize(row, byVisit.get(row.id) ?? null, byEvidence.get(row.id) ?? [])) })
+    res.json({ data: rows.map(row => serialize(row, byVisit.get(row.id) ?? null, byEvidence.get(row.id) ?? [], byTreatments.get(row.id) ?? [])) })
   } catch (error) { console.error('Error consultando visitas:',error); res.status(503).json({ error: 'No se pudieron consultar las visitas.' }) }
 })
 
@@ -468,11 +488,35 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
             const quality = typeof crop.quality === 'string' && crop.quality ? await tx.calidad.findFirst({
               where: { nombre: { equals: crop.quality, mode: 'insensitive' } }, select: { id: true },
             }) : null
-            await tx.evaluacionCultivo.create({ data: {
+            const evaluacion = await tx.evaluacionCultivo.create({ data: {
               visitaId, cicloCultivoId: cycleId, etapaCultivoId: stage?.id ?? null,
               calidadId: quality?.id ?? null,
               observaciones: buildEvaluationObservations(crop.plants, crop.observacionesCultivo),
             } })
+            // CIR-17: almacenar las aplicaciones en el modelo existente, no solo en JSON.
+            const aplicaciones = Array.isArray(crop.aplicaciones) ? crop.aplicaciones as number[] : []
+            if (aplicaciones.length) {
+              const activos = await tx.insumo.findMany({
+                where: { id: { in: aplicaciones }, activo: true, categoriaInsumo: { activo: true } }, select: { id: true },
+              })
+              if (activos.length !== aplicaciones.length) throw new Error('INVALID_VISIT_CATALOG')
+              await tx.tratamientoAplicado.createMany({ data: aplicaciones.map(insumoId => ({
+                evaluacionCultivoId: evaluacion.id, insumoId, fechaAplicacion: new Date(`${payload.date}T12:00:00Z`),
+              })) })
+            }
+            // Plagas y enfermedades también quedan relacionadas a la evaluación del cultivo.
+            for (const finding of crop.findings as Array<{ type: string; name: string; damage: string }>) {
+              const porcentajeDanio = finding.damage ? Number(finding.damage) : null
+              if (finding.type === 'plaga') {
+                const plaga = await tx.plaga.findFirst({ where: { nombre: { equals: finding.name, mode: 'insensitive' }, activo: true }, select: { id: true } })
+                if (!plaga) throw new Error('INVALID_VISIT_CATALOG')
+                await tx.evaluacionPlaga.create({ data: { evaluacionCultivoId: evaluacion.id, plagaId: plaga.id, porcentajeDanio } })
+              } else {
+                const enfermedad = await tx.enfermedad.findFirst({ where: { nombre: { equals: finding.name, mode: 'insensitive' }, activo: true }, select: { id: true } })
+                if (!enfermedad) throw new Error('INVALID_VISIT_CATALOG')
+                await tx.evaluacionEnfermedad.create({ data: { evaluacionCultivoId: evaluacion.id, enfermedadId: enfermedad.id, porcentajeDanio } })
+              }
+            }
             if (crop.movimientoReal) await registrarMovimientoVisita(tx, {
               movimiento: crop.movimientoReal as NonNullable<ReturnType<typeof validarMovimientoVisita>>,
               cicloCultivoId: cycleId, familiaId: payload.familyId, visitaId, fechaVisita: payload.date, usuarioId: userId,
@@ -522,6 +566,9 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
     }
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
       res.status(409).json({ error: 'Otra operación cambió el saldo de la cosecha. Reintenta la sincronización.' }); return
+    }
+    if (error instanceof Error && error.message === 'INVALID_VISIT_CATALOG') {
+      res.status(409).json({ error: 'Algún abono, plaga o enfermedad ya no está disponible. Actualiza el catálogo y reintenta.' }); return
     }
     if (error instanceof Error && error.message === 'INVALID_VISIT_CYCLE') { res.status(409).json({ error: 'La siembra seleccionada no está disponible para esta familia, cultivo o fecha. Actualiza la agenda agrícola.' }); return }
     if (error instanceof Error && error.message === 'DUPLICATE_VISIT_CYCLE') { res.status(409).json({ error: 'Una misma siembra no puede evaluarse dos veces en una visita.' }); return }
