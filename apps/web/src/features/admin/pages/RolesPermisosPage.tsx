@@ -33,6 +33,7 @@ const GRUPOS: Grupo[] = [
     { codigo: 'PRODUCCION_WRITE', nombre: 'Registrar cosechas', ruta: 'Operaciones API', especial: true },
     { codigo: 'PANTALLA_CONTROL_FITOSANITARIO', nombre: 'Control fitosanitario', ruta: '/gestion-agricola/control-fitosanitario' },
     { codigo: 'PANTALLA_INSUMOS', nombre: 'Insumos', ruta: '/gestion-agricola/insumos' },
+    { codigo: 'INSUMOS_WRITE', nombre: 'Administrar productos y categorías', ruta: 'Operaciones API', especial: true },
   ] },
   { titulo: 'Visitas técnicas', pantallas: [
     { codigo: 'PANTALLA_VISITAS_AGENDA', nombre: 'Agenda de visitas', ruta: '/visitas/agenda' },

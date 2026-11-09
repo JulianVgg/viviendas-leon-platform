@@ -8,10 +8,10 @@ import { validarMovimientoParaVisita } from '../services/visitEconomics'
 
 const input = `${formControlClassName} w-full`
 const day = (date: string) => date || ''
-type Props = { cycleId: number; date: string; userId: number; value?: MovimientoVisita;
+type Props = { cycleId: number; date: string; userId: number; value?: MovimientoVisita; hideModeSelector?: boolean;
   onChange: (value: MovimientoVisita | undefined) => void }
 
-export default function VisitEconomicsFields({ cycleId, date, userId, value, onChange }: Props) {
+export default function VisitEconomicsFields({ cycleId, date, userId, value, onChange, hideModeSelector = false }: Props) {
   const mode: MovimientoMode = !value ? 'ninguno' : value.cosecha ? 'nueva' : 'existente'
   const [units, setUnits] = useState<ProductionUnit[]>([])
   const [currencies, setCurrencies] = useState<SaleCurrency[]>([])
@@ -19,13 +19,14 @@ export default function VisitEconomicsFields({ cycleId, date, userId, value, onC
   const [balance, setBalance] = useState<SaleAvailability | null>(null)
   const [warning, setWarning] = useState('')
   const [hasRemoteHarvest, setHasRemoteHarvest] = useState(false)
-  const [saleRequested, setSaleRequested] = useState(Boolean(value?.venta))
+  const saleRequested = Boolean(value?.venta)
   const selectedHarvest = harvests.find(row => row.id === value?.venta?.registroProduccionId)
   const selectedUnit = units.find(row => row.id === value?.cosecha?.unidadMedidaId)
   const saleUnits = mode === 'nueva'
     ? units.filter(row => row.id === value?.cosecha?.unidadMedidaId)
     : (balance?.unidades.filter(row => Number(row.disponible) > 0).map(row => ({ ...row.unidadMedida, tipo: row.tipo })) ?? [])
   const available = balance?.unidades.find(row => row.unidadMedida.id === value?.venta?.unidadMedidaId)
+  const selectedCurrency = currencies.find(row => row.id === value?.venta?.monedaId)
   const total = useMemo(() => {
     if (!value?.venta) return null
     const sum = Number(value.venta.cantidad) * Number(value.venta.precioUnitario)
@@ -65,14 +66,12 @@ export default function VisitEconomicsFields({ cycleId, date, userId, value, onC
   }, [mode, value?.venta?.registroProduccionId])
 
   const start = (next: MovimientoMode) => {
-    if (next === 'ninguno') { onChange(undefined); setSaleRequested(false); return }
+    if (next === 'ninguno') { onChange(undefined); return }
     if (next === 'nueva') {
       onChange({ cosecha: { fechaCosecha: day(date), cantidad: '', unidadMedidaId: 0 } })
-      setSaleRequested(false)
     } else {
       onChange({ venta: { registroProduccionId: 0, fechaVenta: day(date), cantidad: '', unidadMedidaId: 0,
         monedaId: 0, precioUnitario: '', observaciones: null } })
-      setSaleRequested(true)
     }
   }
   const updateHarvest = (patch: Partial<NonNullable<MovimientoVisita['cosecha']>>) => {
@@ -88,16 +87,16 @@ export default function VisitEconomicsFields({ cycleId, date, userId, value, onC
   }
   return <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
     <div className="space-y-3">
-      <h5 className="text-sm font-medium text-slate-900 dark:text-white">¿Hubo cosecha o venta real?</h5>
+      {!hideModeSelector && <h5 className="text-sm font-medium text-slate-900 dark:text-white">¿Hubo cosecha o venta real?</h5>}
       {warning && <p role="status" className="text-xs text-amber-700">{warning}</p>}
-      <FormField id={`movement-mode-${cycleId}`} label="Registro confirmado">
+      {!hideModeSelector && <FormField id={`movement-mode-${cycleId}`} label="Registro confirmado">
         <select id={`movement-mode-${cycleId}`} className={input} value={mode}
           onChange={event => start(event.target.value as MovimientoMode)}>
           <option value="ninguno">No</option>
           <option value="nueva" disabled={!units.length}>Sí, hubo cosecha</option>
           <option value="existente" disabled={!hasRemoteHarvest || !harvests.length || !currencies.length}>Sí, venta de cosecha anterior</option>
         </select>
-      </FormField>
+      </FormField>}
       {mode === 'nueva' && value?.cosecha && <div className="grid gap-3 sm:grid-cols-3">
         <FormField id={`harvest-date-${cycleId}`} label="Fecha de cosecha">
           <input id={`harvest-date-${cycleId}`} className={input} type="date" max={date} value={value.cosecha.fechaCosecha}
@@ -116,11 +115,12 @@ export default function VisitEconomicsFields({ cycleId, date, userId, value, onC
             onChange={e => updateHarvest({ cantidad: e.target.value })}/>
         </FormField>
       </div>}
-      {mode === 'nueva' && <label className="flex gap-2 text-sm">
-        <input type="checkbox" checked={saleRequested} disabled={!currencies.length}
-          onChange={e => {setSaleRequested(e.target.checked); if (e.target.checked) updateSale({}); else if (value?.cosecha) onChange({ cosecha: value.cosecha })}}/>
-        ¿Se realizó una venta de esta cosecha?
-      </label>}
+      {mode === 'nueva' && <FormField id={`harvest-sale-${cycleId}`} label="¿Se realizó una venta de esta cosecha?">
+        <select id={`harvest-sale-${cycleId}`} className={input} value={saleRequested ? 'si' : 'no'} disabled={!currencies.length}
+          onChange={e => { if (e.target.value === 'si') updateSale({}); else if (value?.cosecha) onChange({ cosecha: value.cosecha }) }}>
+          <option value="no">No</option><option value="si">Sí</option>
+        </select>
+      </FormField>}
       {mode === 'existente' && value?.venta && <FormField id={`existing-harvest-${cycleId}`} label="Cosecha existente">
         <select id={`existing-harvest-${cycleId}`} className={input} value={value.venta.registroProduccionId || ''}
           onChange={e => updateSale({ registroProduccionId: Number(e.target.value), unidadMedidaId: 0 })}>
@@ -157,7 +157,7 @@ export default function VisitEconomicsFields({ cycleId, date, userId, value, onC
           <input id={`sale-price-${cycleId}`} className={input} type="number" min="0.0001" step="any" value={value.venta.precioUnitario}
             onChange={e => updateSale({ precioUnitario: e.target.value })}/>
         </FormField>
-        <div className="self-end rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800">Total real: <strong>{total ?? '—'}</strong></div>
+        <div className="self-end rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800">Total de venta: <strong>{total === null ? '—' : `${selectedCurrency?.codigo ?? ''} ${total}`}</strong></div>
         <div className="sm:col-span-2 xl:col-span-3">
           <FormField id={`sale-note-${cycleId}`} label="Observaciones de venta">
             <textarea id={`sale-note-${cycleId}`} className={input} maxLength={500} rows={2}

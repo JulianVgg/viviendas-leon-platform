@@ -1,6 +1,6 @@
 // CIR-09: movimientos económicos reales confirmados con la visita (sin estimaciones).
 export type MovimientoVisita = {
-  cosecha?: { fechaCosecha: string; cantidad: string; unidadMedidaId: number }
+  cosecha?: { fechaCosecha: string; cantidad: string; unidadMedidaId: number; detalleAdicional?: { cantidad: string; unidadMedidaId: number } }
   venta?: { registroProduccionId?: number; fechaVenta: string; cantidad: string;
     unidadMedidaId: number; monedaId: number; precioUnitario: string; observaciones: string | null }
 }
@@ -13,6 +13,11 @@ export function validarMovimientoParaVisita(value: MovimientoVisita | undefined,
   if (!value.cosecha && !value.venta) return 'Selecciona una cosecha o venta real.'
   if (value.cosecha && (!day(value.cosecha.fechaCosecha) || !decimal(value.cosecha.cantidad) || !value.cosecha.unidadMedidaId))
     return 'Completa fecha, cantidad y unidad de la cosecha real.'
+  if (value.cosecha?.detalleAdicional &&
+    (!decimal(value.cosecha.detalleAdicional.cantidad) || !value.cosecha.detalleAdicional.unidadMedidaId ||
+      value.cosecha.detalleAdicional.unidadMedidaId === value.cosecha.unidadMedidaId)) {
+    return 'Revisa la segunda medida de producción.'
+  }
   if (value.venta) {
     const sale = value.venta
     if (!value.cosecha && !sale.registroProduccionId) return 'Selecciona una cosecha existente.'

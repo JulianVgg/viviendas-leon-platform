@@ -17,6 +17,7 @@ import CultivosPage from '@/features/agriculture/pages/CultivosPage'
 import CiclosAgricolasPage from '@/features/agriculture/pages/CiclosAgricolasPage'
 import CicloDetallePage from '@/features/agriculture/pages/CicloDetallePage'
 import ProduccionPage from '@/features/agriculture/pages/ProduccionPage'
+import InsumosPage from '@/features/agriculture/pages/InsumosPage'
 
 import OfflineTestPage from '@/features/offline/pages/OfflineTestPage'
 import OfflineOperationsTestPage from '@/features/offline/pages/OfflineOperationsTestPage'
@@ -228,14 +229,7 @@ export default function AppRoutes() {
             )}
           />
 
-          <Route
-            path="gestion-agricola/insumos"
-            element={module(
-              'Insumos',
-              'Vista base para insumos de programas agrícolas.',
-              ['Insumo', 'Disponibilidad', 'Asignación'],
-            )}
-          />
+          <Route path="gestion-agricola/insumos" element={<InsumosPage />} />
 
           {/* Actividades de campo */}
           <Route

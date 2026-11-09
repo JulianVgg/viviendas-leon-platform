@@ -77,6 +77,14 @@ export function canWriteCrops(usuario: PermissionUser): boolean {
   return isDireccionGeneral(usuario) || usuario.permisos.includes('CULTIVOS_WRITE')
 }
 
+export function canWriteInsumos(usuario: PermissionUser): boolean {
+  if (isDireccionGeneral(usuario)) return true
+  const rolesHabilitados = ['tecnico agropecuario', 'coordinadora del programa agroforestal',
+    'coordinador del programa agroforestal', 'coordinacion']
+  return usuario.permisos.includes('INSUMOS_WRITE') && usuario.roles.some(rol =>
+    rolesHabilitados.includes(rol.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()))
+}
+
 export function canWriteProduction(usuario: PermissionUser): boolean {
   return isDireccionGeneral(usuario) || usuario.permisos.includes('PRODUCCION_WRITE')
 }

@@ -7,7 +7,7 @@ import { harvestQuantityError, harvestUnitKind, isOfficialHarvestUnit } from '..
 // Una cosecha nueva y una venta pueden confirmarse juntas. Los movimientos
 // históricos sin visitaOrigenId siguen siendo válidos.
 export type MovimientoVisita = {
-  cosecha?: { fechaCosecha: string; cantidad: string; unidadMedidaId: number }
+  cosecha?: { fechaCosecha: string; cantidad: string; unidadMedidaId: number; detalleAdicional?: { cantidad: string; unidadMedidaId: number } }
   venta?: { registroProduccionId?: number; fechaVenta: string; cantidad: string; unidadMedidaId: number;
     monedaId: number; precioUnitario: string; observaciones: string | null }
 }
@@ -20,9 +20,24 @@ export function validarMovimientoVisita(value: unknown, cicloCultivoId: number):
   if (row.cosecha) {
     if (typeof row.cosecha !== 'object' || Array.isArray(row.cosecha)) return null
     const candidate = row.cosecha as Record<string, unknown>
-    const check = validateProductionInput({ ...candidate, cicloCultivoId })
-    if (!check.data || (check.data.observaciones ?? null) !== null) return null
-    cosecha = { fechaCosecha: check.data.fechaCosecha, cantidad: check.data.cantidad, unidadMedidaId: check.data.unidadMedidaId }
+    if (Object.keys(candidate).some(key => !['fechaCosecha', 'cantidad', 'unidadMedidaId', 'detalleAdicional'].includes(key))) return null
+    const check = validateProductionInput({ fechaCosecha: candidate.fechaCosecha, cantidad: candidate.cantidad,
+      unidadMedidaId: candidate.unidadMedidaId, cicloCultivoId })
+    if (!check.data) return null
+    let detalleAdicional: { cantidad: string; unidadMedidaId: number } | undefined
+    if (candidate.detalleAdicional !== undefined) {
+      const raw = candidate.detalleAdicional
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+      const additional = raw as Record<string, unknown>
+      if (Object.keys(additional).some(key => !['cantidad', 'unidadMedidaId'].includes(key)) ||
+        additional.unidadMedidaId === check.data.unidadMedidaId) return null
+      const validated = validateProductionInput({ fechaCosecha: check.data.fechaCosecha,
+        cantidad: additional.cantidad, unidadMedidaId: additional.unidadMedidaId, cicloCultivoId })
+      if (!validated.data) return null
+      detalleAdicional = { cantidad: validated.data.cantidad, unidadMedidaId: validated.data.unidadMedidaId }
+    }
+    cosecha = { fechaCosecha: check.data.fechaCosecha, cantidad: check.data.cantidad,
+      unidadMedidaId: check.data.unidadMedidaId, ...(detalleAdicional ? { detalleAdicional } : {}) }
   }
   let venta: MovimientoVisita['venta']
   if (row.venta) {
@@ -69,11 +84,24 @@ export async function registrarMovimientoVisita(tx: Prisma.TransactionClient, pa
     if (!unit || !isOfficialHarvestUnit(unit) || harvestQuantityError(entry.cantidad, harvestUnitKind(unit))) {
       rejected('La unidad o cantidad de cosecha no es válida.')
     }
+    const details = [{ cantidadTotal: new Prisma.Decimal(entry.cantidad), unidadMedidaId: entry.unidadMedidaId }]
+    if (entry.detalleAdicional) {
+      const extra = entry.detalleAdicional
+      const extraUnit = await tx.unidadMedida.findUnique({ where: { id: extra.unidadMedidaId }, select: {
+        id: true, codigo: true, nombre: true, abreviatura: true, activo: true,
+      } })
+      if (!extraUnit || !isOfficialHarvestUnit(extraUnit) ||
+        harvestUnitKind(extraUnit) === harvestUnitKind(unit) ||
+        harvestQuantityError(extra.cantidad, harvestUnitKind(extraUnit))) {
+        rejected('La medida complementaria no corresponde a unidades o kilogramos válidos.')
+      }
+      details.push({ cantidadTotal: new Prisma.Decimal(extra.cantidad), unidadMedidaId: extra.unidadMedidaId })
+    }
     const date = new Date(`${entry.fechaCosecha}T00:00:00Z`)
     const harvest = await tx.registroProduccion.create({ data: {
       cicloCultivoId, fechaInicioPeriodo: date, fechaFinPeriodo: date,
       visitaOrigenId: visitaId, observaciones: `Registrada en visita técnica #${visitaId}`,
-      detalles: { create: { cantidadTotal: new Prisma.Decimal(entry.cantidad), unidadMedidaId: entry.unidadMedidaId } },
+      detalles: { create: details },
     } })
     productionId = harvest.id
     await tx.bitacora.create({ data: { usuarioId, entidad: 'registro_produccion', registroId: String(harvest.id),

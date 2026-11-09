@@ -24,6 +24,7 @@ export type CropCapture = {
   cicloCultivoId?: number
   observacionesCultivo?: string
   movimientoReal?: MovimientoVisita
+  aplicaciones?: number[] // Insumos aplicados a la evaluación; opcional para capturas antiguas.
   name: string; stage: string; quality: string; plants: number | null
   findings: { type: 'plaga' | 'enfermedad'; name: string; damage: string }[]
   production: boolean; origenProduccion?: 'ESTIMACION_VISITA' // Capturas antiguas no incluyen el marcador.
