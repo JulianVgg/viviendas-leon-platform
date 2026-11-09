@@ -7,6 +7,7 @@ import { CalendarDays, ChevronLeft, ChevronRight, Clock3, CloudSun, ImageOff, Le
 import Dialog from '@/components/ui/Dialog'
 import Button from '@/components/ui/Button'
 import type { VisitListItem } from '@/features/visits/services/visitService'
+import { mensajeErrorSincronizacion } from '@/features/visits/services/visitSyncFeedback'
 
 const dateLabel = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('es-GT', { day: 'numeric', month: 'long', year: 'numeric' })
 const filled = (value?: string | number | null) => value !== undefined && value !== null && String(value).trim() !== ''
@@ -54,6 +55,11 @@ export default function VisitDetailDialog({ visit, onClose, extra }: { visit: Vi
     description={visit ? `${visit.community} · ${dateLabel(visit.date)}` : ''} className="visit-detail-modal">
     {visit && <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3"><span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${statusColor}`}>{statusLabel}</span><span className="text-xs text-slate-500">{visit.id ? `Visita #${visit.id}` : 'Registro local'}</span></div>
+      {visit.syncStatus === 'failed' && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-800 dark:bg-red-500/10 dark:text-red-200">
+        <p className="font-semibold">La visita no se pudo sincronizar.</p>
+        <p className="mt-1">{mensajeErrorSincronizacion(visit.syncError)}</p>
+        <p className="mt-1 text-xs">El registro permanece en este dispositivo. Puedes reintentar desde Historial de visitas cuando haya conexión.</p>
+      </div>}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Info icon={<CalendarDays size={17}/>} label="Fecha" value={dateLabel(visit.date)}/>
         <Info icon={<MapPin size={17}/>} label="Comunidad" value={visit.community}/>
@@ -97,7 +103,28 @@ export default function VisitDetailDialog({ visit, onClose, extra }: { visit: Vi
               {canReadHarvest && !pending && <Link to="/gestion-agricola/produccion" className="underline text-brand-600">Consultar Producción</Link>}
             </div>}
             {filled(crop.observacionesCultivo) && <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">{crop.observacionesCultivo}</p>}
-            {crop.findings?.length > 0 && <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">{crop.findings.length} hallazgo(s)</p>}
+            {crop.findings?.length > 0 && <div className="mt-3 rounded-lg border border-amber-100 p-3 text-xs dark:border-amber-900">
+              <p className="font-semibold text-slate-800 dark:text-slate-100">Plagas y enfermedades</p>
+              <ul className="mt-2 space-y-1 text-slate-600 dark:text-slate-300">{crop.findings.map((f, pos) =>
+                <li key={`${f.type}-${f.name}-${pos}`}>{f.type === 'plaga' ? 'Plaga' : 'Enfermedad'}: {f.name}{f.damage ? ` · Daño ${f.damage}%` : ''}</li>
+              )}</ul>
+            </div>}
+            {(() => {
+              const tratamientos = (visit.treatments ?? []).filter(item => item.cicloCultivoId === crop.cicloCultivoId)
+              if (!tratamientos.length) return pending && crop.aplicaciones?.length ?
+                <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">{crop.aplicaciones.length} producto(s) pendientes de sincronizar.</p> : null
+              return <div className="mt-3 rounded-lg border border-slate-200 p-3 text-xs dark:border-slate-700">
+                <p className="font-semibold text-slate-800 dark:text-slate-100">Abonos y tratamientos aplicados</p>
+                <ul className="mt-2 space-y-2 text-slate-600 dark:text-slate-300">{tratamientos.map((item, pos) =>
+                  <li key={`${item.insumoId}-${pos}`}>
+                    <span className="font-medium text-slate-800 dark:text-slate-100">{item.nombre}</span> · {item.categoria}
+                    {item.cantidad !== null && ` · ${item.cantidad}${item.unidad ? ` ${item.unidad}` : ''}`}
+                    {item.fecha && ` · ${dateLabel(item.fecha)}`}
+                    {item.observaciones && <p className="mt-1 whitespace-pre-wrap">{item.observaciones}</p>}
+                  </li>
+                )}</ul>
+              </div>
+            })()}
           </div>)}</div></Section>}
       {commitments.length > 0 && <Section title="Compromisos" icon={<ClipboardCheck size={17}/> }><div className="grid gap-2 sm:grid-cols-2">{commitments.map((item,i) => <div key={item.id ?? i} className="rounded-xl bg-slate-50 p-3.5 dark:bg-slate-800/70"><div className="flex flex-wrap items-center gap-2 text-xs text-slate-500"><span className="font-semibold">{item.status === 'CUMPLIDO' ? 'Cumplido' : item.status === 'NO_CUMPLIDO' ? 'No cumplido' : 'Pendiente'}</span>{item.due && <span>· {dateLabel(item.due)}</span>}</div><p className="mt-1.5 text-sm text-slate-800 dark:text-slate-100">{item.text}</p></div>)}</div></Section>}
       {Boolean(visit.reprogramaciones?.length) && <Section title="Reprogramaciones" icon={<History size={17}/> }><ol className="space-y-2">{visit.reprogramaciones?.map(item => <li key={item.id} className="flex flex-wrap items-center gap-2 text-sm text-slate-700 dark:text-slate-200"><span>{item.oldDate ? dateLabel(item.oldDate) : '—'} → {dateLabel(item.newDate)}</span>{item.reason && <span className="text-slate-500">· {item.reason}</span>}</li>)}</ol></Section>}

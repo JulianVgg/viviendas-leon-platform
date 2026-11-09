@@ -1,4 +1,5 @@
 import { parseVisitTreatmentIds } from './visit-treatment-rules.js'
+import { tratamientosPorVisita, type TratamientoVisita } from './visit-treatment-history.js'
 import { createHash } from 'node:crypto'
 import { Prisma } from '../../generated/prisma/client.js'
 import { registrarMovimientoVisita, validarMovimientoVisita } from './visit-economics.js'
@@ -170,7 +171,7 @@ function serialize(row: {
   reprogramaciones?: { id: number; fechaAnterior: Date; fechaNueva: Date; usuarioId: number; motivo: string | null; creadoEn: Date }[];
   usuarioResponsable: { nombre: string; apellido: string | null };
   familia: { id: number; nombreReferencia: string; comunidad: { nombre: string } };
-}, captura: { operation_id: string; datos: unknown } | null, evidences: { id: number; name: string }[]) {
+}, captura: { operation_id: string; datos: unknown } | null, evidences: { id: number; name: string }[], treatments: TratamientoVisita[] = []) {
   return {
     id: row.id, operationId: captura?.operation_id ?? null,
     reprogramaciones: (row.reprogramaciones ?? []).map(h => ({ id: h.id, oldDate: h.fechaAnterior.toISOString().slice(0,10), newDate: h.fechaNueva.toISOString().slice(0,10), actorId: h.usuarioId, reason: h.motivo, at: h.creadoEn.toISOString() })),
@@ -178,7 +179,7 @@ function serialize(row: {
     responsibleUserId: row.usuarioResponsableId,
     responsibleName: [row.usuarioResponsable.nombre, row.usuarioResponsable.apellido].filter(Boolean).join(' '),
     familyId: row.familia.id, familyName: row.familia.nombreReferencia,
-    community: row.familia.comunidad.nombre, capture: marcarEstimacionesVisita(captura?.datos ?? null),
+    community: row.familia.comunidad.nombre, capture: marcarEstimacionesVisita(captura?.datos ?? null), treatments,
     evidences: evidences.map(item => ({ ...item, url: `/api/v1/visitas/${row.id}/evidencias/${item.id}` })),
   }
 }
@@ -213,8 +214,21 @@ visitsRouter.get('/', async (req: Request, res: Response) => {
     }) : []
     const byEvidence = new Map<number, { id: number; name: string }[]>()
     for (const e of evidenceRows) byEvidence.set(e.visitaId, [...(byEvidence.get(e.visitaId) ?? []), { id: e.evidencia.id, name: e.evidencia.nombreArchivo }])
+    // CIR-18: resolver nombres desde las relaciones normalizadas, incluso si el
+    // insumo fue desactivado después de la visita. Nunca consultar visitas ajenas.
+    const treatmentRows = rows.length ? await prisma.tratamientoAplicado.findMany({
+      where: { evaluacionCultivo: { visitaId: { in: rows.map(row => row.id) } } },
+      select: {
+        insumoId: true, fechaAplicacion: true, cantidad: true, observaciones: true,
+        evaluacionCultivo: { select: { visitaId: true, cicloCultivoId: true } },
+        insumo: { select: { nombre: true, categoriaInsumo: { select: { nombre: true } } } },
+        unidadMedida: { select: { abreviatura: true, nombre: true } },
+      },
+      orderBy: { id: 'asc' },
+    }) : []
+    const byTreatments = tratamientosPorVisita(treatmentRows)
     res.setHeader('Cache-Control','no-store')
-    res.json({ data: rows.map(row => serialize(row, byVisit.get(row.id) ?? null, byEvidence.get(row.id) ?? [])) })
+    res.json({ data: rows.map(row => serialize(row, byVisit.get(row.id) ?? null, byEvidence.get(row.id) ?? [], byTreatments.get(row.id) ?? [])) })
   } catch (error) { console.error('Error consultando visitas:',error); res.status(503).json({ error: 'No se pudieron consultar las visitas.' }) }
 })
 
