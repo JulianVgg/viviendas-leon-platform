@@ -1,0 +1,21 @@
+FROM node:24-bookworm-slim
+
+WORKDIR /app
+
+# Prisma CLI needs OpenSSL in Debian-based Linux images.
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# The npm workspaces and lockfile are at the repository root.
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+RUN npm ci
+
+COPY apps/api apps/api
+RUN cd apps/api && npx prisma generate --config prisma7.config.ts
+RUN npm run build -w @viviendas-leon/api
+
+ENV NODE_ENV=production
+EXPOSE 3000
+CMD ["node", "apps/api/dist/server.js"]
