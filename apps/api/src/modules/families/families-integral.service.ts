@@ -32,9 +32,12 @@ function serializeRecord(
   version: string,
   memberVersions: Map<number, string>,
   programVersions: Map<number, string>,
+  photo?: { foto_ruta: string | null; foto_actualizada_en: Date | null },
 ): IntegralFamilyRecord {
   return {
     ...record,
+    tieneFoto: Boolean(photo?.foto_ruta),
+    fotoUrl: photo?.foto_ruta ? `/api/v1/familias/${record.id}/foto?v=${photo.foto_actualizada_en?.getTime() ?? 0}` : null,
     version,
     fechaIngreso: record.fechaIngreso?.toISOString() ?? null,
     integrantes: record.integrantes.map((member) => ({ ...member, version: memberVersions.get(member.id) ?? '', fechaNacimiento: member.fechaNacimiento?.toISOString() ?? null,
@@ -65,6 +68,7 @@ export async function findIntegralFamily(id: number): Promise<IntegralFamilyReco
     const record = await transaction.familia.findUnique({ where: { id }, select: recordSelect })
     if (!record) return null
     const familyVersions = await transaction.$queryRaw<Array<{ version: string }>>`SELECT xmin::text AS version FROM familia WHERE id = ${id}`
+    const photos = await transaction.$queryRaw<Array<{ foto_ruta: string | null; foto_actualizada_en: Date | null }>>`SELECT foto_ruta, foto_actualizada_en FROM familia WHERE id = ${id}`
     const memberVersions = record.integrantes.length
       ? await transaction.$queryRaw<Array<{ id: number; version: string }>>(Prisma.sql`SELECT id, xmin::text AS version FROM integrante_familia WHERE familia_id = ${id}`)
       : []
@@ -73,7 +77,7 @@ export async function findIntegralFamily(id: number): Promise<IntegralFamilyReco
       : []
     return serializeRecord(record, familyVersions[0].version,
       new Map(memberVersions.map((item) => [item.id, item.version])),
-      new Map(programVersions.map((item) => [item.id, item.version])))
+      new Map(programVersions.map((item) => [item.id, item.version])), photos[0])
   }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead })
 }
 

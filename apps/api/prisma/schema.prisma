@@ -49,6 +49,9 @@ model Familia {
   observaciones    String?
   latitud          Float?    @db.DoublePrecision
   longitud         Float?    @db.DoublePrecision
+  fotoRuta         String?   @map("foto_ruta")
+  fotoMime         String?   @map("foto_mime")
+  fotoActualizadaEn DateTime? @map("foto_actualizada_en")
 
   comunidad Comunidad @relation(fields: [comunidadId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 

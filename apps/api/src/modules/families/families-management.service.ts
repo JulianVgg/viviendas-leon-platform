@@ -104,7 +104,7 @@ export async function createFamilyMember(familyId: number, input: FamilyMemberCr
   const requestHash = createHash('sha256').update(JSON.stringify({ familyId, input })).digest('hex')
   return getPrismaClient().$transaction(async (transaction) => {
     await lockFamily(transaction, familyId)
-    await transaction.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${idempotencyKey}, 0))`
+    await transaction.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${idempotencyKey}, 0)) IS NULL AS locked`
     const description = `idempotency:${idempotencyKey}`
     const existing = await transaction.bitacora.findFirst({
       where: { usuarioId: userId, entidad: 'integrante_familia', accion: 'CREATE', descripcion: description },

@@ -126,3 +126,32 @@ export async function fetchFamilies(
 
   return response.json() as Promise<FamilyListResponse>
 }
+
+export type FamilyBatchChange = {
+  version: string
+  changes: Record<string, string | number | null>
+  programs: Array<
+    | { action: 'create'; input: FamilyParticipationCreateInput }
+    | { action: 'update'; id: number; input: FamilyParticipationUpdateInput }
+  >
+}
+
+export function saveFamilyBatch(id: number, input: FamilyBatchChange, idempotencyKey: string) {
+  return requestData<IntegralFamilyRecord>(`v1/familias/${id}/expediente-completo`, {
+    method: 'PATCH', headers: { 'Idempotency-Key': idempotencyKey }, body: JSON.stringify(input),
+  })
+}
+
+export async function saveFamilyPhoto(id: number, file: File) {
+  const base = API_BASE_URL.endsWith('/') ? API_BASE_URL : `${API_BASE_URL}/`
+  const response = await fetch(new URL(`v1/familias/${id}/foto`, new URL(base, window.location.origin)), {
+    method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': file.type }, body: file,
+  })
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) throw new FamilyApiError(payload?.error?.message ?? 'No se pudo guardar la fotografía.', response.status)
+  return payload.data as { tieneFoto: boolean; fotoUrl: string }
+}
+
+export async function deleteFamilyPhoto(id: number) {
+  return requestData<{ tieneFoto: boolean; fotoUrl: null }>(`v1/familias/${id}/foto`, { method: 'DELETE' })
+}

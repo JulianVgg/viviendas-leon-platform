@@ -26,6 +26,8 @@ export type IntegralFamilyInput = FamilyCreateInput & {
 export type IntegralFamilyRecord = {
   id: number
   version: string
+  tieneFoto: boolean
+  fotoUrl: string | null
   nombreReferencia: string
   fechaIngreso: string | null
   estado: string

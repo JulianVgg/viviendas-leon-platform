@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import '@/features/visits/visits.css'
 import { Link, useNavigate } from 'react-router'
 import PageHeader from '@/components/common/PageHeader'
 import PageMeta from '@/components/common/PageMeta'
@@ -36,7 +37,7 @@ export default function FamilyCreatePage() {
     return () => controller.abort()
   }, [requestVersion])
 
-  return <>
+  return <div className="visits-enter">
     <PageMeta title="Registrar familia | Viviendas León Guatemala" description="Registro de una familia beneficiaria." />
     <PageHeader title="Registrar familia" description="" actions={<Link to="/familias" className="layout-focus inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-theme-xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">Volver al listado</Link>} />
     {loading && <Card><CardBody><LoadingState label="Cargando comunidades..." /></CardBody></Card>}
@@ -47,9 +48,9 @@ export default function FamilyCreatePage() {
     {!loading && !error && <>
       {!communities.length && <Alert variant="warning" title="No hay comunidades disponibles">Se requiere una comunidad activa cuyo municipio también esté activo para registrar una familia.</Alert>}
       <div className="mt-5 min-w-0">
-        <FamilyWizard communities={communities} onCreated={(family) => navigate(`/familias/${family.id}`)} />
+        <FamilyWizard communities={communities} onCreated={(family, photoWarning) => navigate(photoWarning ? `/familias/${family.id}/editar` : `/familias/${family.id}`, { state: photoWarning ? { photoWarning } : undefined })} />
       </div>
     </>}
     {!loading && (error || !communities.length) && <Button className="mt-4" variant="secondary" onClick={() => navigate('/familias')}>Volver al listado</Button>}
-  </>
+  </div>
 }
