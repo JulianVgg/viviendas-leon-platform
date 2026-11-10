@@ -85,9 +85,8 @@ export const navigationGroups: { id: string; name: string; items: NavigationItem
         { id: 'my-agenda', name: 'Mi agenda', path: '/mi-agenda', icon: icons.history, exact: true },
       ] },
       { id: 'families', name: 'Familias y beneficiarios', path: '/familias', icon: icons.families, roles: ['fieldWorker', 'coordination'], children: [
+        { id: 'families-create', name: 'Registrar familia', path: '/familias/nueva', icon: icons.familyCreate, exact: true },
         { id: 'families-list', name: 'Listado de familias', path: '/familias', icon: icons.familyList, exact: true },
-        { id: 'families-create', name: 'Registrar familias', path: '/familias/nueva', icon: icons.familyCreate, exact: true },
-        { id: 'families-edit', name: 'Editar familias', path: '/familias/editar', icon: icons.familyEdit, exact: true },
       ] },
       { id: 'agriculture', name: 'Gestión agrícola', path: '/gestion-agricola', icon: icons.agriculture, roles: ['fieldWorker', 'coordination'], children: [
         { id: 'gardens', name: 'Huertos', path: '/gestion-agricola/huertos', icon: icons.gardens },

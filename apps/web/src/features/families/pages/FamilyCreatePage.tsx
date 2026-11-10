@@ -38,7 +38,7 @@ export default function FamilyCreatePage() {
 
   return <>
     <PageMeta title="Registrar familia | Viviendas León Guatemala" description="Registro de una familia beneficiaria." />
-    <PageHeader title="Registrar familia" description="Registra la familia, sus integrantes y programas en cuatro pasos." actions={<Link to="/familias" className="layout-focus inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-theme-xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">Volver al listado</Link>} />
+    <PageHeader title="Registrar familia" description="" actions={<Link to="/familias" className="layout-focus inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-theme-xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">Volver al listado</Link>} />
     {loading && <Card><CardBody><LoadingState label="Cargando comunidades..." /></CardBody></Card>}
     {!loading && error && <Alert variant="error" title="No se pudieron cargar las comunidades">
       <p>{error}</p>

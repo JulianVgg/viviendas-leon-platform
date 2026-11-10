@@ -80,7 +80,6 @@ export default function FamilyProgramDialog({ familyId, open, participation, ava
   const existingProgramName = participation?.programa.nombre ?? ''
 
   return <Dialog open={open} title={participation ? 'Editar participación' : 'Asociar programa'}
-    description={`Expediente #${familyId}. Los cambios quedan registrados en la bitácora.`}
     onClose={() => { if (!saving) onClose() }}>
     <form onSubmit={(event) => void submit(event)} noValidate className="space-y-5">
       {error && <Alert variant="error" title="No se pudo guardar">{error}</Alert>}

@@ -3,6 +3,8 @@ import Dialog from '@/components/ui/Dialog'
 import Button from '@/components/ui/Button'
 import FormField, { formControlClassName } from '@/components/ui/FormField'
 import { createTraining, getTrainingCommunities, type Training, type TrainingCommunity } from '../services/trainingService'
+import { validateTrainingForm, type TrainingErrors } from '../services/trainingFormRules'
+import { onlyNameCharacters } from '@/features/families/services/familyFieldRules'
 
 const textAreaClass = `${formControlClassName} h-auto min-h-24 resize-y`
 const formatDate = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString('es-GT', { day: 'numeric', month: 'long', year: 'numeric' })
@@ -23,6 +25,7 @@ export default function ScheduleTrainingDialog({ date, onClose, onSaved }: {
   const [comunidades, setComunidades] = useState<TrainingCommunity[]>([])
   const [communityWarning, setCommunityWarning] = useState('')
   const [error, setError] = useState('')
+  const [fieldErrors, setFieldErrors] = useState<TrainingErrors>({})
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -31,7 +34,7 @@ export default function ScheduleTrainingDialog({ date, onClose, onSaved }: {
     setTema(''); setFecha(date); setDescripcion('')
     setHoraInicio(''); setHoraFin(''); setFacilitador('')
     setComunidadId(''); setObservaciones('')
-    setError(''); setCommunityWarning(''); setComunidades([])
+    setError(''); setFieldErrors({}); setCommunityWarning(''); setComunidades([])
     void getTrainingCommunities().then(items => {
       if (active) setComunidades(items)
     }).catch(() => {
@@ -42,10 +45,13 @@ export default function ScheduleTrainingDialog({ date, onClose, onSaved }: {
 
   const save = async () => {
     if (saving || !date) return
-    if (!tema.trim() || !fecha || fecha < new Intl.DateTimeFormat('sv-SE',{ timeZone:'America/Guatemala' }).format(new Date())) { setError('Selecciona una fecha vigente.'); return }
-    if (horaInicio && horaFin && horaFin <= horaInicio) {
-      setError('La hora de finalización debe ser posterior a la hora de inicio.'); return
-    }
+    const errors = validateTrainingForm(
+      { tema, fecha, descripcion, horaInicio, horaFin, facilitador, comunidadId, observaciones },
+      new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Guatemala' }).format(new Date()),
+      comunidades.map((item) => item.id),
+    )
+    setFieldErrors(errors)
+    if (Object.keys(errors).length) return
     setSaving(true)
     setError('')
     try {
@@ -73,34 +79,34 @@ export default function ScheduleTrainingDialog({ date, onClose, onSaved }: {
       </Button>
     </>}>
     <div className="space-y-4">
-      <FormField label="Tema de la capacitación" required>
-        <input value={tema} onChange={e => setTema(e.target.value)} maxLength={160} placeholder="Ej. Buenas prácticas agrícolas" className={formControlClassName} disabled={saving} />
+      <FormField label="Tema de la capacitación" required error={fieldErrors.tema}>
+        <input value={tema} onChange={e => { setTema(e.target.value); setFieldErrors(old => ({ ...old, tema: undefined })) }} maxLength={160} placeholder="Tema" className={formControlClassName} disabled={saving} />
       </FormField>
-      <FormField label="Descripción">
-        <textarea value={descripcion} onChange={e => setDescripcion(e.target.value)} maxLength={2000} rows={3} placeholder="¿Qué se impartirá?" className={textAreaClass} disabled={saving} />
+      <FormField label="Descripción" error={fieldErrors.descripcion}>
+        <textarea value={descripcion} onChange={e => setDescripcion(e.target.value)} maxLength={2000} rows={3} placeholder="" className={textAreaClass} disabled={saving} />
       </FormField>
       <div className="grid gap-4 sm:grid-cols-2">
-        <FormField label="Fecha" required>
-          <input type="date" value={fecha} min={new Intl.DateTimeFormat('sv-SE', {timeZone: 'America/Guatemala'}).format(new Date())} onChange={e => setFecha(e.target.value)} className={formControlClassName} disabled={saving} />
+        <FormField label="Fecha" required error={fieldErrors.fecha}>
+          <input type="date" value={fecha} min={new Intl.DateTimeFormat('sv-SE', {timeZone: 'America/Guatemala'}).format(new Date())} onChange={e => { setFecha(e.target.value); setFieldErrors(old => ({ ...old, fecha: undefined })) }} className={formControlClassName} disabled={saving} />
         </FormField>
-        <FormField label="Hora de inicio">
+        <FormField label="Hora de inicio" error={fieldErrors.horaInicio}>
           <input type="time" value={horaInicio} onChange={e => setHoraInicio(e.target.value)} className={formControlClassName} disabled={saving} />
         </FormField>
-        <FormField label="Hora de finalización">
+        <FormField label="Hora de finalización" error={fieldErrors.horaFin}>
           <input type="time" value={horaFin} onChange={e => setHoraFin(e.target.value)} className={formControlClassName} disabled={saving} />
         </FormField>
       </div>
-      <FormField label="Comunidad" hint="Opcional: selecciona la comunidad donde se impartirá.">
-        <select value={comunidadId} onChange={e => setComunidadId(e.target.value)} className={formControlClassName} disabled={saving}>
+      <FormField label="Comunidad" error={fieldErrors.comunidadId}>
+        <select value={comunidadId} onChange={e => { setComunidadId(e.target.value); setFieldErrors(old => ({ ...old, comunidadId: undefined })) }} className={formControlClassName} disabled={saving}>
           <option value="">Sin comunidad asignada</option>
           {comunidades.map(item => <option key={item.id} value={item.id}>{item.nombre} — {item.municipio.nombre}</option>)}
         </select>
       </FormField>
       {communityWarning && <p role="status" className="text-sm text-amber-700 dark:text-amber-300">{communityWarning}</p>}
-      <FormField label="Facilitador">
-        <input value={facilitador} onChange={e => setFacilitador(e.target.value)} maxLength={160} placeholder="Nombre de quien imparte" className={formControlClassName} disabled={saving} />
+      <FormField label="Facilitador" error={fieldErrors.facilitador}>
+        <input value={facilitador} onChange={e => { setFacilitador(onlyNameCharacters(e.target.value)); setFieldErrors(old => ({ ...old, facilitador: undefined })) }} maxLength={160} placeholder="Facilitador" className={formControlClassName} disabled={saving} />
       </FormField>
-      <FormField label="Observaciones">
+      <FormField label="Observaciones" error={fieldErrors.observaciones}>
         <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)} maxLength={2000} rows={2} className={textAreaClass} disabled={saving} />
       </FormField>
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">{error}</p>}

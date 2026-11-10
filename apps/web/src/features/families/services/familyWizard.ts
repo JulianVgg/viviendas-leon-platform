@@ -1,10 +1,11 @@
 import type { CommunityOption } from '../types/family'
+import { MAX_FAMILY_NAME, MAX_MEMBER_NAME, MAX_MEMBERS, MAX_NOTES, MAX_PROGRAMS, roleOptions, validName, validOtherRole, validPhone } from './familyFieldRules.ts'
 import type { FamilyProgramOption, FamilyWizardInput, IntegralFamilyInput, MemberDraft, ProgramDraft, WizardErrors } from '../types/familyIntegral'
 
 export const memberSexOptions: readonly string[] = ['Masculino', 'Femenino']
-export const memberRelationshipOptions: readonly string[] = ['Padre', 'Madre', 'Hijo', 'Hija', 'Abuela', 'Abuelo', 'Cuñado', 'Cuñada']
+export const memberRelationshipOptions: readonly string[] = roleOptions
 
-export const createMemberDraft = (localId: string): MemberDraft => ({ localId, nombreCompleto: '', fechaNacimiento: '', sexo: '', parentesco: '', telefono: '', observaciones: '' })
+export const createMemberDraft = (localId: string): MemberDraft => ({ localId, nombreCompleto: '', fechaNacimiento: '', sexo: '', parentesco: '', otroRol: '', telefono: '', observaciones: '' })
 export const createProgramDraft = (localId: string): ProgramDraft => ({ localId, programaId: '', fechaIngreso: '', fechaSalida: '', observaciones: '' })
 
 // Stable keys also identify errors, independent of a row's current array index.
@@ -39,23 +40,27 @@ export function validateWizardStep(step: number, draft: FamilyWizardInput, commu
     if (!validDate(value)) errors[field] = 'Introduce una fecha existente en formato YYYY-MM-DD.'
   }
   if (step === 0) {
-    if (!draft.nombreReferencia.trim() || draft.nombreReferencia.trim().length > 150) errors.nombreReferencia = 'Introduce un nombre de hasta 150 caracteres.'
+    if (!validName(draft.nombreReferencia, MAX_FAMILY_NAME)) errors.nombreReferencia = 'Usa entre 2 y 150 caracteres, solo letras y signos de nombre.'
     if (!communities.some(({ id }) => id === Number(draft.comunidadId))) errors.comunidadId = 'Selecciona una comunidad disponible.'
     checkDate('fechaIngreso', draft.fechaIngreso)
     if (!draft.fechaIngreso) errors.fechaIngreso = 'La fecha de ingreso es obligatoria.'
-    if (draft.observaciones.trim().length > 2000) errors.observaciones = 'Las observaciones admiten hasta 2000 caracteres.'
+    if (draft.observaciones.trim().length > MAX_NOTES) errors.observaciones = 'Las observaciones admiten hasta 2000 caracteres.'
   }
   if (step === 1) {
-    if (!draft.integrantes.length) errors.integrantes = 'Agrega al menos un integrante.'
+    if (!draft.integrantes.length || draft.integrantes.length > MAX_MEMBERS) errors.integrantes = `Agrega entre 1 y ${MAX_MEMBERS} integrantes.`
     draft.integrantes.forEach((row) => {
-      if (!row.nombreCompleto.trim()) errors[memberField(row.localId, 'nombreCompleto')] = 'El nombre completo es obligatorio.'
+      if (!validName(row.nombreCompleto, MAX_MEMBER_NAME)) errors[memberField(row.localId, 'nombreCompleto')] = 'Escribe un nombre válido de hasta 150 caracteres, sin números.'
       checkDate(memberField(row.localId, 'fechaNacimiento'), row.fechaNacimiento)
       if (!row.fechaNacimiento) errors[memberField(row.localId, 'fechaNacimiento')] = 'La fecha de nacimiento es obligatoria.'
+      if (validDate(row.fechaNacimiento) && row.fechaNacimiento > new Date().toISOString().slice(0, 10)) errors[memberField(row.localId, 'fechaNacimiento')] = 'La fecha de nacimiento no puede ser futura.'
       if (!memberSexOptions.includes(row.sexo)) errors[memberField(row.localId, 'sexo')] = 'Selecciona Masculino o Femenino.'
-      if (!memberRelationshipOptions.includes(row.parentesco)) errors[memberField(row.localId, 'parentesco')] = 'Selecciona un parentesco disponible.'
+      if (!memberRelationshipOptions.includes(row.parentesco)) errors[memberField(row.localId, 'parentesco')] = 'Selecciona un rol.'
+      if (row.parentesco === 'Otro' && !validOtherRole(row.otroRol)) errors[memberField(row.localId, 'otroRol')] = 'Especifica un rol de 2 a 60 caracteres, solo letras.'
+      if (!validPhone(row.telefono)) errors[memberField(row.localId, 'telefono')] = 'Usa un teléfono válido (mínimo 8 dígitos).'
     })
   }
   if (step === 2) {
+    if (draft.programas.length > MAX_PROGRAMS) errors.programas = `Se permiten hasta ${MAX_PROGRAMS} programas.`
     if (!options.length) errors.programas = 'No hay programas disponibles. Reintenta la consulta antes de continuar.'
     else if (!draft.programas.length) errors.programas = 'Selecciona al menos un programa.'
     const seen = new Set<number>()
@@ -66,6 +71,7 @@ export function validateWizardStep(step: number, draft: FamilyWizardInput, commu
       seen.add(id)
       checkDate(programField(row.localId, 'fechaIngreso'), row.fechaIngreso)
       checkDate(programField(row.localId, 'fechaSalida'), row.fechaSalida)
+      if (row.observaciones.trim().length > MAX_NOTES) errors[programField(row.localId, 'observaciones')] = 'Máximo 2000 caracteres.'
       if (row.fechaIngreso && row.fechaSalida && validDate(row.fechaIngreso) && validDate(row.fechaSalida) && row.fechaSalida < row.fechaIngreso) errors[programField(row.localId, 'fechaSalida')] = 'La salida no puede ser anterior al ingreso.'
     })
   }
@@ -79,7 +85,7 @@ export function buildIntegralPayload(draft: FamilyWizardInput): IntegralFamilyIn
     fechaIngreso: optional(draft.fechaIngreso), observaciones: optional(draft.observaciones),
     integrantes: draft.integrantes.map((row) => ({
       nombreCompleto: row.nombreCompleto.trim(), fechaNacimiento: optional(row.fechaNacimiento), sexo: optional(row.sexo),
-      parentesco: optional(row.parentesco), telefono: optional(row.telefono), observaciones: optional(row.observaciones),
+      parentesco: optional(row.parentesco === 'Otro' ? row.otroRol : row.parentesco), telefono: optional(row.telefono), observaciones: optional(row.observaciones),
     })),
     programas: draft.programas.map((row) => ({
       programaId: Number(row.programaId), fechaIngreso: optional(row.fechaIngreso), fechaSalida: optional(row.fechaSalida),

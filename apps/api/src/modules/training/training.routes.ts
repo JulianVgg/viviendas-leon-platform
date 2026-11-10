@@ -6,6 +6,7 @@ import { Router, raw } from 'express'
 import { getPrismaClient } from '../../config/prisma.js'
 import { requireAuth } from '../auth/auth.middleware.js'
 import { requirePermission } from '../auth/require-permission.middleware.js'
+import { officialCommunityFilter } from '../catalogs/official-communities.js'
 
 export const trainingRouter = Router()
 
@@ -124,6 +125,7 @@ trainingRouter.post('/', requirePermission('CAPACITACIONES_WRITE'), async (req, 
   const input = body as Record<string, unknown>
   const tema = typeof input.tema === 'string' ? input.tema.trim() : ''
   const fecha = typeof input.fecha === 'string' ? input.fecha : ''
+  const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Guatemala' }).format(new Date())
   const descripcion = optionalText(input.descripcion, 2000)
   const facilitadorNombre = optionalText(input.facilitadorNombre, 160)
   const observaciones = optionalText(input.observaciones, 2000)
@@ -132,8 +134,9 @@ trainingRouter.post('/', requirePermission('CAPACITACIONES_WRITE'), async (req, 
   const estado = input.estado === undefined ? 'PROGRAMADA' : input.estado
   const comunidadId = input.comunidadId == null || input.comunidadId === '' ? null : input.comunidadId
 
-  if (!tema || tema.length > 160 || !validDate(fecha) ||
+  if (tema.length < 2 || tema.length > 160 || !/[\p{L}]/u.test(tema) || /[\p{Cc}]/u.test(tema) || !validDate(fecha) || fecha < today ||
       descripcion === undefined || facilitadorNombre === undefined || observaciones === undefined ||
+      (facilitadorNombre && !/^[\p{L}\p{M} .\-'’]+$/u.test(facilitadorNombre)) ||
       horaInicio === undefined || horaFin === undefined ||
       (estado !== 'PROGRAMADA' && estado !== 'REALIZADA') ||
       (comunidadId !== null && (typeof comunidadId !== 'number' || !Number.isSafeInteger(comunidadId) || comunidadId <= 0)) ||
@@ -146,7 +149,7 @@ trainingRouter.post('/', requirePermission('CAPACITACIONES_WRITE'), async (req, 
     const prisma = getPrismaClient()
     if (comunidadId !== null) {
       const community = await prisma.comunidad.findFirst({
-        where: { id: Number(comunidadId), activo: true }, select: { id: true },
+        where: { id: Number(comunidadId), activo: true, ...officialCommunityFilter }, select: { id: true },
       })
       if (!community) {
         res.status(400).json({ error: { code: 'INVALID_COMMUNITY', message: 'Selecciona una comunidad activa.' } })
@@ -178,7 +181,7 @@ trainingRouter.post('/', requirePermission('CAPACITACIONES_WRITE'), async (req, 
 trainingRouter.get('/familias', async (_req, res, next) => {
   try {
     const rows = await getPrismaClient().familia.findMany({
-      where: { comunidad: { activo: true, municipio: { activo: true } } },
+      where: { comunidad: { activo: true, ...officialCommunityFilter } },
       select: { id: true, nombreReferencia: true, comunidad: { select: { id: true, nombre: true } } },
       orderBy: [{ comunidad: { nombre: 'asc' } }, { nombreReferencia: 'asc' }, { id: 'asc' }],
     })

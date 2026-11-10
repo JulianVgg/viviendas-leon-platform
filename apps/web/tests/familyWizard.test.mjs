@@ -41,15 +41,15 @@ test('member dates use stable error keys', () => {
 
 test('member sex and relationship accept only the requested required values', () => {
   assert.deepEqual(memberSexOptions, ['Masculino', 'Femenino'])
-  assert.deepEqual(memberRelationshipOptions, ['Padre', 'Madre', 'Hijo', 'Hija', 'Abuela', 'Abuelo', 'Cuñado', 'Cuñada'])
+  assert.deepEqual(memberRelationshipOptions, ['Madre', 'Padre', 'Hijo', 'Hija', 'Otro'])
   const draft = valid()
   for (const sexo of memberSexOptions) {
     for (const parentesco of memberRelationshipOptions) {
-      Object.assign(draft.integrantes[0], { sexo, parentesco })
+      Object.assign(draft.integrantes[0], { sexo, parentesco, ...(parentesco === 'Otro' ? { otroRol: 'Abuela' } : {}) })
       assert.deepEqual(validateWizardStep(1, draft, communities, options), {})
       const member = buildIntegralPayload(draft).integrantes[0]
       assert.equal(member.sexo, sexo || null)
-      assert.equal(member.parentesco, parentesco || null)
+      assert.equal(member.parentesco, parentesco === 'Otro' ? 'Abuela' : parentesco || null)
     }
   }
   Object.assign(draft.integrantes[0], { sexo: 'Unavailable', parentesco: 'Unavailable' })

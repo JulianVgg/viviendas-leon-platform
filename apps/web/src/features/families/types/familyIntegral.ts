@@ -37,7 +37,7 @@ export type IntegralFamilyRecord = FamilyDetail & {
   programas: FamilyParticipationRecord[]
 }
 
-export type MemberDraft = { localId: string } & { [K in keyof FamilyMemberInput]: string }
+export type MemberDraft = { localId: string; otroRol: string } & { [K in keyof FamilyMemberInput]: string }
 export type ProgramDraft = {
   localId: string
   programaId: string
