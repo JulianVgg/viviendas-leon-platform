@@ -19,7 +19,7 @@ test('CIR-06: rechaza siembras futuras o cultivos sin fecha de inicio', () => {
   assert.equal(isVisitCycleAvailable(cycle('2026-11-06', '2027-01-12'), 4, '2026-11-05'), false)
   assert.equal(isVisitCycleAvailable(cycle(null, null), 4, '2026-11-05'), false)
   assert.equal(isVisitCycleAvailable(cycle(null, '2026-11-06'), 4, '2026-11-05'), false)
-  assert.equal(isVisitCycleAvailable(cycle(null, '2026-11-05'), 4, '2026-11-05'), true)
+  assert.equal(isVisitCycleAvailable(cycle(null, '2026-11-05'), 4, '2026-11-05'), false)
 })
 
 test('CIR-06: respeta familia, huerto, cultivo, ciclo y fecha de finalización', () => {

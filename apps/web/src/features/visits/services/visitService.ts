@@ -2,7 +2,7 @@ import type { MovimientoVisita } from './visitEconomics'
 import type { ConfigRecordatorios } from '@/features/notifications/services/remindersService'
 import { getOfflineData, saveOfflineData } from '@/db/offlineDb'
 import { getConnectivitySnapshot } from '@/services/connectivity'
-import { listQueueOperations, processQueueOperation, queueOfflineOperation, recoverInterruptedOperations, type PendingOperation, type SyncAcknowledgment } from '@/services/pendingOperations'
+import { listQueueOperations, processQueueOperation, queueOfflineOperation, recoverInterruptedOperations, replaceFailedOperation, type PendingOperation, type SyncAcknowledgment } from '@/services/pendingOperations'
 
 export const VISIT_SYNC_KIND = 'visits.create.v1'
 export const MAX_VISIT_PHOTOS = 4
@@ -43,6 +43,8 @@ export type VisitCapture = {
   programacion?: { date: string; timeSlot?: VisitTimeSlot; operationId?: string }
 }
 type OwnedVisitCapture = { ownerId: number; familyName: string; community: string; capture: VisitCapture; photos?: VisitPhotoFile[] }
+export type VisitRecovery = { id: string; familyName: string; community: string; capture: VisitCapture; photos: VisitPhotoFile[] }
+
 export type VisitListItem = {
   id: number | null; operationId: string | null; date: string; status: string; responsibleName?: string; responsibleUserId?: number
   familyId: number; familyName: string; community: string
@@ -168,6 +170,50 @@ export async function saveVisitCapture(userId: number, familyName: string, commu
   if (getConnectivitySnapshot().status === 'connected') await syncPendingVisits(userId)
   const updated = (await listQueueOperations()).find(o => o.id === operation.id)
   return { status: updated?.status === 'synced' ? 'synced' : updated?.status === 'failed' ? 'failed' : 'pending', id: operation.id }
+}
+
+// Solo se puede modificar una operación rechazada antes de confirmarse en el servidor.
+// Los fallos de carga de fotografías pueden ocurrir después de registrar la visita:
+// en ese caso hay que reintentar, sin cambiar el contenido confirmado.
+export function canCorrectFailedVisit(visit: VisitListItem): boolean {
+  return visit.syncStatus === 'failed' && Boolean(visit.operationId) && visit.status === 'REALIZADA' &&
+    Boolean(visit.syncError) && /cosecha|venta|fecha|siembra|cultivo|ciclo|producci[oó]n|cantidad|unidad|moneda|aplicaci[oó]n/i.test(visit.syncError ?? '') &&
+    !/foto|evidencia|HTTP 5\d\d/i.test(visit.syncError ?? '')
+}
+
+export async function getFailedVisitCapture(userId: number, operationId: string): Promise<VisitRecovery> {
+  const operation = (await listQueueOperations()).find(op => op.id === operationId && op.kind === VISIT_SYNC_KIND &&
+    (op.payload as OwnedVisitCapture | undefined)?.ownerId === userId && op.status === 'failed')
+  if (!operation) throw new Error('Esta visita ya no está pendiente de corrección en este dispositivo.')
+  const payload = operation.payload as OwnedVisitCapture
+  if (!canCorrectFailedVisit({ id: null, operationId, date: payload.capture.date, status: payload.capture.status,
+    familyId: payload.capture.familyId, familyName: payload.familyName, community: payload.community, capture: payload.capture,
+    syncStatus: 'failed', syncError: operation.lastError })) {
+    throw new Error('Esta operación no admite edición. Reintenta la sincronización desde el historial.')
+  }
+  return { id: operationId, familyName: payload.familyName, community: payload.community,
+    capture: payload.capture, photos: payload.photos ?? [] }
+}
+
+export async function correctFailedVisitCapture(userId: number, previous: VisitRecovery,
+  capture: VisitCapture, photos: VisitPhotoFile[]): Promise<{ status: 'synced' | 'pending' | 'failed'; id: string }> {
+  if (capture.status !== 'REALIZADA' || capture.familyId !== previous.capture.familyId ||
+    capture.date !== previous.capture.date || capture.scheduledVisitId !== previous.capture.scheduledVisitId) {
+    throw new Error('La familia, fecha y cita original no pueden cambiarse durante la corrección.')
+  }
+  if (photos.length > MAX_VISIT_PHOTOS || photos.some(photo => photo.blob.type !== 'image/jpeg' || photo.blob.size > MAX_VISIT_PHOTO_BYTES)) {
+    throw new Error('Las fotos no cumplen los límites admitidos.')
+  }
+  await replaceFailedOperation<OwnedVisitCapture>(previous.id, VISIT_SYNC_KIND, original => {
+    if (original.ownerId !== userId || original.capture.familyId !== previous.capture.familyId ||
+      original.capture.date !== previous.capture.date || original.capture.scheduledVisitId !== previous.capture.scheduledVisitId) {
+      throw new Error('No puedes modificar una visita de otro usuario ni cambiar la cita original.')
+    }
+    return { ...original, capture, photos }
+  })
+  if (getConnectivitySnapshot().status === 'connected') await syncPendingVisits(userId)
+  const updated = (await listQueueOperations()).find(op => op.id === previous.id)
+  return { id: previous.id, status: updated?.status === 'synced' ? 'synced' : updated?.status === 'failed' ? 'failed' : 'pending' }
 }
 
 // La agenda consulta la tabla de seguimientos; IndexedDB mantiene copia para trabajo de campo.

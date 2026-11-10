@@ -14,6 +14,7 @@ import VisitDetailDialog from '@/features/visits/components/VisitDetailDialog'
 import WhatsAppReminderDialog from '@/features/visits/components/WhatsAppReminderDialog'
 import InvitacionDetalleDialog from '@/features/notifications/components/InvitacionDetalleDialog'
 import { obtenerMisInvitaciones, type DetalleInvitacion } from '@/features/notifications/services/invitationsService'
+import { addCivilDays } from '@/features/visits/services/visitPlanning'
 import { filtrarAgenda, filtrosIniciales, type FiltrosAgenda } from '@/features/visits/services/personalCalendarFilters'
 import ScheduleTrainingDialog from '@/features/training/components/ScheduleTrainingDialog'
 import { getTrainings, type Training } from '@/features/training/services/trainingService'
@@ -55,6 +56,8 @@ export default function VisitAgendaPage() {
   const [editing, setEditing] = useState<VisitFollowUp | null>(null)
   const [rescheduling, setRescheduling] = useState<VisitListItem | null>(null)
   const [slide, setSlide] = useState(0)
+  const [reminderView, setReminderView] = useState<'upcoming' | 'overdue' | 'undated' | 'all'>('upcoming')
+  const [reminderDays, setReminderDays] = useState(30)
   const [schedulingDate, setSchedulingDate] = useState<string | null>(null)
   const [expandedDay, setExpandedDay] = useState<string | null>(null)
   const carousel = useRef<HTMLDivElement>(null)
@@ -214,13 +217,24 @@ export default function VisitAgendaPage() {
     }))
     // La lista lateral utiliza los mismos filtros que el calendario mensual.
     const todos = [...scheduled, ...followUpReminders, ...institutional, ...trainings]
-    return todos.filter(item => filtrarAgenda([{
-      key: item.key, label: item.family, kind: item.type === 'institutional' ? 'institutional' : item.type,
-      visit: item.visit, followup: item.followup, invitation: item.invitation, training: item.training,
-    }], filtros, today).length > 0).sort((a,b) => a.sortDate.localeCompare(b.sortDate)).slice(0,24)
-  }, [items,followups,invitaciones,capacitaciones,today,filtros])
+    const limit = addCivilDays(today, reminderDays)
+    return todos.filter(item => {
+      if (!filtrarAgenda([{
+        key: item.key, label: item.family, kind: item.type === 'institutional' ? 'institutional' : item.type,
+        visit: item.visit, followup: item.followup, invitation: item.invitation, training: item.training,
+      }], filtros, today).length) return false
+      if (reminderView === 'all') return true
+      if (reminderView === 'undated') return !item.date
+      if (!item.date) return false
+      if (reminderView === 'overdue') return item.date < today
+      // Por defecto, mostrar exclusivamente actividades próximas; las vencidas
+      // permanecen disponibles en su propio filtro y en el calendario.
+      return item.date >= today && item.date <= limit
+    }).sort((a,b) => a.sortDate.localeCompare(b.sortDate))
+  }, [items,followups,invitaciones,capacitaciones,today,filtros,reminderView,reminderDays])
+  const visibleReminders = reminders.slice(0, 12)
   const pendingCount = followups.filter(f => f.status !== 'CUMPLIDO').length
-  useEffect(() => { setSlide(0) }, [filtros])
+  useEffect(() => { setSlide(0) }, [filtros, reminderView, reminderDays])
   const detailsFollowUps = selected ? followups.filter(f => f.familyId === selected.familyId && (f.status !== 'CUMPLIDO' || f.sourceVisitId === selected.id)) : []
   const move = (n: number) => setMonth(prev => new Date(prev.getFullYear(), prev.getMonth()+n,1))
   const scrollToReminder = (index: number) => {
@@ -327,7 +341,16 @@ export default function VisitAgendaPage() {
         </div></div>
       </section>
       <section className={`${card} self-start`} aria-label="Próximas visitas y recordatorios">
-        <header className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-800"><div><h2 className="font-semibold text-gray-900 dark:text-white">Próximas actividades</h2></div><Button type="button" variant="ghost" size="sm" onClick={()=>void refresh()} aria-label="Actualizar agenda" disabled={loading}><RefreshCw size={16}/></Button></header>
+        <header className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-800"><h2 className="font-semibold text-gray-900 dark:text-white">Mis actividades</h2><Button type="button" variant="ghost" size="sm" onClick={()=>void refresh()} aria-label="Actualizar agenda" disabled={loading}><RefreshCw size={16}/></Button></header>
+        <div className="grid gap-2 border-b border-gray-100 px-4 py-3 dark:border-gray-800">
+          <select aria-label="Mostrar actividades" className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white" value={reminderView} onChange={e=>setReminderView(e.target.value as typeof reminderView)}>
+            <option value="upcoming">Próximas</option><option value="overdue">Vencidas</option><option value="undated">Sin fecha</option><option value="all">Todas</option>
+          </select>
+          {reminderView === 'upcoming' && <select aria-label="Período de próximas actividades" className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white" value={reminderDays} onChange={e=>setReminderDays(Number(e.target.value))}>
+            <option value={7}>Próximos 7 días</option><option value={30}>Próximos 30 días</option><option value={90}>Próximos 90 días</option>
+          </select>}
+          <p className="text-xs text-gray-500 dark:text-gray-400">{reminders.length} actividad(es){reminders.length > visibleReminders.length ? ' · mostrando las primeras 12' : ''}</p>
+        </div>
         <div className="relative flex gap-2 p-4">
           <div ref={carousel} onScroll={event => {
             const root = event.currentTarget
@@ -337,7 +360,7 @@ export default function VisitAgendaPage() {
             setSlide(closest)
           }} className="custom-scrollbar max-h-[450px] min-w-0 flex-1 snap-y snap-mandatory space-y-3 overflow-y-auto overscroll-contain">
             {loading ? <p className="py-8 text-center text-sm text-gray-500">Cargando…</p> : reminders.length === 0 ? <div className="py-9 text-center text-sm text-gray-500"><CheckCheck className="mx-auto mb-2 text-emerald-500" size={27}/>Sin actividades para estos filtros.</div>
-            : reminders.map(item => <article key={item.key} data-reminder className="snap-start rounded-xl border border-gray-200 bg-gray-50/30 p-3 dark:border-gray-800 dark:bg-white/5">
+            : visibleReminders.map(item => <article key={item.key} data-reminder className="snap-start rounded-xl border border-gray-200 bg-gray-50/30 p-3 dark:border-gray-800 dark:bg-white/5">
               <div className="mb-2 flex items-center gap-2 text-xs font-semibold"><span className={`rounded-full px-2 py-1 ${item.type==='training' ? 'bg-cyan-50 text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-300' : item.type==='institutional' ? 'bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300' : item.type==='visit' ? item.date && item.date < today ? 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300' : 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300' : item.followup?.status === 'NO_CUMPLIDO' ? 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'}`}>{item.type==='training' ? 'Capacitación' : item.type==='institutional' ? 'Evento' : item.type==='visit' ? item.date && item.date < today ? 'Visita vencida' : 'Visita programada' : item.followup?.status === 'NO_CUMPLIDO' ? 'No cumplido' : 'Seguimiento'}</span><span className={item.date && item.date<today?'text-rose-600':'text-gray-500'}>{item.date ? dateLabel(item.date) : item.followup?.nextVisit ? 'Próxima visita' : 'Sin fecha'}{item.date && item.date<today?' · Vencido':''}</span></div>
               <p className="text-sm font-semibold text-gray-900 dark:text-white">{item.family}</p>
               <p className="mt-1 line-clamp-3 text-sm leading-5 text-gray-600 dark:text-gray-300">{item.description}</p>
@@ -352,10 +375,10 @@ export default function VisitAgendaPage() {
               </div>
             </article>)}
           </div>
-          {reminders.length > 1 && <div className="flex shrink-0 flex-col items-center justify-start gap-1.5 pt-2" aria-label="Ir a recordatorio">
-            {reminders.slice(0,16).map((item,index)=><button key={item.key} type="button" aria-label={`Ir al recordatorio ${index+1}`} aria-current={slide===index?'true':undefined}
+          {visibleReminders.length > 1 && <div className="flex shrink-0 flex-col items-center justify-start gap-1.5 pt-2" aria-label="Ir a recordatorio">
+            {visibleReminders.map((item,index)=><button key={item.key} type="button" aria-label={`Ir al recordatorio ${index+1}`} aria-current={slide===index?'true':undefined}
               onClick={()=>scrollToReminder(index)} className={`size-2.5 rounded-full transition-all ${slide===index?'bg-brand-500 ring-2 ring-brand-200':'bg-gray-300 hover:bg-brand-300 dark:bg-gray-600'}`} />)}
-            {reminders.length>16 && <span className="text-[10px] text-gray-500">+{reminders.length-16}</span>}
+
           </div>}
         </div>
         <footer className="flex flex-wrap gap-3 border-t border-gray-200 px-5 py-4 text-xs dark:border-gray-800"><ClipboardList size={16} className="text-amber-500"/><span className="text-gray-600 dark:text-gray-400">{pendingCount} compromiso(s) por revisar</span><Link to="/visitas/historial" className="ml-auto font-medium text-brand-600 hover:underline dark:text-brand-400">Ver historial →</Link></footer>
@@ -410,10 +433,12 @@ export default function VisitAgendaPage() {
         <button type="button" onClick={()=>openFollowUp(f)} className="mt-2 text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400">{canManageFollowUp(f) ? 'Editar seguimiento →' : 'Ver seguimiento →'}</button>
       </div>)}</div>}
       <div className="mt-3 flex flex-wrap gap-4">
-        {canManageVisit(selected) && selected.status === 'PROGRAMADA' && <button type="button" disabled={!selected.id} onClick={()=>openReschedule(selected)} className="text-xs font-semibold text-brand-600 hover:underline disabled:opacity-40 dark:text-brand-400">Cambiar fecha programada</button>}
-        {canManageVisit(selected) && selected.status === 'PROGRAMADA' && selected.date >= today && selected.id !== null && (!selected.syncStatus || selected.syncStatus === 'synced') && <button type="button" onClick={() => { setWhatsappVisit(selected); setSelected(null) }} className="text-xs font-semibold text-green-700 hover:underline dark:text-green-400">Enviar recordatorio por WhatsApp</button>}
-        {canManageVisit(selected) && selected.status === 'PROGRAMADA' && <button type="button" disabled={!selected.id || Boolean(selected.syncStatus && selected.syncStatus !== 'synced')} onClick={()=>requestDelete(selected)} className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 hover:underline disabled:cursor-not-allowed disabled:opacity-40 dark:text-red-400"><Trash2 size={14}/> Eliminar visita</button>}
-        {!institutionManager && visitOwner(selected) && !(selected.status === 'PROGRAMADA' && selected.date < today) && <Link className="text-xs font-semibold text-brand-600 hover:underline dark:text-brand-400" to={`/visitas/nueva?familia=${selected.familyId}${selected.id && selected.status === 'PROGRAMADA' ? `&programada=${selected.id}` : ''}`}>Registrar siguiente visita ↗</Link>}
+        {canManageVisit(selected) && selected.status === 'PROGRAMADA' && <Button type="button" variant="secondary" disabled={!selected.id} onClick={()=>openReschedule(selected)}>Cambiar fecha</Button>}
+        {canManageVisit(selected) && selected.status === 'PROGRAMADA' && selected.date >= today && selected.id !== null && (!selected.syncStatus || selected.syncStatus === 'synced') && <Button type="button" variant="secondary" onClick={() => { setWhatsappVisit(selected); setSelected(null) }}>Enviar recordatorio por WhatsApp</Button>}
+        {canManageVisit(selected) && selected.status === 'PROGRAMADA' && <Button type="button" variant="danger" disabled={!selected.id || Boolean(selected.syncStatus && selected.syncStatus !== 'synced')} onClick={()=>requestDelete(selected)}><Trash2 size={16}/> Eliminar visita</Button>}
+        {!institutionManager && visitOwner(selected) && selected.status === 'PROGRAMADA' && selected.id !== null && (!selected.syncStatus || selected.syncStatus === 'synced') && (selected.date === today
+          ? <Link className="inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-medium text-white shadow-theme-xs transition hover:bg-brand-600" to={`/visitas/nueva?familia=${selected.familyId}&fecha=${selected.date}&programada=${selected.id}`}>Registrar visita</Link>
+          : <Button type="button" disabled title={selected.date > today ? 'Disponible el día de la visita.' : 'Reprograma la visita vencida.'}>Registrar visita</Button>)}
       </div>
     </section> : undefined}/>
     <WhatsAppReminderDialog key={whatsappVisit?.id ?? 'recordatorio-whatsapp'} visit={whatsappVisit} onClose={() => setWhatsappVisit(null)} />

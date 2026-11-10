@@ -15,7 +15,6 @@ export default function RegisterSowingDialog({ huertoId, huerto, familia, onClos
   const [options, setOptions] = useState<CropOption[]>([])
   const [cultivoId, setCultivoId] = useState('')
   const [siembra, setSiembra] = useState('')
-  const [trasplante, setTrasplante] = useState('')
   const [plantas, setPlantas] = useState('')
   const [notas, setNotas] = useState('')
   const [loading, setLoading] = useState(true)
@@ -37,8 +36,7 @@ export default function RegisterSowingDialog({ huertoId, huerto, familia, onClos
     if (saving) return
     const next: Record<string, string> = {}
     if (!options.some(item => item.id === Number(cultivoId))) next.cultivoId = 'Selecciona un cultivo disponible.'
-    if (!siembra && !trasplante) next.fechaSiembra = 'Indica al menos una fecha.'
-    if (siembra && trasplante && trasplante < siembra) next.fechaTrasplante = 'El trasplante no puede preceder la siembra.'
+    if (!siembra) next.fechaSiembra = 'Indica la fecha de inicio de la siembra.'
     if (plantas && (!/^\d+$/.test(plantas) || Number(plantas) < 1 || Number(plantas) > 2147483647)) next.cantidadPlantas = 'Indica una cantidad entera positiva.'
     if (notas.length > 2000) next.observaciones = 'Máximo 2000 caracteres.'
     setFields(next)
@@ -47,7 +45,7 @@ export default function RegisterSowingDialog({ huertoId, huerto, familia, onClos
     try {
       const cycle = await createCycle({
         huertoId, cultivoId: Number(cultivoId), fechaSiembra: siembra || null,
-        fechaTrasplante: trasplante || null, cantidadPlantas: plantas ? Number(plantas) : null,
+        fechaTrasplante: null, cantidadPlantas: plantas ? Number(plantas) : null,
         observaciones: notas.trim() || null,
       })
       onSaved(cycle)
@@ -71,14 +69,9 @@ export default function RegisterSowingDialog({ huertoId, huerto, familia, onClos
           {!options.length && <p className="mt-2 text-sm text-slate-500">No hay cultivos activos en el catálogo.</p>}
           {canManageCatalog && <Link className="mt-2 inline-block text-sm text-brand-600 underline" to="/administracion/cultivos">Administrar catálogo de cultivos</Link>}
         </FormField>}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <FormField id="sowing-date" label="Fecha de siembra" error={fields.fechaSiembra}>
-          <input id="sowing-date" className={formControlClassName} type="date" value={siembra} onChange={e => setSiembra(e.target.value)} />
-        </FormField>
-        <FormField id="transplant-date" label="Fecha de trasplante" error={fields.fechaTrasplante}>
-          <input id="transplant-date" className={formControlClassName} type="date" value={trasplante} onChange={e => setTrasplante(e.target.value)} />
-        </FormField>
-      </div>
+      <FormField id="sowing-date" label="Fecha de inicio de la siembra" required error={fields.fechaSiembra}>
+        <input id="sowing-date" required className={formControlClassName} type="date" value={siembra} onChange={e => setSiembra(e.target.value)} />
+      </FormField>
       <FormField id="sowing-amount" label="Cantidad inicial de plantas" error={fields.cantidadPlantas}>
         <input id="sowing-amount" className={formControlClassName} type="number" min={1} max={2147483647} step={1} value={plantas} onChange={e => setPlantas(e.target.value)} />
       </FormField>

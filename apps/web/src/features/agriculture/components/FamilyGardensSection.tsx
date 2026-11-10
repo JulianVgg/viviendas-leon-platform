@@ -194,9 +194,8 @@ export default function FamilyGardensSection({ familyId }: { familyId: number })
                 <Link to={`/gestion-agricola/ciclos/${selectedCycle.id}`} className="layout-focus inline-flex min-h-9 items-center gap-1 rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-white dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">Detalle completo <ChevronRight aria-hidden="true" size={15} /></Link>
               </div>
             </div>
-            <dl className="mt-4 grid gap-3 border-t border-gray-200 pt-4 sm:grid-cols-3 dark:border-gray-800">
-              <div className="flex items-start gap-2"><CalendarDays aria-hidden="true" size={16} className="mt-0.5 shrink-0 text-gray-400" /><div><dt className="text-xs text-gray-500">Siembra</dt><dd className="mt-1 text-sm font-medium text-gray-800 dark:text-white">{formatAgriculturalDate(selectedCycle.fechaSiembra)}</dd></div></div>
-              <div className="flex items-start gap-2"><CalendarDays aria-hidden="true" size={16} className="mt-0.5 shrink-0 text-gray-400" /><div><dt className="text-xs text-gray-500">Trasplante</dt><dd className="mt-1 text-sm font-medium text-gray-800 dark:text-white">{formatAgriculturalDate(selectedCycle.fechaTrasplante)}</dd></div></div>
+            <dl className="mt-4 grid gap-3 border-t border-gray-200 pt-4 sm:grid-cols-2 dark:border-gray-800">
+              <div className="flex items-start gap-2"><CalendarDays aria-hidden="true" size={16} className="mt-0.5 shrink-0 text-gray-400" /><div><dt className="text-xs text-gray-500">Inicio de siembra</dt><dd className="mt-1 text-sm font-medium text-gray-800 dark:text-white">{formatAgriculturalDate(selectedCycle.fechaSiembra)}</dd></div></div>
               <div className="flex items-start gap-2"><Sprout aria-hidden="true" size={16} className="mt-0.5 shrink-0 text-gray-400" /><div><dt className="text-xs text-gray-500">Plantas iniciales</dt><dd className="mt-1 text-sm font-medium text-gray-800 dark:text-white">{selectedCycle.cantidadPlantas ?? 'Sin registro'}</dd></div></div>
             </dl>
             {selectedCycle.observaciones && <p className="mt-4 whitespace-pre-wrap break-words text-sm text-gray-600 dark:text-gray-300">{selectedCycle.observaciones}</p>}
