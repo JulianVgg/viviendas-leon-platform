@@ -50,7 +50,7 @@ export default function CicloDetallePage() {
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-semibold">{cycle.cultivo.nombre} · Ciclo #{cycle.id}</h2><Badge>{cycle.estado}</Badge></div>
         <p className="text-sm">Familia: <Link className="text-brand-600 underline" to={`/familias/${cycle.huerto.familiaId}?tab=gardens`}>{cycle.huerto.familia.nombreReferencia}</Link> · {cycle.huerto.familia.comunidad.nombre}</p>
         <p className="mt-1 text-sm">Huerto: {cycle.huerto.nombre || `Huerto #${cycle.huertoId}`}</p>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Siembra: {cycle.fechaSiembra || 'Sin fecha'} · Trasplante: {cycle.fechaTrasplante || 'Sin fecha'} · Plantas iniciales: {cycle.cantidadPlantas ?? 'No registradas'}</p>
+        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">Inicio de siembra: {cycle.fechaSiembra || 'Sin fecha'} · Plantas iniciales: {cycle.cantidadPlantas ?? 'No registradas'}</p>
         {cycle.observaciones && <p className="mt-2 whitespace-pre-wrap text-sm">Observaciones iniciales: {cycle.observaciones}</p>}
       </CardBody></Card>
       <CicloProduccionSection cicloId={cycle.id} />

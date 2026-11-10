@@ -90,7 +90,7 @@ productionRouter.post('/', requirePermission('PRODUCCION_WRITE'), async (req, re
     const result = await getPrismaClient().$transaction(async tx => {
       const cycle = await tx.cicloCultivo.findUnique({
         where: { id: input.cicloCultivoId },
-        select: { id: true, fechaSiembra: true, fechaTrasplante: true, fechaFin: true },
+        select: { id: true, fechaSiembra: true, fechaFin: true },
       })
       if (!cycle) return { status: 404 as const, code: 'CYCLE_NOT_FOUND', message: 'El ciclo de cultivo no existe.' }
       const unit = await tx.unidadMedida.findUnique({
@@ -103,10 +103,8 @@ productionRouter.post('/', requirePermission('PRODUCCION_WRITE'), async (req, re
       const quantityError = harvestQuantityError(input.cantidad, harvestUnitKind(unit))
       if (quantityError) return { status: 400 as const, code: 'VALIDATION_ERROR',
         message: 'Revisa la cantidad y la unidad de cosecha.', details: [{ field: 'cantidad', message: quantityError }] }
-      const dates = [cycle.fechaSiembra, cycle.fechaTrasplante].filter((value): value is Date => value !== null)
-      const lastPlantingDate = dates.map(day).sort().at(-1)
-      if (lastPlantingDate && input.fechaCosecha < lastPlantingDate) {
-        return { status: 400 as const, code: 'INVALID_HARVEST_DATE', message: 'La cosecha no puede ser anterior a la siembra o al trasplante.' }
+      if (cycle.fechaSiembra && input.fechaCosecha < day(cycle.fechaSiembra)) {
+        return { status: 400 as const, code: 'INVALID_HARVEST_DATE', message: 'La cosecha no puede ser anterior a la fecha de inicio de la siembra.' }
       }
       if (cycle.fechaFin && input.fechaCosecha > day(cycle.fechaFin)) {
         return { status: 400 as const, code: 'INVALID_HARVEST_DATE', message: 'La cosecha no puede ser posterior al cierre del ciclo.' }

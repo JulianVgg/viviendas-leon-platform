@@ -138,8 +138,7 @@ export default function ProduccionPage() {
     if (!selectedCycle) fields.cicloCultivoId = 'Selecciona un ciclo de cultivo.'
     if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) fields.fechaCosecha = 'Ingresa la fecha de cosecha.'
     if (selectedCycle && fecha) {
-      const start = [selectedCycle.fechaSiembra, selectedCycle.fechaTrasplante].filter((d): d is string => Boolean(d)).sort().at(-1)
-      if (start && fecha < start) fields.fechaCosecha = 'La cosecha no puede ser anterior a la siembra o trasplante.'
+      if (selectedCycle.fechaSiembra && fecha < selectedCycle.fechaSiembra) fields.fechaCosecha = 'La cosecha no puede ser anterior a la fecha de inicio de la siembra.'
       if (selectedCycle.fechaFin && fecha > selectedCycle.fechaFin) fields.fechaCosecha = 'La fecha supera el cierre del ciclo.'
     }
     if (!/^\d{1,9}(?:\.\d{1,3})?$/.test(cantidad) || Number(cantidad) <= 0) fields.cantidad = 'Ingresa una cantidad positiva, máximo tres decimales.'

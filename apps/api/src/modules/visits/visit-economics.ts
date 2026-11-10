@@ -65,7 +65,7 @@ export async function registrarMovimientoVisita(tx: Prisma.TransactionClient, pa
   const { movimiento, cicloCultivoId, familiaId, visitaId, fechaVisita, usuarioId } = params
   const today = guatemalaToday()
   const cycle = await tx.cicloCultivo.findUnique({ where: { id: cicloCultivoId }, select: {
-    huerto: { select: { familiaId: true } }, fechaSiembra: true, fechaTrasplante: true, fechaFin: true,
+    huerto: { select: { familiaId: true } }, fechaSiembra: true, fechaFin: true,
   } })
   if (!cycle || cycle.huerto.familiaId !== familiaId || !cycle.fechaSiembra) rejected('La siembra no corresponde a la familia visitada o no tiene fecha de inicio.')
   let productionId = movimiento.venta?.registroProduccionId
@@ -73,9 +73,6 @@ export async function registrarMovimientoVisita(tx: Prisma.TransactionClient, pa
     const entry = movimiento.cosecha
     if (entry.fechaCosecha > fechaVisita || entry.fechaCosecha > today || entry.fechaCosecha < day(cycle.fechaSiembra)) {
       rejected('La fecha de cosecha debe estar entre la siembra y la visita.')
-    }
-    if (cycle.fechaTrasplante && entry.fechaCosecha < day(cycle.fechaTrasplante)) {
-      rejected('La cosecha no puede ser anterior al trasplante registrado.')
     }
     if (cycle.fechaFin && entry.fechaCosecha > day(cycle.fechaFin)) rejected('La cosecha es posterior al cierre del ciclo.')
     const unit = await tx.unidadMedida.findUnique({ where: { id: entry.unidadMedidaId }, select: {

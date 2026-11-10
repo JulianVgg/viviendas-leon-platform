@@ -191,3 +191,16 @@ export async function recoverInterruptedOperations(
   }
   return recovered
 }
+
+// Permite corregir un registro rechazado sin generar un segundo UUID ni
+// perder sus evidencias. La comprobación de estado y el reemplazo son atómicos.
+export async function replaceFailedOperation<T>(id: string, kind: string,
+  replacePayload: (payload: T) => T): Promise<PendingOperation<T>> {
+  const updated = await updateOperation(id, current => {
+    if (current.kind !== kind || current.status !== 'failed') return null
+    return { ...current, payload: replacePayload(current.payload as T), status: 'pending',
+      attempts: 0, lastAttemptAt: undefined, lastError: undefined }
+  })
+  if (!updated) throw new Error('El registro ya se sincronizó o está siendo procesado. Actualiza el historial.')
+  return updated as PendingOperation<T>
+}

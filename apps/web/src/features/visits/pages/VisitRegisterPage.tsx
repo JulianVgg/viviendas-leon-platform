@@ -20,7 +20,7 @@ import { listProductionUnits, type ProductionUnit } from '@/features/agriculture
 import { listSaleCurrencies, type SaleCurrency } from '@/features/agriculture/services/salesService'
 import { canWriteProduction } from '@/features/auth/screenPermissions'
 import { isVisitCycleAvailable } from '@/features/visits/services/visitCycleAvailability'
-import { saveVisitCapture, todayInGuatemala, type VisitCapture, type CropCapture, type VisitPhotoFile, type VisitTimeSlot } from '@/features/visits/services/visitService'
+import { correctFailedVisitCapture, getFailedVisitCapture, saveVisitCapture, todayInGuatemala, type VisitRecovery, type VisitCapture, type CropCapture, type VisitPhotoFile, type VisitTimeSlot } from '@/features/visits/services/visitService'
 import SearchableSelect, { catalogOptions } from '@/features/visits/components/SearchableSelect'
 import { getVisitFollowUps, getVisitList, type VisitListItem, type VisitFollowUp, type FollowUpStatus } from '@/features/visits/services/visitService'
 import VisitEvidencePicker from '@/features/visits/components/VisitEvidencePicker'
@@ -34,6 +34,9 @@ type CropEntry = {
   priceQ: string; priceBasis: 'unidad' | 'kg'
   observacionesCultivo: string
   aplicaciones: number[]
+  // Conserva los valores económicos originales de una captura fallida hasta que el técnico elija editarlos.
+  originalMovement?: CropCapture['movimientoReal']
+  originalCrop?: CropCapture
 }
 type Commitment = { id: string; text: string; due: string; nextVisit: boolean; category: string }
 const steps = ['Información general', 'Evaluación de cultivos', 'Compromisos y observaciones']
@@ -83,6 +86,7 @@ export default function VisitRegisterPage() {
   const initialDate = searchParams.get('fecha')
   const initialFamily = searchParams.get('familia')
   const initialScheduled = searchParams.get('programada')
+  const recoverId = searchParams.get('recuperar')
   const [step, setStep] = useState(0)
   const [familyId, setFamilyId] = useState(initialFamily && /^\d+$/.test(initialFamily) ? initialFamily : '')
   const [date, setDate] = useState(initialDate && initialDate === todayLocal() ? initialDate : todayLocal)
@@ -123,9 +127,42 @@ export default function VisitRegisterPage() {
   const today = todayLocal()
   const overdueVisits = useMemo(() => scheduledVisits.filter(v => v.status === 'PROGRAMADA' && v.date < today && (!usuario || v.responsibleUserId === usuario.id)), [scheduledVisits, today, usuario])
   const [saving, setSaving] = useState(false)
+  const [recovery, setRecovery] = useState<VisitRecovery | null>(null)
+  const [recoveryError, setRecoveryError] = useState('')
   const [saved, setSaved] = useState<{ status: 'synced' | 'pending' | 'failed'; id: string; type: 'PROGRAMADA' | 'REALIZADA' } | null>(null)
   const [error, setError] = useState('')
   const cacheKey = usuario ? `visits:family-options:v1:user:${usuario.id}` : null
+
+  useEffect(() => {
+    if (!recoverId || !usuario) return
+    let active = true
+    getFailedVisitCapture(usuario.id, recoverId).then(data => {
+      if (!active) return
+      setRecovery(data)
+      setFamilyId(String(data.capture.familyId))
+      setDate(data.capture.date)
+      setTurno(data.capture.timeSlot ?? 'MANANA')
+      setWeather(data.capture.weather)
+      setScheduledVisitId(data.capture.scheduledVisitId ?? null)
+      setObservations(data.capture.observations)
+      setPhotos(data.photos)
+      setCommitments(data.capture.commitments.map(c => ({
+        id: c.id, text: c.text, due: c.due ?? '', nextVisit: c.nextVisit ?? !c.due, category: c.category,
+      })))
+      setReviewStates(Object.fromEntries(data.capture.reviews.map(r => [r.id, r.status])))
+      setCrops(data.capture.crops.map(c => ({
+        ...newCrop(), cicloCultivoId: c.cicloCultivoId ?? null, name: c.name, stage: c.stage,
+        quality: c.quality, observacionesCultivo: c.observacionesCultivo ?? '',
+        findings: c.findings.map(f => ({ ...f, id: crypto.randomUUID() })),
+        aplicaciones: c.aplicaciones ?? [], originalMovement: c.movimientoReal, originalCrop: c,
+      })))
+      setStep(1)
+      setRecoveryError('')
+    }).catch(cause => {
+      if (active) setRecoveryError(cause instanceof Error ? cause.message : 'No se pudo recuperar la visita.')
+    })
+    return () => { active = false }
+  }, [recoverId, usuario?.id])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -201,7 +238,7 @@ export default function VisitRegisterPage() {
 
   useEffect(() => {
     const controller = new AbortController()
-    setCrops([])
+    if (!recoverId) setCrops([])
     setAvailableCycles([])
     setCyclesWarning('')
     setCyclesLoading(Boolean(usuario && familyId))
@@ -280,10 +317,10 @@ export default function VisitRegisterPage() {
 
   // La agenda puede pasar ?programada=ID para seleccionar una cita directamente.
   useEffect(() => {
-    if (!initialScheduled || !/^\d+$/.test(initialScheduled) || scheduleLoading) return
+    if (recoverId || !initialScheduled || !/^\d+$/.test(initialScheduled) || scheduleLoading) return
     const match = scheduledVisits.find(visit => visit.id === Number(initialScheduled) && String(visit.familyId) === familyId)
     if (match?.id && match.date === todayLocal()) setScheduledVisitId(match.id)
-  }, [initialScheduled, familyId, scheduleLoading, scheduledVisits])
+  }, [initialScheduled, familyId, scheduleLoading, scheduledVisits, recoverId])
 
   useEffect(() => {
     if (!usuario) { setFollowUpLoading(false); return }
@@ -323,12 +360,14 @@ export default function VisitRegisterPage() {
 
   const save = async (type: 'PROGRAMADA' | 'REALIZADA') => {
     if (saving || saved) return
+    if (recoverId && !recovery) { setError('No se pudo recuperar el registro original. Regresa al historial.'); return }
+    if (recovery && type !== 'REALIZADA') { setError('Una visita recuperada solo puede guardarse como realizada.'); return }
     if (!usuario) { setError('Tu sesión no está disponible. Inicia sesión nuevamente.'); return }
     if (!selectedFamily || !date) { setError('Selecciona una familia y la fecha.'); setStep(0); return }
-    if (date !== todayLocal()) { setError('La visita debe registrarse con la fecha real de hoy. No se pueden registrar visitas con una fecha anterior o futura.'); setStep(0); return }
-    if (scheduledVisitId && familyScheduled.some(v=>v.id===scheduledVisitId && v.date !== date)) { setError('La visita programada tiene otra fecha. Reprográmala primero desde la agenda.'); setStep(0); return }
-    if (!scheduledVisitId && familyScheduled.length) { setError('Esta familia ya tiene una visita programada. Reprográmala desde el calendario.'); setStep(0); return }
-    if (scheduledVisitId && !familyScheduled.some(visit => visit.id === scheduledVisitId && visit.status === 'PROGRAMADA')) {
+    if (!recovery && date !== todayLocal()) { setError('La visita debe registrarse con la fecha real de hoy. No se pueden registrar visitas con una fecha anterior o futura.'); setStep(0); return }
+    if (!recovery && scheduledVisitId && familyScheduled.some(v=>v.id===scheduledVisitId && v.date !== date)) { setError('La visita programada tiene otra fecha. Reprográmala primero desde la agenda.'); setStep(0); return }
+    if (!recovery && !scheduledVisitId && familyScheduled.length) { setError('Esta familia ya tiene una visita programada. Reprográmala desde el calendario.'); setStep(0); return }
+    if (!recovery && scheduledVisitId && !familyScheduled.some(visit => visit.id === scheduledVisitId && visit.status === 'PROGRAMADA')) {
       setError('La cita programada seleccionada ya no está disponible. Actualiza la página y vuelve a elegir.'); setStep(0); return
     }
     if (cropsState.some(c => c.aplicaciones.length > 12 || new Set(c.aplicaciones).size !== c.aplicaciones.length ||
@@ -349,7 +388,7 @@ export default function VisitRegisterPage() {
     if (cropsState.some(c => c.observacionesCultivo.length > 2000)) {
       setError('Las observaciones del cultivo no pueden superar 2000 caracteres.'); setStep(1); return
     }
-    const invalido = cropsState.find(c => registroIniciado(c) && (!c.cicloCultivoId || validarProduccion(c)))
+    const invalido = cropsState.find(c => !c.originalMovement && registroIniciado(c) && (!c.cicloCultivoId || validarProduccion(c)))
     if (invalido) {
       setError(!invalido.cicloCultivoId ? 'Selecciona una siembra para registrar producción.' :
         validarProduccion(invalido) ?? 'Revisa los datos de producción.')
@@ -358,13 +397,13 @@ export default function VisitRegisterPage() {
     const unitId = salesUnits.find(unit => unit.codigo.toUpperCase() === 'UNIDAD' && unit.activo !== false)?.id ?? 0
     const kgId = salesUnits.find(unit => unit.codigo.toUpperCase() === 'KG' && unit.activo !== false)?.id ?? 0
     const monedaId = salesCurrencies.find(currency => currency.codigo.toUpperCase() === 'GTQ')?.id ?? 0
-    if (cropsState.some(registroIniciado) && (!monedaId || !unitId || !kgId)) {
+    if (cropsState.some(c => !c.originalMovement && registroIniciado(c)) && (!monedaId || !unitId || !kgId)) {
       setError('No se pudieron consultar las unidades o la moneda. Revisa la conexión.'); setStep(1); return
     }
     let movimientos: Map<string, NonNullable<ReturnType<typeof movimientoProduccion>>>
     try {
-      movimientos = new Map(cropsState.filter(registroIniciado).map(c => {
-        const movimiento = movimientoProduccion(c, { fecha: date, unidadId: unitId, kgId, monedaId })
+      movimientos = new Map(cropsState.filter(c => Boolean(c.originalMovement) || registroIniciado(c)).map(c => {
+        const movimiento = c.originalMovement ?? movimientoProduccion(c, { fecha: date, unidadId: unitId, kgId, monedaId })
         if (!movimiento || validarMovimientoParaVisita(movimiento, date)) throw Error('Revisa los datos de producción.')
         return [c.id, movimiento] as const
       }))
@@ -374,25 +413,38 @@ export default function VisitRegisterPage() {
     const cropsCapture: CropCapture[] = cropsState.map(c => ({
       ...(c.cicloCultivoId ? { cicloCultivoId: c.cicloCultivoId } : {}),
       ...(movimientos.get(c.id) ? { movimientoReal: movimientos.get(c.id) } : {}),
-      name: c.name, stage: c.stage, quality: c.quality, plants: null,
+      name: c.name, stage: c.stage, quality: c.quality, plants: c.originalCrop?.plants ?? null,
       ...(c.observacionesCultivo.trim() ? { observacionesCultivo: c.observacionesCultivo.trim() } : {}),
       findings: c.findings.map(f => ({ type: f.type, name: f.name, damage: f.damage })),
       ...(c.aplicaciones.length ? { aplicaciones: c.aplicaciones } : {}),
-      production: false,
-      perPlantUnits: null, perPlantKg: null, units: null, kg: null,
-      priceQ: null, priceUSD: null, priceBasis: c.priceBasis,
+      production: c.originalMovement ? (c.originalCrop?.production ?? false) : false,
+      perPlantUnits: c.originalMovement ? (c.originalCrop?.perPlantUnits ?? null) : null,
+      perPlantKg: c.originalMovement ? (c.originalCrop?.perPlantKg ?? null) : null,
+      units: c.originalMovement ? (c.originalCrop?.units ?? null) : null,
+      kg: c.originalMovement ? (c.originalCrop?.kg ?? null) : null,
+      priceQ: c.originalMovement ? (c.originalCrop?.priceQ ?? null) : null,
+      priceUSD: c.originalMovement ? (c.originalCrop?.priceUSD ?? null) : null, priceBasis: c.priceBasis,
     }))
     const payload: VisitCapture = {
-      familyId: Number(familyId), date, status: type, timeSlot: turno, capturedAt: type === 'REALIZADA' ? new Date().toISOString() : undefined, weather,
+      familyId: Number(familyId), date, status: type, timeSlot: turno,
+      capturedAt: type === 'REALIZADA' ? (recovery?.capture.capturedAt ?? new Date().toISOString()) : undefined, weather,
       ...(scheduledVisitId ? { scheduledVisitId } : {}),
-      checkIn: '', crops: cropsCapture, recommendation: '',
-      treatment: '', observations: observations.trim(),
+      ...(recovery?.capture.recordatorios ? { recordatorios: recovery.capture.recordatorios } : {}),
+      ...(recovery?.capture.programacion ? { programacion: recovery.capture.programacion } : {}),
+      checkIn: recovery?.capture.checkIn ?? '', crops: cropsCapture,
+      recommendation: recovery?.capture.recommendation ?? '',
+      treatment: recovery?.capture.treatment ?? '', observations: observations.trim(),
       commitments: commitments.map(c => ({ id: c.id, text: c.text.trim(), due: c.nextVisit ? null : c.due || null, nextVisit: c.nextVisit, category: c.category as 'Familia' | 'ONG' })),
-      reviews: type === 'REALIZADA' ? previousFollowUps.filter(f => reviewStates[f.id] && reviewStates[f.id] !== f.status).map(f => ({ id: f.id, status: reviewStates[f.id] })) : [],
+      reviews: type === 'REALIZADA' ? Array.from(new Map([
+        ...(recovery?.capture.reviews ?? []),
+        ...previousFollowUps.filter(f => reviewStates[f.id] && reviewStates[f.id] !== f.status).map(f => ({ id: f.id, status: reviewStates[f.id] })),
+      ].map(review => [review.id, review] as const)).values()) : [],
     }
     setError(''); setSaving(true)
     try {
-      const result = await saveVisitCapture(usuario.id, selectedFamily.nombreReferencia, selectedFamily.comunidad.nombre, payload, photos)
+      const result = recovery
+        ? await correctFailedVisitCapture(usuario.id, recovery, payload, photos)
+        : await saveVisitCapture(usuario.id, selectedFamily.nombreReferencia, selectedFamily.comunidad.nombre, payload, photos)
       setSaved({ ...result, type })
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : 'No se pudo guardar la visita en este dispositivo.')
@@ -403,7 +455,11 @@ export default function VisitRegisterPage() {
 
   return <>
     <PageMeta title="Registrar visita técnica | Viviendas León" description="Formulario guiado de evaluación agrícola." />
-    <PageHeader title="Registrar visita técnica" description="" actions={<Link to="/visitas/agenda" className="inline-flex min-h-11 items-center rounded-lg border border-slate-300 px-4 py-2.5 text-sm dark:border-slate-700">Volver a agenda</Link>} />
+    <PageHeader title={recovery ? 'Corregir visita técnica' : 'Registrar visita técnica'} description="" actions={<Link to="/visitas/agenda" className="inline-flex min-h-11 items-center rounded-lg border border-slate-300 px-4 py-2.5 text-sm dark:border-slate-700">Volver a agenda</Link>} />
+    {recoverId && <div role={recoveryError ? 'alert' : 'status'} className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
+      {recoveryError || (recovery ? `Editando la visita de ${recovery.familyName}. Se conservarán las fotografías y los movimientos originales hasta que elijas modificarlos.` : 'Recuperando visita guardada en este dispositivo…')}
+      {recoveryError && <Link to="/visitas/historial" className="ml-2 font-semibold underline">Volver al historial</Link>}
+    </div>}
     <nav aria-label="Pasos para registrar visita" className="mb-5 grid grid-cols-1 gap-2 sm:grid-cols-3">
       {steps.map((title, index) => <button key={title} type="button" onClick={() => { if (index > 0 && (!familyId || !date)) { setError('Selecciona una familia y fecha antes de cambiar de paso.'); return }; setStep(index); setError('');  }} aria-current={step === index ? 'step' : undefined} className={`rounded-xl border p-3 text-left text-xs font-medium transition-colors sm:text-sm ${step === index ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-500/10 dark:text-brand-300' : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300'}`}><span className="mb-1 block text-xs opacity-75">Paso {index + 1} de {steps.length}</span>{title}</button>)}
     </nav>
@@ -411,10 +467,10 @@ export default function VisitRegisterPage() {
       {step === 0 && <section className={card} aria-label="Información general">
         <h2 className="mb-1 text-lg font-semibold text-slate-900 dark:text-white">¿A quién visitamos?</h2>
         <div className="grid gap-4 md:grid-cols-2">
-          <SearchableSelect id="visit-family" label="Familia" required disabled={familiesLoading} value={familyId} onChange={value => { setFamilyId(value); setScheduledVisitId(null) }}
+          <SearchableSelect id="visit-family" label="Familia" required disabled={familiesLoading || Boolean(recovery)} value={familyId} onChange={value => { setFamilyId(value); setScheduledVisitId(null) }}
             placeholder={familiesLoading ? 'Cargando familias...' : 'Buscar familia o comunidad...'}
             options={familyOptions.map(f => ({ value: String(f.id), label: `${f.nombreReferencia} — ${f.comunidad.nombre}` }))} />
-          <FormField id="visit-date" label="Fecha de visita" required><input id="visit-date" type="date" className={input} value={date} min={today} max={today} onChange={e => setDate(e.target.value)}/></FormField>
+          <FormField id="visit-date" label="Fecha de visita" required><input id="visit-date" type="date" className={input} value={date} min={recovery ? date : today} max={recovery ? date : today} disabled={Boolean(recovery)} onChange={e => setDate(e.target.value)}/></FormField>
           {familyId && lastFamilyVisit && <div className="md:col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">Última visita: <strong>{lastFamilyVisit.date}</strong> · Próxima sugerida: <strong>{addCivilDays(lastFamilyVisit.date, DIAS_CICLO_VISITA)}</strong></div>}
           {familyId && overdueVisits.some(v => String(v.familyId) === familyId) && <div role="alert" className="md:col-span-2 rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800 dark:bg-rose-500/10 dark:text-rose-300">Esta familia tiene una visita programada vencida. <Link className="font-semibold underline" to="/visitas/agenda">Ir al calendario para reprogramarla</Link> antes de registrarla.</div>}
           {familyId && <div className="md:col-span-2 rounded-xl border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-700 dark:bg-blue-500/10">
@@ -514,7 +570,7 @@ export default function VisitRegisterPage() {
                   ...(found?.id === crop.cicloCultivoId ? {} : {
                     stage: '', quality: '', findings: [], aplicaciones: [],
                     plantasVendidas: '', perPlantUnits: '', perPlantKg: '', priceQ: '', priceBasis: 'unidad',
-                    observacionesCultivo: '',
+                    observacionesCultivo: '', originalMovement: undefined, originalCrop: undefined,
                   }) })
               }}><option value="">Seleccionar siembra</option>
                 {availableCycles.filter(item => item.id === crop.cicloCultivoId || !cropsState.some(selected => selected.cicloCultivoId === item.id)).map(item => <option key={item.id} value={item.id}>{item.cultivo.nombre} · {item.huerto.nombre || `Huerto #${item.huertoId}`} · {item.fechaSiembra || item.fechaTrasplante || 'Sin fecha'} (#{item.id})</option>)}
@@ -555,7 +611,12 @@ export default function VisitRegisterPage() {
           </details>
           {usuario && canWriteProduction(usuario) && <details className="mt-3 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
             <summary className="cursor-pointer font-medium text-slate-900 dark:text-white">Producción agrícola</summary>
-            <div className="mt-4 space-y-4 rounded-xl bg-slate-50/70 p-4 dark:bg-slate-800/40">
+            {crop.originalMovement ? <div className="mt-4 space-y-3 rounded-xl border border-brand-200 bg-brand-50/50 p-4 text-sm dark:border-brand-800 dark:bg-brand-500/10">
+              <p className="font-semibold text-slate-900 dark:text-white">Producción original conservada</p>
+              {crop.originalMovement.cosecha && <p>Cosecha: {crop.originalMovement.cosecha.cantidad} · {crop.originalMovement.cosecha.fechaCosecha}</p>}
+              {crop.originalMovement.venta && <p>Venta: {crop.originalMovement.venta.cantidad} · {crop.originalMovement.venta.fechaVenta} · Precio: Q {crop.originalMovement.venta.precioUnitario}</p>}
+              <Button type="button" variant="secondary" onClick={() => updateCrop(crop.id, { originalMovement: undefined })}>Editar producción</Button>
+            </div> : <div className="mt-4 space-y-4 rounded-xl bg-slate-50/70 p-4 dark:bg-slate-800/40">
               <div className="grid gap-3 sm:grid-cols-2">
                 <FormField id={`plants-sold-${crop.id}`} label="Plantas Vendidas:">
                   <input id={`plants-sold-${crop.id}`} className={input} type="number" min="1" step="1" value={crop.plantasVendidas}
@@ -580,7 +641,7 @@ export default function VisitRegisterPage() {
                 <span className="text-sm text-slate-600 dark:text-slate-300">Valor estimado:</span>
                 <strong className="text-base text-slate-900 dark:text-white">Q {currencyTotal(crop)}</strong>
               </div>
-            </div>
+            </div>}
           </details>}
 
         </article>)}

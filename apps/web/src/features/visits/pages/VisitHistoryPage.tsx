@@ -11,7 +11,7 @@ import VisitDetailDialog from '@/features/visits/components/VisitDetailDialog'
 import { mensajeErrorSincronizacion } from '@/features/visits/services/visitSyncFeedback'
 import { useConnectivityStatus } from '@/hooks/useConnectivityStatus'
 import {
-  getVisitFollowUps, getVisitList, syncPendingVisits,
+  canCorrectFailedVisit, getVisitFollowUps, getVisitList, syncPendingVisits,
   todayInGuatemala, type VisitFollowUp, type VisitListItem,
 } from '@/features/visits/services/visitService'
 
@@ -157,7 +157,9 @@ export default function VisitHistoryPage() {
                 {open > 0 && <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">Pendiente ({open})</span>}
                 {!notCompleted && !open && <span className="text-xs text-gray-500">{followUpError ? 'No disponible' : related.length ? 'Sin pendientes' : '—'}</span>}
               </div></td>
-              <td className="px-5 py-4"><button type="button" onClick={() => setSelected(row)} className="text-sm font-semibold text-brand-600 hover:underline focus-visible:outline-2 focus-visible:outline-brand-500 dark:text-brand-400">Ver detalle</button></td>
+              <td className="px-5 py-4"><div className="flex flex-col items-start gap-2"><button type="button" onClick={() => setSelected(row)} className="text-sm font-semibold text-brand-600 hover:underline focus-visible:outline-2 focus-visible:outline-brand-500 dark:text-brand-400">Ver detalle</button>
+                {row.responsibleUserId === usuario?.id && row.operationId && canCorrectFailedVisit(row) && <Link to={`/visitas/nueva?recuperar=${encodeURIComponent(row.operationId)}`} className="text-sm font-semibold text-amber-700 underline dark:text-amber-400">Corregir registro</Link>}
+              </div></td>
             </tr>
           })}
         </tbody></table>

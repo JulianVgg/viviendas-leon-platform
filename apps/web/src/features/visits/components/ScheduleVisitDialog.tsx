@@ -39,6 +39,15 @@ export default function ScheduleVisitDialog({ date, onClose, onSaved }: {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  // Familias que alcanzaron su siguiente ciclo de visita y aún no tienen una
+  // cita que lo cubra. No altera los permisos ni agenda automáticamente.
+  const suggestedFamilies = useMemo(() => planning.flatMap(row => {
+    const family = families.find(item => item.id === row.familyId)
+    if (!family || !row.lastCompleted) return []
+    const due = suggestedNextVisit(row.lastCompleted, row.scheduled.map(v => v.date))
+    if (!due || due > scheduledDate || row.scheduled.some(v => visitsSameCycle(v.date, scheduledDate))) return []
+    return [{ family, due }]
+  }).sort((a, b) => a.due.localeCompare(b.due)).slice(0, 6), [planning, families, scheduledDate])
   const selected = useMemo(() => families.find(f => String(f.id) === familyId), [families, familyId])
   const coverage = useMemo(() => planning.find(item => String(item.familyId) === familyId), [planning, familyId])
   const pending = coverage?.scheduled ?? []
@@ -121,6 +130,13 @@ export default function ScheduleVisitDialog({ date, onClose, onSaved }: {
         {saving ? 'Guardando…' : 'Agendar visita'}
       </Button></>}>
     <div className="space-y-4">
+      {!planningLoading && suggestedFamilies.length > 0 && <section aria-label="Familias sugeridas" className="rounded-xl border border-brand-200 bg-brand-50/40 p-3 dark:border-brand-800 dark:bg-brand-500/10">
+        <h3 className="mb-2 text-sm font-semibold text-gray-900 dark:text-white">Familias sugeridas para esta fecha</h3>
+        <div className="space-y-2">{suggestedFamilies.map(({family, due}) => <div key={family.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white p-2.5 text-sm dark:border-gray-700 dark:bg-gray-900">
+          <div><p className="font-medium text-gray-900 dark:text-white">{family.nombreReferencia}</p><p className="text-xs text-gray-500">{family.comunidad.nombre} · Siguiente visita: {due}</p></div>
+          <Button type="button" variant="secondary" size="sm" disabled={saving || Boolean(success) || familyId === String(family.id)} onClick={()=>setFamilyId(String(family.id))}>{familyId === String(family.id) ? 'Seleccionada' : 'Seleccionar'}</Button>
+        </div>)}</div>
+      </section>}
       <SearchableSelect id="schedule-family" label="Familia a visitar" required value={familyId} onChange={setFamilyId}
         disabled={loading || saving || Boolean(success)} placeholder={loading ? 'Cargando familias…' : 'Buscar familia o comunidad…'}
         options={families.map(f => {

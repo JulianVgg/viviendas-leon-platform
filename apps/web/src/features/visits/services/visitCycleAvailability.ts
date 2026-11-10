@@ -8,13 +8,9 @@ type CycleForVisit = {
   cultivo: { activo: boolean }
 }
 
-/**
- * Si existe fecha de siembra, el cultivo puede evaluarse desde esa fecha,
- * aunque el trasplante todavía no haya ocurrido. Si no hay siembra,
- * el trasplante es la referencia de inicio.
- */
+/** Una siembra solo puede evaluarse desde su fecha de inicio registrada. */
 export function isVisitCycleAvailable(cycle: CycleForVisit, familyId: number, visitDate: string): boolean {
-  const startDate = cycle.fechaSiembra ?? cycle.fechaTrasplante
+  const startDate = cycle.fechaSiembra
   return cycle.estado === 'ACTIVO' && cycle.huerto.familiaId === familyId &&
     cycle.huerto.estado === 'ACTIVO' && cycle.cultivo.activo &&
     !!startDate && startDate <= visitDate &&
