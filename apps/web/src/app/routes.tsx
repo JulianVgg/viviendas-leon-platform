@@ -42,6 +42,7 @@ import EstablecerPasswordPage from '@/features/auth/pages/EstablecerPasswordPage
 
 // AUTH-04: Perfil del usuario autenticado
 import MiPerfilPage from '@/features/profile/pages/MiPerfilPage'
+import AuditLogPage from '@/features/audit/pages/AuditLogPage'
 
 // AUTH-04: Administración de usuarios, roles y permisos
 import UsuariosPage from '@/features/admin/pages/UsuariosPage'
@@ -318,24 +319,9 @@ export default function AppRoutes() {
             )}
           />
 
-          {/* Auditoría */}
-          <Route
-            path="auditoria"
-            element={module(
-              'Auditoría',
-              'Espacio base para trazabilidad.',
-              ['Módulo', 'Operaciones', 'Estado'],
-            )}
-          />
-
-          <Route
-            path="auditoria/bitacora"
-            element={module(
-              'Bitácora',
-              'Vista base para operaciones y cambios realizados.',
-              ['Usuario', 'Fecha', 'Operación', 'Módulo'],
-            )}
-          />
+          {/* Auditoría: el API valida los permisos en cada consulta. */}
+          <Route path="auditoria" element={<Navigate to="/auditoria/bitacora" replace />} />
+          <Route path="auditoria/bitacora" element={<AuditLogPage />} />
 
         </Route>
       </Route>
