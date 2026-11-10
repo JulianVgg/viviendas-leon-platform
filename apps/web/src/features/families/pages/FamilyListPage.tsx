@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { FormEvent } from 'react'
+import '@/features/visits/visits.css'
 import { Link } from 'react-router'
 import ComponentCard from '@/components/common/ComponentCard'
 import DataTableContainer from '@/components/common/DataTableContainer'
@@ -106,12 +106,14 @@ export default function FamilyListPage({ mode = 'list' }: { mode?: 'list' | 'edi
     setRequestVersion((current) => current + 1)
   }
 
-  function handleSearch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setPage(1)
-    setSearch(searchInput.trim())
-    retryQuery()
-  }
+  useEffect(() => {
+    // Evita una solicitud por cada tecla y cancela las consultas anteriores con AbortController.
+    const timer = window.setTimeout(() => {
+      const next = searchInput.trim()
+      if (next !== search) { setPage(1); setSearch(next) }
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [searchInput, search])
 
   function clearFilters() {
     setSearchInput('')
@@ -141,7 +143,7 @@ export default function FamilyListPage({ mode = 'list' }: { mode?: 'list' | 'edi
   ]) ?? []
 
   return (
-    <>
+    <div className="visits-enter">
       <PageMeta
         title={`${mode === 'edit' ? 'Seleccionar familia' : 'Familias y beneficiarios'} | Viviendas León Guatemala`}
         description={mode === 'edit' ? 'Selección de un expediente familiar existente.' : 'Consulta de familias beneficiarias registradas en la plataforma.'}
@@ -163,7 +165,7 @@ export default function FamilyListPage({ mode = 'list' }: { mode?: 'list' | 'edi
             Puede estar desactualizada y es solo de lectura.
           </Alert>
         )}
-        <form role="search" aria-label="Buscar familias" aria-controls="family-results" className="mb-6 grid items-end gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[minmax(0,1fr)_12rem] 2xl:grid-cols-[minmax(0,1fr)_12rem_auto] dark:border-slate-800 dark:bg-white/5" onSubmit={handleSearch}>
+        <div role="search" aria-label="Buscar familias" aria-controls="family-results" className="mb-6 grid items-end gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[minmax(0,1fr)_12rem] 2xl:grid-cols-[minmax(0,1fr)_12rem_auto] dark:border-slate-800 dark:bg-white/5" >
           <FormField label="Buscar familia" id="family-search">
             <input
               id="family-search"
@@ -193,12 +195,11 @@ export default function FamilyListPage({ mode = 'list' }: { mode?: 'list' | 'edi
           </FormField>
 
           <div className="flex flex-wrap gap-2 md:col-span-2 2xl:col-span-1">
-            <Button type="submit" className="flex-1 sm:flex-none">Buscar</Button>
-            {(search || status) && (
+            {(searchInput || search || status) && (
               <Button type="button" variant="secondary" className="flex-1 sm:flex-none" onClick={clearFilters}>Limpiar</Button>
             )}
           </div>
-        </form>
+        </div>
 
         <div id="family-results" aria-busy={loading} className="space-y-5">
         {error && (
@@ -264,6 +265,6 @@ export default function FamilyListPage({ mode = 'list' }: { mode?: 'list' | 'edi
         )}
         </div>
       </ComponentCard>
-    </>
+    </div>
   )
 }

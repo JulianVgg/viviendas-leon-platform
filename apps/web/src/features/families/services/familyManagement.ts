@@ -3,13 +3,13 @@ import type { FamilyMemberInput, FamilyMemberRecord, FamilyMemberUpdateInput, Fa
 import { memberRelationshipOptions, memberSexOptions, validDate } from './familyWizard.ts'
 import { MAX_FAMILY_NAME, MAX_MEMBER_NAME, MAX_NOTES, validName, validOtherRole, validPhone } from './familyFieldRules.ts'
 
-export type FamilyEditDraft = { nombreReferencia: string; comunidadId: string; fechaIngreso: string; observaciones: string }
+export type FamilyEditDraft = { nombreReferencia: string; comunidadId: string; fechaIngreso: string; observaciones: string; estado: string }
 export type FamilyEditErrors = Partial<Record<keyof FamilyEditDraft, string>>
 export type MemberEditDraft = { nombreCompleto: string; fechaNacimiento: string; sexo: string; parentesco: string; telefono: string; observaciones: string }
 export type MemberEditErrors = Partial<Record<keyof MemberEditDraft, string>>
 
 export function familyDraftFrom(family: IntegralFamilyRecord): FamilyEditDraft {
-  return { nombreReferencia: family.nombreReferencia, comunidadId: String(family.comunidad.id), fechaIngreso: family.fechaIngreso?.slice(0, 10) ?? '', observaciones: family.observaciones ?? '' }
+  return { nombreReferencia: family.nombreReferencia, comunidadId: String(family.comunidad.id), fechaIngreso: family.fechaIngreso?.slice(0, 10) ?? '', observaciones: family.observaciones ?? '', estado: family.estado }
 }
 
 export function validateFamilyDraft(draft: FamilyEditDraft, communities: CommunityOption[]) {
@@ -18,17 +18,19 @@ export function validateFamilyDraft(draft: FamilyEditDraft, communities: Communi
   if (!validName(name, MAX_FAMILY_NAME)) errors.nombreReferencia = 'Escribe un nombre válido de hasta 150 caracteres, sin números.'
   if (!communities.some(({ id }) => id === Number(draft.comunidadId))) errors.comunidadId = 'Selecciona una comunidad activa.'
   if (draft.fechaIngreso && !validDate(draft.fechaIngreso)) errors.fechaIngreso = 'Introduce una fecha válida.'
+  if (!['ACTIVA', 'PENDIENTE_VALIDACION', 'RETIRADA', 'EGRESADA'].includes(draft.estado)) errors.estado = 'Selecciona un estado válido.'
   if (draft.observaciones.trim().length > MAX_NOTES) errors.observaciones = 'Las observaciones admiten hasta 2000 caracteres.'
   return errors
 }
 
-export function buildFamilyUpdate(family: IntegralFamilyRecord, draft: FamilyEditDraft, initial: FamilyEditDraft): FamilyUpdateInput {
+export function buildFamilyUpdate(family: IntegralFamilyRecord, draft: FamilyEditDraft, initial: FamilyEditDraft): FamilyUpdateInput & { estado?: string } {
   return {
     version: family.version,
     ...(draft.nombreReferencia !== initial.nombreReferencia && { nombreReferencia: draft.nombreReferencia.trim() }),
     ...(draft.comunidadId !== initial.comunidadId && { comunidadId: Number(draft.comunidadId) }),
     ...(draft.fechaIngreso !== initial.fechaIngreso && { fechaIngreso: draft.fechaIngreso || null }),
     ...(draft.observaciones !== initial.observaciones && { observaciones: draft.observaciones.trim() || null }),
+    ...(draft.estado !== initial.estado && { estado: draft.estado }),
   }
 }
 

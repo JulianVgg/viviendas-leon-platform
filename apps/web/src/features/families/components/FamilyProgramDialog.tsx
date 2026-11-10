@@ -14,11 +14,12 @@ type Props = {
   availablePrograms: FamilyProgramOption[]
   onClose: () => void
   onSaved: (saved: FamilyParticipationRecord) => void
+  deferred?: boolean
 }
 
 const statuses = ['ACTIVO', 'FINALIZADO', 'RETIRADO'] as const
 
-export default function FamilyProgramDialog({ familyId, open, participation, availablePrograms, onClose, onSaved }: Props) {
+export default function FamilyProgramDialog({ familyId, open, participation, availablePrograms, onClose, onSaved, deferred = false }: Props) {
   const [programId, setProgramId] = useState('')
   const [estado, setEstado] = useState<string>('ACTIVO')
   const [fechaIngreso, setFechaIngreso] = useState('')
@@ -59,6 +60,19 @@ export default function FamilyProgramDialog({ familyId, open, participation, ava
       observaciones: observaciones.trim() || null,
     }
     try {
+      if (deferred) {
+        const selected = participation?.programa ?? availablePrograms.find(({ id }) => id === Number(programId))
+        if (!selected) throw new Error('El programa no está disponible.')
+        const record: FamilyParticipationRecord = {
+          id: participation?.id ?? -Date.now(),
+          version: participation?.version ?? '',
+          programaId: selected.id,
+          programa: { id: selected.id, nombre: selected.nombre },
+          ...changes,
+        }
+        onSaved(record)
+        return
+      }
       const result = participation
         ? await updateFamilyProgram(familyId, participation.id, { ...changes, version: participation.version })
         : await createFamilyProgram(familyId, { ...changes, programaId: Number(programId) }, idempotencyKey.current)
@@ -111,7 +125,7 @@ export default function FamilyProgramDialog({ familyId, open, participation, ava
       </FormField>
       <div className="flex flex-wrap justify-end gap-3 border-t border-gray-100 pt-5 dark:border-gray-800">
         <Button type="button" variant="secondary" disabled={saving} onClick={onClose}>Cancelar</Button>
-        <Button type="submit" disabled={saving || uncertain || (!participation && !availablePrograms.length)}>{saving ? 'Guardando...' : 'Guardar participación'}</Button>
+        <Button type="submit" disabled={saving || uncertain || (!participation && !availablePrograms.length)}>{saving ? 'Preparando...' : deferred ? 'Aplicar cambios' : 'Guardar participación'}</Button>
       </div>
     </form>
   </Dialog>

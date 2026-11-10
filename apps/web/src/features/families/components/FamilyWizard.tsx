@@ -6,9 +6,10 @@ import Alert from '@/components/ui/Alert'
 import Button from '@/components/ui/Button'
 import LoadingState from '@/components/ui/LoadingState'
 import FormField, { formControlClassName } from '@/components/ui/FormField'
-import { createIntegralFamily, FamilyApiError, fetchFamilyProgramOptions } from '../services/familyService'
+import { createIntegralFamily, FamilyApiError, fetchFamilyProgramOptions, saveFamilyPhoto } from '../services/familyService'
 import { buildIntegralPayload, createMemberDraft, createProgramDraft, integralErrorMessage, mapServerErrors, memberField, memberRelationshipOptions, memberSexOptions, programField, stepForField, validateWizardStep } from '../services/familyWizard'
 import { MAX_FAMILY_NAME, MAX_MEMBER_NAME, MAX_MEMBERS, MAX_NOTES, MAX_PHONE, MAX_PROGRAMS, onlyNameCharacters, onlyPhoneCharacters } from '../services/familyFieldRules'
+import FamilyPhotoField from './FamilyPhotoField'
 import type { CommunityOption } from '../types/family'
 import type { FamilyProgramOption, FamilyWizardInput, IntegralFamilyRecord, MemberDraft, ProgramDraft, WizardErrors } from '../types/familyIntegral'
 
@@ -36,7 +37,9 @@ function AvatarText({ name, index }: { name: string; index: number }) {
   return <span aria-hidden="true" className={`flex size-12 shrink-0 items-center justify-center rounded-full text-sm font-semibold ring-4 ring-white dark:ring-gray-900 ${colors[index % colors.length]}`}>{initials(name)}</span>
 }
 
-export default function FamilyWizard({ communities, onCreated }: { communities: CommunityOption[]; onCreated: (record: IntegralFamilyRecord) => void }) {
+export default function FamilyWizard({ communities, onCreated }: { communities: CommunityOption[]; onCreated: (record: IntegralFamilyRecord, photoWarning?: string) => void }) {
+  const [photo, setPhoto] = useState<File | null>(null)
+  const [photoWarning, setPhotoWarning] = useState<string>()
   const [draft, setDraft] = useState<FamilyWizardInput>(() => ({ nombreReferencia: '', comunidadId: '', fechaIngreso: '', observaciones: '', integrantes: [createMemberDraft('member-1')], programas: [createProgramDraft('program-2')] }))
   const nextId = useRef(2)
   const [step, setStep] = useState(0)
@@ -167,6 +170,10 @@ export default function FamilyWizard({ communities, onCreated }: { communities: 
       if (!session.ok) throw new FamilyApiError('', session.status)
       postStarted = true
       created = await createIntegralFamily(buildIntegralPayload(submitted))
+      if (photo) {
+        try { await saveFamilyPhoto(created.id, photo) }
+        catch { setPhotoWarning('La familia quedó registrada, pero no fue posible guardar su fotografía. Agrégala desde Editar familia.'); onCreated(created, 'La familia quedó registrada, pero no fue posible guardar su fotografía. Agrégala desde Editar familia.'); return }
+      }
     } catch (cause) {
       const status = cause instanceof FamilyApiError ? cause.status : undefined
       setGeneralError(!postStarted && status === undefined ? 'No se pudo verificar la sesión. No se envió el expediente. Comprueba la conexión antes de continuar.' : integralErrorMessage(status, postStarted))
@@ -181,7 +188,7 @@ export default function FamilyWizard({ communities, onCreated }: { communities: 
       submitting.current = false
       setSaving(false)
     }
-    if (created) onCreated(created)
+    if (created) onCreated(created, photoWarning)
   }
 
   function textField(key: string, label: string, value: string, onChange: (value: string) => void, type = 'text', required = false, maxLength?: number) {
@@ -235,6 +242,7 @@ export default function FamilyWizard({ communities, onCreated }: { communities: 
           <FormField id="wizard-municipio" label="Municipio"><input className={controlClass} readOnly value={community?.municipio.nombre ?? ''} /></FormField>
           {textField('fechaIngreso', 'Fecha de ingreso', draft.fechaIngreso, (value) => changeGeneral('fechaIngreso', value), 'date', true)}
         </FormGrid>{notes('observaciones', draft.observaciones, (value) => changeGeneral('observaciones', value))}</div>
+          <FamilyPhotoField file={photo} onChange={setPhoto} disabled={saving} />
         </FormSection></div>}
       {step === 1 && <div className="wizard-card-entry"><FormSection title="Integrantes de la familia" variant="card">
         <div className="space-y-5">{collectionError('integrantes')}{draft.integrantes.map((row, index) => <fieldset key={row.localId} className="wizard-card-entry group min-w-0 space-y-5 rounded-2xl border border-gray-200 bg-gray-50/60 p-4 transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-theme-sm motion-reduce:transform-none motion-reduce:transition-none sm:p-5 dark:border-gray-800 dark:bg-white/[0.02] dark:hover:border-brand-500/40">

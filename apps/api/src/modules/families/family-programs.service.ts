@@ -56,7 +56,7 @@ export async function createFamilyParticipation(familiaId: number, input: Partic
     if (!family.length) throw new FamilyProgramError(404, 'FAMILY_NOT_FOUND', 'La familia solicitada no existe.')
 
     const description = `idempotency:${key}`
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`familia_programa:${userId}:${key}`}, 0))`
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`familia_programa:${userId}:${key}`}, 0)) IS NULL AS locked`
     const previousRequest = await tx.bitacora.findFirst({
       where: { usuarioId: userId, entidad: 'familia_programa', accion: 'CREATE', descripcion: description },
       orderBy: { id: 'asc' },

@@ -17,16 +17,17 @@ const family = {
 
 test('FAM-03 preloads real values without inventing state and builds changed fields only', () => {
   const initial = familyDraftFrom(family)
-  assert.deepEqual(initial, { nombreReferencia: 'QA FAMILY', comunidadId: '4', fechaIngreso: '2026-10-01', observaciones: '' })
-  assert.equal('estado' in initial, false)
+  assert.deepEqual(initial, { nombreReferencia: 'QA FAMILY', comunidadId: '4', fechaIngreso: '2026-10-01', observaciones: '', estado: 'RETIRADA' })
+  assert.equal(initial.estado, 'RETIRADA')
   const draft = { ...initial, nombreReferencia: ' QA FAMILY UPDATED ', observaciones: ' ' }
   assert.deepEqual(buildFamilyUpdate(family, draft, initial), { version: '123', nombreReferencia: 'QA FAMILY UPDATED', observaciones: null })
+  assert.deepEqual(buildFamilyUpdate(family, { ...initial, estado: 'ACTIVA' }, initial), { version: '123', estado: 'ACTIVA' })
   assert.equal(family.programas.length, 1)
 })
 
 test('FAM-03 validates community, real dates and field limits', () => {
   assert.deepEqual(validateFamilyDraft(familyDraftFrom(family), [community]), {})
-  const errors = validateFamilyDraft({ nombreReferencia: '', comunidadId: '99', fechaIngreso: '2026-02-30', observaciones: 'x'.repeat(2001) }, [community])
+  const errors = validateFamilyDraft({ nombreReferencia: '', comunidadId: '99', fechaIngreso: '2026-02-30', observaciones: 'x'.repeat(2001), estado: 'ACTIVA' }, [community])
   assert.deepEqual(Object.keys(errors).sort(), ['comunidadId', 'fechaIngreso', 'nombreReferencia', 'observaciones'])
 })
 

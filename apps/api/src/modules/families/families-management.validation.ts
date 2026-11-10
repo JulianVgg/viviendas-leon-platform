@@ -98,7 +98,7 @@ function phoneValue(value: unknown, details: ValidationDetail[]) {
   return phone
 }
 
-export function validateFamilyUpdate(body: unknown): { data?: FamilyUpdateInput; details: ValidationDetail[] } {
+export function validateFamilyUpdate(body: unknown, allowEmpty = false): { data?: FamilyUpdateInput; details: ValidationDetail[] } {
   const details: ValidationDetail[] = []
   const allowed = ['nombreReferencia', 'comunidadId', 'fechaIngreso', 'observaciones', 'latitud', 'longitud', 'version']
   const input = objectInput(body, allowed, details)
@@ -111,7 +111,7 @@ export function validateFamilyUpdate(body: unknown): { data?: FamilyUpdateInput;
   const coordinates = validateCoordinates(input)
   details.push(...coordinates.details)
   if (coordinates.data) Object.assign(data, coordinates.data)
-  if (!allowed.slice(0, -1).some((field) => has(input, field))) details.push({ field: 'body', message: 'Incluye al menos un campo para actualizar.' })
+  if (!allowEmpty && !allowed.slice(0, -1).some((field) => has(input, field))) details.push({ field: 'body', message: 'Incluye al menos un campo para actualizar.' })
   return details.length ? { details } : { data, details }
 }
 
