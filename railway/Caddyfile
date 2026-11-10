@@ -1,0 +1,18 @@
+:{$PORT:8080} {
+    encode zstd gzip
+
+    # All browsers call /api on the same origin: session cookies work with PWA.
+    @api path /api /api/*
+    handle @api {
+        reverse_proxy {$API_UPSTREAM:api.railway.internal:3000} {
+            # Public TLS terminates at Railway; Express must see HTTPS.
+            header_up X-Forwarded-Proto https
+        }
+    }
+
+    handle {
+        root * /srv
+        try_files {path} /index.html
+        file_server
+    }
+}

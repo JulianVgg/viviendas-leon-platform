@@ -48,6 +48,10 @@ import { createSessionMiddleware } from './config/session.js';
 
 export const app = express();
 
+// HTTPS is terminated at the Railway edge (and Caddy forwards to this API).
+// express-session needs the proxy protocol to set Secure cookies.
+app.set('trust proxy', 1);
+
 // Configuración CORS
 app.use(
   cors({

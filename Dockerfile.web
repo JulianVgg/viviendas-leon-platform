@@ -1,0 +1,16 @@
+FROM node:24-bookworm-slim AS build
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+RUN npm ci
+
+COPY apps/web apps/web
+# Keep Vite's API base path same-origin; Caddy proxies /api to the backend.
+RUN npm run build -w @viviendas-leon/web
+
+FROM caddy:2-alpine
+COPY railway/Caddyfile /etc/caddy/Caddyfile
+COPY --from=build /app/apps/web/dist /srv
+EXPOSE 8080
