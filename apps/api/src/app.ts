@@ -45,6 +45,8 @@ import { requirePasswordChangeCompleted } from './modules/auth/require-password-
 // AUTH-02: Autenticación
 import { authRouter } from './modules/auth/auth.routes.js';
 import { createSessionMiddleware } from './config/session.js';
+import { auditOperations } from './modules/audit/audit.middleware.js';
+import { auditRouter } from './modules/audit/audit.routes.js';
 
 export const app = express();
 
@@ -65,6 +67,8 @@ app.use(express.json());
 
 // AUTH-02: Configurar sesiones
 app.use(createSessionMiddleware());
+// Registrar acciones relevantes sin almacenar el cuerpo de las peticiones.
+app.use(auditOperations);
 
 // Verificar estado del servidor
 app.get('/api/health', (_req, res) => {
@@ -93,6 +97,9 @@ app.use('/api/v1/roles', rolesRouter);
 
 // AUTH-04: Administración de usuarios
 app.use('/api/v1/usuarios', usersRouter);
+
+// Bitácora de solo lectura, protegida con el permiso PANTALLA_BITACORA.
+app.use('/api/v1/auditoria', auditRouter);
 
 // Rutas existentes de Viviendas León
 app.use('/api/v1/familias', familiesRouter);
