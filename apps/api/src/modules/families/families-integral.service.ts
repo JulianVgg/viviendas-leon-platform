@@ -1,5 +1,7 @@
 import { getPrismaClient } from '../../config/prisma.js'
 import { Prisma } from '../../generated/prisma/client.js'
+import { officialCommunityFilter } from '../catalogs/official-communities.js'
+import { OFFICIAL_MUNICIPALITY, OFFICIAL_COMMUNITY_NAMES } from '../catalogs/official-communities.js'
 import type { ValidationDetail } from './families.types.js'
 import type { FamilyProgramOption, IntegralFamilyInput, IntegralFamilyRecord } from './families-integral.types.js'
 
@@ -82,7 +84,7 @@ export async function createIntegralFamily(input: IntegralFamilyInput, prisma = 
   if (minimumDetails.length) throw new IntegralFamilyValidationError(minimumDetails)
   const ids = input.programas.map((program) => program.programaId).sort((a, b) => a - b)
   const [community, programs] = await Promise.all([
-    prisma.comunidad.findFirst({ where: { id: input.comunidadId, activo: true, municipio: { activo: true } }, select: { id: true } }),
+    prisma.comunidad.findFirst({ where: { id: input.comunidadId, activo: true, ...officialCommunityFilter }, select: { id: true } }),
     prisma.programa.findMany({ where: { id: { in: ids }, estado: SELECTABLE_PROGRAM_STATUS }, select: { id: true } }),
   ])
   checkReferences(community ? [community.id] : [], programs.map((program) => program.id), input)
@@ -92,6 +94,7 @@ export async function createIntegralFamily(input: IntegralFamilyInput, prisma = 
     const lockedCommunities = await transaction.$queryRaw<Array<{ id: number }>>`
       SELECT c.id FROM comunidad c JOIN municipio m ON m.id = c.municipio_id
       WHERE c.id = ${input.comunidadId} AND c.activo = true AND m.activo = true
+        AND lower(m.nombre) = lower(${OFFICIAL_MUNICIPALITY}) AND lower(c.nombre) IN (${Prisma.join(OFFICIAL_COMMUNITY_NAMES.map((name) => name.toLowerCase()))})
       FOR SHARE OF c, m
     `
     const lockedPrograms = await transaction.$queryRaw<Array<{ id: number }>>(Prisma.sql`

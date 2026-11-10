@@ -120,7 +120,7 @@ export default function TrainingRegisterPage() {
 
   return <div>
     <PageMeta title="Registrar capacitación | Viviendas León" description="Registro de familias asistentes" />
-    <PageHeader title="Registrar capacitación" description="Selecciona la capacitación y marca las familias presentes por comunidad. No se registra asistencia individual sin identificar a la persona." />
+    <PageHeader title="Registrar capacitación" description="" />
     {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">{error}</p>}
     {success && <p role="status" className="mb-4 flex items-center gap-2 rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300"><CheckCircle2 size={18} />{success} <Link className="font-semibold underline" to="/actividades/capacitaciones/historial">Ver historial</Link></p>}
     <section className={`${card} mb-5`}>
@@ -146,7 +146,7 @@ export default function TrainingRegisterPage() {
         <span className="rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 dark:bg-brand-500/10 dark:text-brand-200">{checked.length} presentes</span>
       </div>
       <div className="mb-5 grid gap-3 md:grid-cols-[1fr_220px]">
-        <label className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 dark:border-gray-700"><Search size={17} className="text-gray-400" /><input aria-label="Buscar familia" value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar familia por nombre" className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none dark:text-white" /></label>
+        <label className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 dark:border-gray-700"><Search size={17} className="text-gray-400" /><input aria-label="Buscar familia" value={search} maxLength={100} onChange={e => setSearch(e.target.value)} placeholder="Buscar familia por nombre" className="h-11 min-w-0 flex-1 bg-transparent text-sm outline-none dark:text-white" /></label>
         <select aria-label="Filtrar por comunidad" value={communityId} onChange={e => setCommunityId(e.target.value)} className="h-11 rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white">
           <option value="TODAS">Todas las comunidades</option>
           {communities.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}

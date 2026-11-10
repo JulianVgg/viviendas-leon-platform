@@ -1,17 +1,12 @@
 import type { CommunityOption } from '../types/family'
 import type { FamilyMemberInput, FamilyMemberRecord, FamilyMemberUpdateInput, FamilyUpdateInput, IntegralFamilyRecord } from '../types/familyIntegral'
-import { memberRelationshipOptions, memberSexOptions } from './familyWizard.ts'
+import { memberRelationshipOptions, memberSexOptions, validDate } from './familyWizard.ts'
+import { MAX_FAMILY_NAME, MAX_MEMBER_NAME, MAX_NOTES, validName, validOtherRole, validPhone } from './familyFieldRules.ts'
 
 export type FamilyEditDraft = { nombreReferencia: string; comunidadId: string; fechaIngreso: string; observaciones: string }
 export type FamilyEditErrors = Partial<Record<keyof FamilyEditDraft, string>>
 export type MemberEditDraft = { nombreCompleto: string; fechaNacimiento: string; sexo: string; parentesco: string; telefono: string; observaciones: string }
 export type MemberEditErrors = Partial<Record<keyof MemberEditDraft, string>>
-
-function validDate(value: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || value.startsWith('0000')) return false
-  const date = new Date(`${value}T00:00:00.000Z`)
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
-}
 
 export function familyDraftFrom(family: IntegralFamilyRecord): FamilyEditDraft {
   return { nombreReferencia: family.nombreReferencia, comunidadId: String(family.comunidad.id), fechaIngreso: family.fechaIngreso?.slice(0, 10) ?? '', observaciones: family.observaciones ?? '' }
@@ -20,10 +15,10 @@ export function familyDraftFrom(family: IntegralFamilyRecord): FamilyEditDraft {
 export function validateFamilyDraft(draft: FamilyEditDraft, communities: CommunityOption[]) {
   const errors: FamilyEditErrors = {}
   const name = draft.nombreReferencia.trim()
-  if (!name || name.length > 150) errors.nombreReferencia = 'El nombre es obligatorio y admite hasta 150 caracteres.'
+  if (!validName(name, MAX_FAMILY_NAME)) errors.nombreReferencia = 'Escribe un nombre válido de hasta 150 caracteres, sin números.'
   if (!communities.some(({ id }) => id === Number(draft.comunidadId))) errors.comunidadId = 'Selecciona una comunidad activa.'
   if (draft.fechaIngreso && !validDate(draft.fechaIngreso)) errors.fechaIngreso = 'Introduce una fecha válida.'
-  if (draft.observaciones.trim().length > 2000) errors.observaciones = 'Las observaciones admiten hasta 2000 caracteres.'
+  if (draft.observaciones.trim().length > MAX_NOTES) errors.observaciones = 'Las observaciones admiten hasta 2000 caracteres.'
   return errors
 }
 
@@ -43,15 +38,16 @@ export function memberDraftFrom(member?: FamilyMemberRecord): MemberEditDraft {
 
 export function validateMemberDraft(draft: MemberEditDraft, isNew: boolean) {
   const errors: MemberEditErrors = {}
-  if (!draft.nombreCompleto.trim() || draft.nombreCompleto.trim().length > 150) errors.nombreCompleto = 'El nombre es obligatorio y admite hasta 150 caracteres.'
+  if (!validName(draft.nombreCompleto, MAX_MEMBER_NAME)) errors.nombreCompleto = 'Escribe un nombre válido de hasta 150 caracteres, sin números.'
   if (isNew && !draft.fechaNacimiento) errors.fechaNacimiento = 'La fecha de nacimiento es obligatoria.'
   if (draft.fechaNacimiento && !validDate(draft.fechaNacimiento)) errors.fechaNacimiento = 'Introduce una fecha válida.'
+  if (draft.fechaNacimiento && validDate(draft.fechaNacimiento) && draft.fechaNacimiento > new Date().toISOString().slice(0, 10)) errors.fechaNacimiento = 'La fecha de nacimiento no puede ser futura.'
   if (isNew && !memberSexOptions.includes(draft.sexo)) errors.sexo = 'Selecciona el sexo.'
   if (draft.sexo && !memberSexOptions.includes(draft.sexo)) errors.sexo = 'Selecciona una opción válida.'
-  if (isNew && !memberRelationshipOptions.includes(draft.parentesco)) errors.parentesco = 'Selecciona el parentesco.'
-  if (draft.parentesco && !memberRelationshipOptions.includes(draft.parentesco)) errors.parentesco = 'Selecciona una opción válida.'
-  if (draft.telefono.trim().length > 30) errors.telefono = 'El teléfono admite hasta 30 caracteres.'
-  if (draft.observaciones.trim().length > 2000) errors.observaciones = 'Las observaciones admiten hasta 2000 caracteres.'
+  if (isNew && !draft.parentesco.trim()) errors.parentesco = 'Selecciona un rol.'
+  if (draft.parentesco === 'Otro' || (draft.parentesco && !memberRelationshipOptions.includes(draft.parentesco) && !validOtherRole(draft.parentesco))) errors.parentesco = 'Especifica un rol válido de hasta 60 caracteres.'
+  if (!validPhone(draft.telefono)) errors.telefono = 'Usa un teléfono válido (mínimo 8 dígitos).'
+  if (draft.observaciones.trim().length > MAX_NOTES) errors.observaciones = 'Las observaciones admiten hasta 2000 caracteres.'
   return errors
 }
 

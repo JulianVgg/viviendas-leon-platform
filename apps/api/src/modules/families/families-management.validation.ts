@@ -7,12 +7,12 @@ import type {
 } from './families.types.js'
 import { MAX_DATABASE_INTEGER, MAX_OBSERVATIONS_LENGTH, MAX_REFERENCE_NAME_LENGTH } from './families.validation.js'
 import { validateCoordinates } from './family-coordinates.rules.js'
+import { ALLOWED_SEX, MAX_MEMBER_NAME, MAX_PHONE_LENGTH, validMemberPhone, validMemberRole, validPersonName } from './families-field.rules.js'
 
-const MEMBER_NAME_MAX = 150
-const PHONE_MAX = 30
+const MEMBER_NAME_MAX = MAX_MEMBER_NAME
+const PHONE_MAX = MAX_PHONE_LENGTH
 const VERSION_PATTERN = /^\d{1,10}$/
-const SEX_OPTIONS = ['Masculino', 'Femenino']
-const RELATIONSHIP_OPTIONS = ['Padre', 'Madre', 'Hijo', 'Hija', 'Abuela', 'Abuelo', 'Cuñado', 'Cuñada']
+const SEX_OPTIONS = ALLOWED_SEX
 const has = (input: Record<string, unknown>, field: string) => Object.prototype.hasOwnProperty.call(input, field)
 
 function objectInput(body: unknown, allowed: string[], details: ValidationDetail[]) {
@@ -54,12 +54,16 @@ function dateValue(value: unknown, field: string, details: ValidationDetail[], n
     details.push({ field, message: 'Introduce una fecha existente en formato YYYY-MM-DD.' })
     return null
   }
+  if (field === 'fechaNacimiento' && value > new Date().toISOString().slice(0, 10)) {
+    details.push({ field, message: 'La fecha de nacimiento no puede ser futura.' })
+    return null
+  }
   return date
 }
 
 function requiredText(value: unknown, field: string, max: number, details: ValidationDetail[]) {
   const text = typeof value === 'string' ? value.trim() : ''
-  if (!text || text.length > max) details.push({ field, message: `Este campo es obligatorio y admite hasta ${max} caracteres.` })
+  if (!validPersonName(text, max)) details.push({ field, message: `Usa entre 2 y ${max} caracteres, solo letras y signos de nombre.` })
   return text
 }
 
@@ -72,13 +76,26 @@ function nullableText(value: unknown, field: string, max: number, details: Valid
   return value.trim() || null
 }
 
-function optionValue(value: unknown, field: string, options: string[], details: ValidationDetail[], nullable: boolean) {
+function optionValue(value: unknown, field: string, options: readonly string[], details: ValidationDetail[], nullable: boolean) {
   if (value === null && nullable) return null
   if (typeof value !== 'string' || !options.includes(value)) {
     details.push({ field, message: `Selecciona una opción válida para ${field}.` })
     return null
   }
   return value
+}
+
+function roleValue(value: unknown, details: ValidationDetail[], nullable: boolean) {
+  if (value == null && nullable) return null
+  const role = typeof value === 'string' ? value.trim() : ''
+  if (!validMemberRole(role)) { details.push({ field: 'parentesco', message: 'Indica un rol válido de hasta 60 caracteres.' }); return null }
+  return role
+}
+
+function phoneValue(value: unknown, details: ValidationDetail[]) {
+  const phone = nullableText(value, 'telefono', PHONE_MAX, details)
+  if (!validMemberPhone(phone)) details.push({ field: 'telefono', message: 'Introduce un teléfono válido (al menos 8 dígitos).' })
+  return phone
 }
 
 export function validateFamilyUpdate(body: unknown): { data?: FamilyUpdateInput; details: ValidationDetail[] } {
@@ -108,8 +125,8 @@ export function validateMemberCreate(body: unknown): { data?: FamilyMemberCreate
     nombreCompleto: requiredText(input.nombreCompleto, 'nombreCompleto', MEMBER_NAME_MAX, details),
     fechaNacimiento: dateValue(input.fechaNacimiento, 'fechaNacimiento', details, false) as Date,
     sexo: optionValue(input.sexo, 'sexo', SEX_OPTIONS, details, false) as string,
-    parentesco: optionValue(input.parentesco, 'parentesco', RELATIONSHIP_OPTIONS, details, false) as string,
-    telefono: nullableText(input.telefono, 'telefono', PHONE_MAX, details),
+    parentesco: roleValue(input.parentesco, details, false) as string,
+    telefono: phoneValue(input.telefono, details),
     ...(input.whatsappAutorizado !== undefined ? { whatsappAutorizado: input.whatsappAutorizado === true } : {}),
     observaciones: nullableText(input.observaciones, 'observaciones', MAX_OBSERVATIONS_LENGTH, details),
   }
@@ -127,8 +144,8 @@ export function validateMemberUpdate(body: unknown): { data?: FamilyMemberUpdate
   if (has(input, 'nombreCompleto')) data.nombreCompleto = requiredText(input.nombreCompleto, 'nombreCompleto', MEMBER_NAME_MAX, details)
   if (has(input, 'fechaNacimiento')) data.fechaNacimiento = dateValue(input.fechaNacimiento, 'fechaNacimiento', details, true)
   if (has(input, 'sexo')) data.sexo = optionValue(input.sexo, 'sexo', SEX_OPTIONS, details, true)
-  if (has(input, 'parentesco')) data.parentesco = optionValue(input.parentesco, 'parentesco', RELATIONSHIP_OPTIONS, details, true)
-  if (has(input, 'telefono')) data.telefono = nullableText(input.telefono, 'telefono', PHONE_MAX, details)
+  if (has(input, 'parentesco')) data.parentesco = roleValue(input.parentesco, details, true)
+  if (has(input, 'telefono')) data.telefono = phoneValue(input.telefono, details)
   if (has(input, 'whatsappAutorizado')) {
     if (typeof input.whatsappAutorizado !== 'boolean')
       details.push({ field: 'whatsappAutorizado', message: 'La autorización debe ser verdadera o falsa.' })

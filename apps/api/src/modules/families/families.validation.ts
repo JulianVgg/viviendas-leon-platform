@@ -1,4 +1,5 @@
 import type { FamilyCreateInput, ValidationDetail } from './families.types.js'
+import { validPersonName } from './families-field.rules.js'
 
 export const MAX_REFERENCE_NAME_LENGTH = 150
 export const MAX_OBSERVATIONS_LENGTH = 2000
@@ -21,7 +22,7 @@ export function validateFamilyInput(body: unknown): { data?: FamilyCreateInput; 
     if (!allowedFields.includes(field)) details.push({ field, message: 'Este campo no está permitido.' })
   }
   const name = typeof input.nombreReferencia === 'string' ? input.nombreReferencia.trim() : ''
-  if (!name || name.length > MAX_REFERENCE_NAME_LENGTH) {
+  if (!validPersonName(name, MAX_REFERENCE_NAME_LENGTH)) {
     details.push({ field: 'nombreReferencia', message: `El nombre es obligatorio y debe tener como máximo ${MAX_REFERENCE_NAME_LENGTH} caracteres.` })
   }
   const communityId = input.comunidadId

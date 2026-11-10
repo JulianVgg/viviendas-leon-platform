@@ -3,6 +3,7 @@ import type { FormEvent } from 'react'
 import { Form, FormActions, FormGrid, FormSection } from '@/components/forms'
 import FormField, { formControlClassName } from '@/components/ui/FormField'
 import { FamilyApiError } from '@/features/families/services/familyService'
+import { validName, MAX_FAMILY_NAME, onlyNameCharacters } from '../services/familyFieldRules'
 import type { CommunityOption, FamilyCreateInput, FamilyDetail } from '@/features/families/types/family'
 
 type FamilyFormProps = {
@@ -30,7 +31,7 @@ export default function FamilyForm({ communities, onSave, onCreated, onCancel }:
     event.preventDefault()
     if (submitting.current) return
     const nextErrors: Record<string, string> = {}
-    if (!referenceName.trim() || referenceName.trim().length > 150) nextErrors.nombreReferencia = 'Introduce un nombre de hasta 150 caracteres.'
+    if (!validName(referenceName, MAX_FAMILY_NAME)) nextErrors.nombreReferencia = 'Introduce un nombre de hasta 150 caracteres.'
     if (!communities.some((community) => community.id === Number(communityId))) nextErrors.comunidadId = 'Selecciona una comunidad disponible.'
     if (observations.trim().length > 2000) nextErrors.observaciones = 'Las observaciones admiten hasta 2000 caracteres.'
     if (entryDate) {
@@ -71,12 +72,12 @@ export default function FamilyForm({ communities, onSave, onCreated, onCancel }:
 
   return <Form mode="create" status={saving ? 'saving' : generalError ? 'error' : 'idle'} generalError={generalError} onSubmit={handleSubmit} noValidate
     actions={<FormActions submitting={saving} disabled={!communities.length} onCancel={onCancel} />}>
-    <FormSection title="Identificación y ubicación" description="Los campos con asterisco son obligatorios. La familia se registrará como activa." variant="card">
+    <FormSection title="Identificación y ubicación"  variant="card">
       <FormGrid>
-        <FormField id="family-nombreReferencia" label="Nombre de referencia" required error={errors.nombreReferencia} hint="Nombre utilizado para identificar el expediente. Máximo 150 caracteres.">
-          <input {...fieldAttributes('nombreReferencia')} className={formControlClassName} required aria-required="true" maxLength={150} value={referenceName} onChange={(event) => setReferenceName(event.target.value)} />
+        <FormField id="family-nombreReferencia" label="Nombre de referencia" required error={errors.nombreReferencia} >
+          <input {...fieldAttributes('nombreReferencia')} className={formControlClassName} required aria-required="true" maxLength={150} value={referenceName} onChange={(event) => setReferenceName(onlyNameCharacters(event.target.value))} />
         </FormField>
-        <FormField id="family-comunidadId" label="Comunidad" required error={errors.comunidadId} hint="Las opciones muestran la comunidad y su municipio.">
+        <FormField id="family-comunidadId" label="Comunidad" required error={errors.comunidadId} >
           <select {...fieldAttributes('comunidadId')} className={formControlClassName} required aria-required="true" value={communityId} onChange={(event) => setCommunityId(event.target.value)}>
             <option value="">Selecciona una comunidad</option>
             {communities.map((community) => <option key={community.id} value={community.id}>{community.nombre} — {community.municipio.nombre}</option>)}
@@ -84,9 +85,9 @@ export default function FamilyForm({ communities, onSave, onCreated, onCancel }:
         </FormField>
       </FormGrid>
     </FormSection>
-    <FormSection title="Información complementaria" description="Estos campos son opcionales." variant="card">
+    <FormSection title="Información complementaria"  variant="card">
       <div className="space-y-5">
-        <div className="max-w-sm"><FormField id="family-fechaIngreso" label="Fecha de ingreso" error={errors.fechaIngreso} hint="Selecciona la fecha de ingreso, si está disponible.">
+        <div className="max-w-sm"><FormField id="family-fechaIngreso" label="Fecha de ingreso" error={errors.fechaIngreso} >
           <input {...fieldAttributes('fechaIngreso')} type="date" className={formControlClassName} value={entryDate} onChange={(event) => setEntryDate(event.target.value)} />
         </FormField></div>
         <FormField id="family-observaciones" label="Observaciones" error={errors.observaciones} hint="Máximo 2000 caracteres.">

@@ -17,6 +17,7 @@ import type { IntegralFamilyRecord } from '../types/familyIntegral'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { buildFamilyUpdate, familyDraftFrom, validateFamilyDraft, type FamilyEditDraft, type FamilyEditErrors } from '../services/familyManagement'
 import { familyStateLabel } from '../services/familyRecord'
+import { onlyNameCharacters } from '../services/familyFieldRules'
 import FamilyProgramsSection from '../components/FamilyProgramsSection'
 
 const control = formControlClassName
@@ -76,7 +77,7 @@ export default function FamilyEditPage() {
   }, [draft, family, initial])
 
   function change(field: keyof FamilyEditDraft, value: string) {
-    setDraft((current) => current ? { ...current, [field]: value } : current)
+    setDraft((current) => current ? { ...current, [field]: field === 'nombreReferencia' ? onlyNameCharacters(value) : value } : current)
     setErrors((current) => ({ ...current, [field]: undefined }))
     setMessage(undefined)
   }
@@ -126,10 +127,10 @@ export default function FamilyEditPage() {
       <Card><CardBody><div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex min-w-0 items-center gap-3"><span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-300"><Home size={22} /></span><div className="min-w-0"><p className="text-xs font-medium uppercase tracking-wide text-gray-500">Expediente #{family.id}</p><h2 className="truncate text-xl font-semibold text-gray-900 dark:text-white">{family.nombreReferencia}</h2></div></div><div><p className="mb-1 text-xs text-gray-500">Estado actual (solo lectura)</p><Badge variant={family.estado === 'ACTIVA' ? 'success' : family.estado === 'RETIRADA' ? 'warning' : 'neutral'}>{familyStateLabel(family.estado)}</Badge></div></div></CardBody></Card>
       {!isOnline && <Alert variant="warning" title="Sin conexión">El borrador permanece únicamente en memoria. Reconecta para guardar o recuperar datos actualizados.</Alert>}
       {message && <Alert variant={message.kind} title={message.kind === 'success' ? 'Cambios guardados' : 'No se pudo guardar'}>{message.text}</Alert>}
-      <Card><CardHeader title="Información familiar" description="El estado institucional no puede modificarse desde este formulario." /><CardBody><div className="grid gap-5 md:grid-cols-2">
+      <Card><CardHeader title="Información familiar"  /><CardBody><div className="grid gap-5 md:grid-cols-2">
         <FormField id="family-edit-name" label="Nombre de referencia" required error={errors.nombreReferencia}><div className="relative"><FileText aria-hidden="true" size={17} className="absolute start-3 top-3.5 text-gray-400" /><input id="family-edit-name" className={`${control} ps-10`} value={draft.nombreReferencia} maxLength={150} onChange={(event) => change('nombreReferencia', event.target.value)} /></div></FormField>
         <FormField id="family-edit-community" label="Comunidad" required error={errors.comunidadId}><div className="relative"><MapPin aria-hidden="true" size={17} className="pointer-events-none absolute start-3 top-3.5 text-gray-400" /><select id="family-edit-community" className={`${control} ps-10`} value={draft.comunidadId} onChange={(event) => change('comunidadId', event.target.value)}>{communities.map((option) => <option key={option.id} value={option.id}>{option.nombre}</option>)}</select></div></FormField>
-        <FormField id="family-edit-municipality" label="Municipio" hint="Se calcula automáticamente según la comunidad."><input id="family-edit-municipality" className={control} readOnly value={community?.municipio.nombre ?? ''} /></FormField>
+        <FormField id="family-edit-municipality" label="Municipio" ><input id="family-edit-municipality" className={control} readOnly value={community?.municipio.nombre ?? ''} /></FormField>
         <FormField id="family-edit-date" label="Fecha de ingreso" error={errors.fechaIngreso}><div className="relative"><CalendarDays aria-hidden="true" size={17} className="pointer-events-none absolute start-3 top-3.5 text-gray-400" /><input id="family-edit-date" type="date" className={`${control} ps-10`} value={draft.fechaIngreso} onChange={(event) => change('fechaIngreso', event.target.value)} /></div></FormField>
         <FormField id="family-edit-notes" label="Observaciones" error={errors.observaciones} hint="Máximo 2000 caracteres."><textarea id="family-edit-notes" rows={5} className={`${control} h-auto py-3`} value={draft.observaciones} maxLength={2000} onChange={(event) => change('observaciones', event.target.value)} /></FormField>
       </div></CardBody></Card>

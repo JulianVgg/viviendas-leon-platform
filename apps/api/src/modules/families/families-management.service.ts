@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { getPrismaClient } from '../../config/prisma.js'
-import type { Prisma } from '../../generated/prisma/client.js'
+import { Prisma } from '../../generated/prisma/client.js'
+import { OFFICIAL_COMMUNITY_NAMES, OFFICIAL_MUNICIPALITY } from '../catalogs/official-communities.js'
 import type {
   FamilyMemberCreateInput,
   FamilyMemberStateInput,
@@ -78,6 +79,8 @@ export async function updateFamily(familyId: number, input: FamilyUpdateInput, u
       const communities = await transaction.$queryRaw<Array<{ id: number }>>`
         SELECT c.id FROM comunidad c JOIN municipio m ON m.id = c.municipio_id
         WHERE c.id = ${changes.comunidadId} AND c.activo = true AND m.activo = true
+          AND lower(m.nombre) = lower(${OFFICIAL_MUNICIPALITY})
+          AND lower(c.nombre) IN (${Prisma.join(OFFICIAL_COMMUNITY_NAMES.map((name) => name.toLowerCase()))})
         FOR SHARE OF c, m
       `
       if (!communities.length) throw new FamilyManagementError(400, 'VALIDATION_ERROR', 'Revisa la comunidad seleccionada.', [{ field: 'comunidadId', message: 'La comunidad debe existir y estar activa, al igual que su municipio.' }])

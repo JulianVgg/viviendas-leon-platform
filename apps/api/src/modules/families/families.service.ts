@@ -1,5 +1,6 @@
 import { getPrismaClient } from '../../config/prisma.js'
-import type { Prisma } from '../../generated/prisma/client.js'
+import { Prisma } from '../../generated/prisma/client.js'
+import { OFFICIAL_MUNICIPALITY, OFFICIAL_COMMUNITY_NAMES } from '../catalogs/official-communities.js'
 import type { FamilyCreateInput, FamilyListFilters, FamilyListItem } from './families.types.js'
 
 const familyDetailSelect = {
@@ -21,6 +22,7 @@ export async function createFamily(input: FamilyCreateInput) {
     const communities = await transaction.$queryRaw<Array<{ id: number }>>`
       SELECT c.id FROM comunidad c JOIN municipio m ON m.id = c.municipio_id
       WHERE c.id = ${input.comunidadId} AND c.activo = true AND m.activo = true
+        AND lower(m.nombre) = lower(${OFFICIAL_MUNICIPALITY}) AND lower(c.nombre) IN (${Prisma.join(OFFICIAL_COMMUNITY_NAMES.map((name) => name.toLowerCase()))})
       FOR SHARE OF c, m
     `
     if (!communities.length) return null
