@@ -13,10 +13,9 @@ import FamilyCreatePage from '@/features/families/pages/FamilyCreatePage'
 import FamilyDetailPage from '@/features/families/pages/FamilyDetailPage'
 import FamilyEditPage from '@/features/families/pages/FamilyEditPage'
 import HuertosPage, { CreateGardenPage } from '@/features/agriculture/pages/HuertosPage'
+import HuertoDetallePage from '@/features/agriculture/pages/HuertoDetallePage'
 import CultivosPage from '@/features/agriculture/pages/CultivosPage'
-import CiclosAgricolasPage from '@/features/agriculture/pages/CiclosAgricolasPage'
-import CicloDetallePage from '@/features/agriculture/pages/CicloDetallePage'
-import ProduccionPage from '@/features/agriculture/pages/ProduccionPage'
+import LegacyProductionRedirect from '@/features/agriculture/pages/LegacyProductionRedirect'
 import InsumosPage from '@/features/agriculture/pages/InsumosPage'
 
 import OfflineTestPage from '@/features/offline/pages/OfflineTestPage'
@@ -205,21 +204,15 @@ export default function AppRoutes() {
           />
 
           {/* Gestión agrícola */}
-          <Route
-            path="gestion-agricola"
-            element={module(
-              'Gestión agrícola',
-              'Seguimiento general de huertos, cultivos, producción, control fitosanitario e insumos.',
-              ['Área', 'Estado'],
-            )}
-          />
+          <Route path="gestion-agricola" element={<Navigate to="/gestion-agricola/huertos" replace />} />
 
           <Route path="gestion-agricola/huertos" element={<HuertosPage />} />
           <Route path="gestion-agricola/huertos/nuevo" element={<CreateGardenPage />} />
-          <Route path="gestion-agricola/ciclos" element={<CiclosAgricolasPage />} />
-          <Route path="gestion-agricola/ciclos/:id" element={<CicloDetallePage />} />
+          <Route path="gestion-agricola/huertos/:id" element={<HuertoDetallePage />} />
+          <Route path="gestion-agricola/ciclos" element={<Navigate to="/gestion-agricola/huertos" replace />} />
+          <Route path="gestion-agricola/ciclos/:id" element={<LegacyProductionRedirect />} />
           <Route path="gestion-agricola/cultivos" element={<Navigate to="/administracion/cultivos" replace />} />
-          <Route path="gestion-agricola/produccion" element={<ProduccionPage />} />
+          <Route path="gestion-agricola/produccion" element={<LegacyProductionRedirect />} />
 
           <Route
             path="gestion-agricola/control-fitosanitario"
