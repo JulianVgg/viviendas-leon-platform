@@ -108,10 +108,10 @@ export default function ProduccionSemestralReportPage() {
   const resumenTitulo = modo === 'rango' ? 'Resumen del período' : anio === anioCerrado && semestre === semestreCerrado
     ? 'Resumen del último semestre' : 'Resumen del semestre seleccionado'
   const resumenCards = informeVigente ? [
-    { titulo: 'Cosechas', valor: numero(informeVigente.resumen.cosechas), icono: PackageCheck, ruta: '/gestion-agricola/produccion' },
-    { titulo: 'Producción (kg)', valor: numero(informeVigente.resumen.cantidades.kg), icono: Sprout, ruta: '/gestion-agricola/ciclos' },
-    { titulo: 'Ventas (GTQ)', valor: importe(informeVigente.resumen.totalVentasOriginalGTQ, 'GTQ'), icono: Coins, ruta: '/gestion-agricola/ciclos' },
-    { titulo: 'Ventas (USD)', valor: importe(informeVigente.resumen.totalVentasOriginalUSD, 'USD'), icono: Coins, ruta: '/gestion-agricola/ciclos' },
+    { titulo: 'Cosechas', valor: numero(informeVigente.resumen.cosechas), icono: PackageCheck, ruta: '/gestion-agricola/huertos' },
+    { titulo: 'Producción (kg)', valor: numero(informeVigente.resumen.cantidades.kg), icono: Sprout, ruta: '/gestion-agricola/huertos' },
+    { titulo: 'Ventas (GTQ)', valor: importe(informeVigente.resumen.totalVentasOriginalGTQ, 'GTQ'), icono: Coins, ruta: '/gestion-agricola/huertos' },
+    { titulo: 'Ventas (USD)', valor: importe(informeVigente.resumen.totalVentasOriginalUSD, 'USD'), icono: Coins, ruta: '/gestion-agricola/huertos' },
   ] : []
 
   if (!autorizado) return <main className="p-6 text-sm text-error-600" role="alert">No tienes permiso para consultar reportes.</main>

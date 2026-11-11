@@ -56,7 +56,7 @@ export default function CicloEvaluacionesSection({ cicloId }: { cicloId: number 
     <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
       <div className="flex min-w-0 items-start gap-3">
         <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-500/15 dark:text-brand-400"><ClipboardList aria-hidden="true" size={20} /></div>
-        <div><h3 className="text-base font-semibold text-gray-900 dark:text-white">Evaluaciones agrícolas</h3><p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Registradas durante visitas técnicas</p></div>
+        <div><h3 className="text-base font-semibold text-gray-900 dark:text-white">Evaluaciones agrícolas</h3><div className="mt-2 flex flex-wrap items-center gap-2"><Badge variant={history?.pagination.total ? 'success' : 'neutral'}>{history?.pagination.total ?? 0} registradas</Badge><span className="text-xs text-gray-500 dark:text-gray-400">Visitas técnicas</span></div></div>
       </div>
       {canViewVisits && <Link to="/visitas/historial" className="layout-focus text-xs font-semibold text-brand-600 underline-offset-2 hover:underline dark:text-brand-400">Historial de visitas</Link>}
     </div>

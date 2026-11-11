@@ -100,7 +100,7 @@ export default function VisitDetailDialog({ visit, onClose, extra }: { visit: Vi
               <p className="font-semibold">Movimiento real · {pending ? 'Pendiente de sincronización' : 'Confirmado en Producción'}</p>
               {crop.movimientoReal.cosecha && <p>Cosecha: {crop.movimientoReal.cosecha.cantidad} · {crop.movimientoReal.cosecha.fechaCosecha}</p>}
               {crop.movimientoReal.venta && <p>Venta: {crop.movimientoReal.venta.cantidad} · {crop.movimientoReal.venta.fechaVenta}</p>}
-              {canReadHarvest && !pending && <Link to="/gestion-agricola/produccion" className="underline text-brand-600">Consultar Producción</Link>}
+              {canReadHarvest && !pending && <Link to="/gestion-agricola/huertos" className="underline text-brand-600">Ver huertos</Link>}
             </div>}
             {filled(crop.observacionesCultivo) && <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">{crop.observacionesCultivo}</p>}
             {crop.findings?.length > 0 && <div className="mt-3 rounded-lg border border-amber-100 p-3 text-xs dark:border-amber-900">

@@ -90,8 +90,6 @@ export const navigationGroups: { id: string; name: string; items: NavigationItem
       ] },
       { id: 'agriculture', name: 'Gestión agrícola', path: '/gestion-agricola', icon: icons.agriculture, roles: ['fieldWorker', 'coordination'], children: [
         { id: 'gardens', name: 'Huertos', path: '/gestion-agricola/huertos', icon: icons.gardens },
-        { id: 'cycles', name: 'Ciclos agrícolas', path: '/gestion-agricola/ciclos', icon: icons.crops },
-        { id: 'production', name: 'Producción', path: '/gestion-agricola/produccion', icon: icons.production },
         { id: 'supplies', name: 'Insumos', path: '/gestion-agricola/insumos', icon: icons.supplies },
       ] },
       { id: 'visits', name: 'Visitas técnicas', path: '/visitas', icon: icons.visits, roles: ['fieldWorker', 'coordination'], children: [

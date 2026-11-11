@@ -43,6 +43,10 @@ export function listGardens(familiaId?: number, signal?: AbortSignal) {
   return api<Garden[]>(familiaId ? `?familiaId=${familiaId}` : '', { signal })
 }
 
+export function getGarden(id: number, signal?: AbortSignal) {
+  return api<Garden>(`/${id}`, { signal })
+}
+
 export function listGardenFamilies(signal?: AbortSignal) {
   return api<FamilyOption[]>('/familias-opciones', { signal })
 }

@@ -24,7 +24,7 @@ export default function AgriculturaProduccionPanel({ datos, meses, filtros, alSa
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Últimos {meses} meses · {datos.periodo.desde} al {datos.periodo.hasta}</p></div>
       <div className="flex flex-wrap gap-2">
         {mostrarComparacion && <Link onClick={alSalir} to={construirEnlaceReportesDashboard({ desde: datos.periodo.desde, hasta: datos.periodo.hasta, comunidadId: filtros.comunidadId })} className="inline-flex items-center gap-2 rounded-lg border border-brand-200 bg-brand-50/50 px-3 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 dark:border-brand-500/20 dark:bg-brand-500/10 dark:text-brand-300">Comparar en Reportes <ArrowUpRight size={16}/></Link>}
-        <Link to="/gestion-agricola/produccion" onClick={alSalir} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 dark:border-gray-700 dark:bg-gray-900 dark:text-brand-300">Ver producción <ArrowUpRight size={16}/></Link>
+        <Link to="/gestion-agricola/huertos" onClick={alSalir} className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-brand-700 hover:bg-brand-50 dark:border-gray-700 dark:bg-gray-900 dark:text-brand-300">Ver huertos <ArrowUpRight size={16}/></Link>
       </div>
     </div>
     <div className="grid gap-4 xl:grid-cols-2">

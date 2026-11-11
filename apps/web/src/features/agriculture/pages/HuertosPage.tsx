@@ -1,6 +1,6 @@
-import { useEffect, useState, type FormEvent, type ChangeEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
-import { ImagePlus, Plus, Sprout } from 'lucide-react'
+import { ArrowLeft, ArrowUpRight, ChevronLeft, ChevronRight, ImagePlus, Layers3, Plus, Search, Warehouse } from 'lucide-react'
 import Alert from '@/components/ui/Alert'
 import Badge from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
@@ -13,22 +13,33 @@ import LoadingState from '@/components/ui/LoadingState'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { canWriteGardens } from '@/features/auth/screenPermissions'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
-import { createGarden, gardenImageUrl, listGardenFamilies, listGardens, uploadGardenImage, type FamilyOption, type Garden, type GardenClassification } from '../services/gardens'
-import { GardenClassificationFields, entornoLabels, modalidadLabels } from '../components/GardenClassificationFields'
+import { createGarden, listGardenFamilies, listGardens, uploadGardenImage, type FamilyOption, type Garden, type GardenClassification } from '../services/gardens'
+import { GardenClassificationFields, entornoLabels } from '../components/GardenClassificationFields'
 import EditGardenClassification from '../components/EditGardenClassification'
+import GardenScene from '../components/GardenScene'
+import { formatAgriculturalDate } from '../components/agriculturalDate'
+import { mainStructures, matchesGardenGroup, type GardenGroup } from '../services/gardenGroups'
 
-const typeLabels: Record<string, string> = { FAMILIAR: 'Familiar', COMUNITARIO: 'Comunitario' }
+const PAGE_SIZE = 6
 const statusLabels: Record<string, string> = { PLANIFICADO: 'Planificado', ACTIVO: 'Activo', INACTIVO: 'Inactivo' }
+type Status = 'TODOS' | 'PLANIFICADO' | 'ACTIVO' | 'INACTIVO'
+
+function BtnLink({ to, children, primary = false }: { to: string; children: ReactNode; primary?: boolean }) {
+  return <Link to={to} className={`layout-focus inline-flex min-h-10 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold shadow-theme-xs transition-colors ${primary ? 'bg-brand-500 text-white hover:bg-brand-600' : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'}`}>{children}</Link>
+}
 
 export default function HuertosPage() {
   const [gardens, setGardens] = useState<Garden[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [reload, setReload] = useState(0)
-  const [uploadingId, setUploadingId] = useState<number | null>(null)
+  const [group, setGroup] = useState<GardenGroup | null>(null)
   const [editingId, setEditingId] = useState<number | null>(null)
   const [notice, setNotice] = useState('')
-  const [params] = useSearchParams()
+  const [query, setQuery] = useState('')
+  const [status, setStatus] = useState<Status>('TODOS')
+  const [page, setPage] = useState(1)
+  const [params, setParams] = useSearchParams()
   const { usuario } = useAuth()
   const canCreate = Boolean(usuario && canWriteGardens(usuario))
   const online = useOnlineStatus()
@@ -36,57 +47,100 @@ export default function HuertosPage() {
   useEffect(() => {
     const controller = new AbortController()
     setLoading(true)
-    listGardens(undefined, controller.signal).then((data) => {
-      if (!controller.signal.aborted) { setGardens(data); setError('') }
-    }).catch((cause) => {
-      if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'No fue posible consultar los huertos.')
-    }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    listGardens(undefined, controller.signal)
+      .then(data => { if (!controller.signal.aborted) { setGardens(data); setError('') } })
+      .catch(cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'No fue posible consultar los huertos.') })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [reload])
 
-  async function changeImage(id: number, event: ChangeEvent<HTMLInputElement>) {
-    const image = event.target.files?.[0]
-    if (!image) return
-    event.target.value = ''
-    setNotice(''); setUploadingId(id)
-    try {
-      await uploadGardenImage(id, image)
-      setNotice(`La imagen del huerto #${id} se guardó en el servidor local.`)
-      setReload((n) => n + 1)
-    } catch (cause) { setNotice(cause instanceof Error ? cause.message : 'No fue posible subir la imagen.') }
-    finally { setUploadingId(null) }
+  // Selección compartible por URL, sin cambiar el diseño ni cargar ciclos antes de abrir un huerto.
+  const routeGroup = params.get('tipo')
+  const selectedGroup = routeGroup && (mainStructures.some(item => item.value === routeGroup) || routeGroup === 'SIN_CLASIFICAR')
+    ? routeGroup as GardenGroup : group
+  const groupName = selectedGroup === 'SIN_CLASIFICAR'
+    ? 'Sin clasificar'
+    : mainStructures.find(item => item.value === selectedGroup)?.title
+  const unclassified = gardens.filter(item => matchesGardenGroup(item, 'SIN_CLASIFICAR')).length
+  const filtered = useMemo(() => {
+    if (!selectedGroup) return []
+    const q = query.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+    return gardens.filter(garden => {
+      if (!matchesGardenGroup(garden, selectedGroup)) return false
+      if (status !== 'TODOS' && garden.estado !== status) return false
+      if (!q) return true
+      const text = [garden.nombre, garden.familia.nombreReferencia, garden.familia.comunidad.nombre]
+        .join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+      return text.includes(q)
+    })
+  }, [gardens, selectedGroup, query, status])
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const actualPage = Math.min(page, totalPages)
+  const shown = filtered.slice((actualPage - 1) * PAGE_SIZE, actualPage * PAGE_SIZE)
+
+  function chooseGroup(next: GardenGroup | null) {
+    setGroup(next)
+    setQuery('')
+    setStatus('TODOS')
+    setPage(1)
+    setEditingId(null)
+    const nextParams = new URLSearchParams(params)
+    if (next) nextParams.set('tipo', next)
+    else nextParams.delete('tipo')
+    nextParams.delete('huertoId')
+    setParams(nextParams, { replace: true })
   }
 
   return <>
-    <PageMeta title="Huertos | ViviendasLeón" description="Registro y consulta de huertos por familia." />
-    <PageHeader title="Huertos" description="Gestiona los huertos familiares y comunitarios y sus imágenes satelitales." actions={canCreate ? <Link to="/gestion-agricola/huertos/nuevo" className="layout-focus inline-flex min-h-11 items-center gap-2 rounded-lg bg-brand-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-600"><Plus size={17} /> Agregar huerto</Link> : undefined} />
-    {params.has('creado') && <Alert variant="success" title="Huerto guardado" className="mb-5">El registro quedó asociado con la familia seleccionada.</Alert>}
-    {params.has('imagenError') && <Alert variant="warning" title="Imagen pendiente" className="mb-5">El huerto #{params.get('imagenError')} fue registrado, pero no se guardó su imagen. Puedes adjuntarla desde la tarjeta correspondiente.</Alert>}
-    {!online && <Alert variant="warning" title="Sin conexión" className="mb-5">La consulta y las altas de huertos requieren conexión con el servidor. El soporte de sincronización offline queda para una fase posterior.</Alert>}
-    {notice && <Alert variant="info" className="mb-5">{notice}</Alert>}
-    <ComponentCard title="Huertos registrados" description="Hasta 500 huertos recientes; abre un expediente para consultar la información familiar." actions={<Badge>{gardens.length} huertos</Badge>}>
-      {loading && <LoadingState label="Consultando huertos..." />}
-      {error && <Alert variant="error" title="Error al consultar">{error}<Button variant="secondary" type="button" className="mt-3" onClick={() => setReload((n) => n + 1)}>Reintentar</Button></Alert>}
-      {!loading && !error && !gardens.length && <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-slate-300 py-12 text-center text-slate-500 dark:border-slate-700"><Sprout size={36} /><p>Todavía no hay huertos registrados.</p>{canCreate && <Link className="text-brand-600 underline" to="/gestion-agricola/huertos/nuevo">Registrar el primero</Link>}</div>}
-      {!loading && !error && <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{gardens.map((garden) => <article key={garden.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-theme-xs dark:border-slate-800 dark:bg-slate-900">
-        {gardenImageUrl(garden) ? <img className="h-44 w-full object-cover" src={gardenImageUrl(garden)!} alt={`Vista satelital de ${garden.nombre || `huerto ${garden.id}`}`} loading="lazy" /> : <div className="flex h-44 items-center justify-center bg-slate-100 text-slate-400 dark:bg-slate-800"><ImagePlus size={36} aria-label="Sin imagen satelital" /></div>}
-        <div className="space-y-3 p-5"><div className="flex items-start justify-between gap-2"><h3 className="font-semibold text-slate-900 dark:text-white">{garden.nombre || `Huerto #${garden.id}`}</h3><Badge>{statusLabels[garden.estado] || garden.estado}</Badge></div>
-        <p className="text-sm text-slate-600 dark:text-slate-300">{typeLabels[garden.tipo || ''] || 'Tipo sin clasificar'} · {garden.fechaInicio || 'Sin fecha'}</p>
-        <p className="text-xs text-slate-500 dark:text-slate-400">Entorno: {garden.entornoCultivo ? entornoLabels[garden.entornoCultivo] : 'Sin clasificar'}</p>
-        <p className="text-xs text-slate-500 dark:text-slate-400">Modalidad: {garden.modalidadesProductivas.length ? garden.modalidadesProductivas.map(m => modalidadLabels[m]).join(', ') : 'Sin clasificar'}</p>
-        {garden.entornoCultivo === 'OTRO' && garden.detalleEntorno && <p className="text-xs text-slate-500">{garden.detalleEntorno}</p>}
-        <p className="text-sm"><Link to={`/familias/${garden.familiaId}`} className="text-brand-600 underline dark:text-brand-300">{garden.familia.nombreReferencia}</Link><span className="block text-xs text-slate-500">{garden.familia.comunidad.nombre}</span></p>
-        {garden.observaciones && <p className="line-clamp-3 whitespace-pre-wrap text-sm text-slate-500 dark:text-slate-400">{garden.observaciones}</p>}
-        {canCreate && <button type="button" disabled={!online} onClick={() => setEditingId(current => current === garden.id ? null : garden.id)}
-          className="layout-focus inline-flex min-h-10 items-center rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-brand-600 disabled:opacity-50 dark:border-slate-700">
-          {editingId === garden.id ? 'Cerrar clasificación' : 'Editar clasificación'}
-        </button>}
-        {canCreate && <label className={`layout-focus relative inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 dark:border-slate-700 dark:text-slate-300 ${!online || uploadingId !== null ? 'opacity-50' : 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800'}`}><ImagePlus size={17} />{uploadingId === garden.id ? 'Guardando...' : garden.tieneImagen ? 'Reemplazar imagen' : 'Añadir imagen'}<input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp" aria-label={`Imagen satelital del huerto ${garden.nombre || garden.id}`} disabled={!online || uploadingId !== null} onChange={(event) => void changeImage(garden.id, event)} /></label>}
-        {canCreate && editingId === garden.id && <EditGardenClassification key={garden.id} garden={garden} onCancel={() => setEditingId(null)}
-          onSaved={updated => { setGardens(current => current.map(item => item.id === updated.id ? updated : item)); setEditingId(null); setNotice('Clasificación actualizada.') }} />}
+    <PageMeta title="Huertos | ViviendasLeón" description="Huertos por tipo de estructura." />
+    <PageHeader title="Huertos" description="" actions={canCreate ? <BtnLink to="/gestion-agricola/huertos/nuevo" primary><Plus size={17}/> Agregar huerto</BtnLink> : undefined} />
+    {params.has('creado') && <Alert variant="success" className="mb-5">Huerto guardado.</Alert>}
+    {params.has('imagenError') && <Alert variant="warning" className="mb-5">El huerto se guardó, pero no se pudo adjuntar su fotografía.</Alert>}
+    {!online && <Alert variant="warning" title="Sin conexión" className="mb-5">Los cambios requieren conexión.</Alert>}
+    {notice && <Alert variant="success" className="mb-5">{notice}</Alert>}
+    {error && <Alert variant="error" title="No se pudo consultar" className="mb-5">{error}<Button type="button" variant="secondary" className="mt-3" onClick={() => setReload(n => n + 1)}>Reintentar</Button></Alert>}
+
+    <section className="space-y-5" aria-label="Tipos de huerto">
+      <div className="grid gap-4 lg:grid-cols-3">
+        {mainStructures.map(item => {
+          const count = gardens.filter(garden => matchesGardenGroup(garden, item.value)).length
+          return <button key={item.value} type="button" aria-pressed={selectedGroup === item.value}
+            onClick={() => chooseGroup(item.value)}
+            className={`layout-focus group overflow-hidden rounded-[1.6rem] border bg-white text-left shadow-theme-xs transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-1 hover:shadow-theme-md motion-reduce:transform-none dark:bg-gray-900 ${selectedGroup === item.value ? 'border-brand-500 ring-2 ring-brand-500/20' : 'border-gray-200 hover:border-brand-300 dark:border-gray-800 dark:hover:border-brand-700'}`}>
+            <GardenScene structure={item.value} compact showLegend={false} />
+            <div className="flex items-center justify-between gap-4 px-5 py-4">
+              <div className="min-w-0"><h2 className="text-lg font-semibold text-gray-900 dark:text-white">{item.title}</h2><p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{item.caption}</p></div>
+              <div className="flex shrink-0 items-center gap-2"><Badge variant="neutral">{loading ? '…' : count} huertos</Badge><ChevronRight size={20} className="text-brand-600 transition-transform group-hover:translate-x-1 motion-reduce:transform-none dark:text-brand-300" /></div>
+            </div>
+          </button>
+        })}
+      </div>
+      {unclassified > 0 && <button type="button" onClick={() => chooseGroup('SIN_CLASIFICAR')}
+        className="layout-focus inline-flex items-center gap-2 rounded-lg px-2 py-2 text-sm font-medium text-gray-600 hover:text-brand-600 dark:text-gray-300">
+        <Layers3 size={16} /> Sin clasificar ({unclassified}) <ChevronRight size={15} />
+      </button>}
+    </section>
+
+    {selectedGroup && <section className="mt-6" aria-label={`Huertos de ${groupName}`}>
+      <ComponentCard title={`${groupName} · Huertos`} description="" actions={<Button type="button" variant="secondary" size="sm" onClick={() => chooseGroup(null)}><ArrowLeft size={16}/> Volver a categorías</Button>}>
+        <div className="mb-5 flex flex-wrap items-center gap-3">
+          <label className="relative min-w-[220px] flex-1"><Search size={17} className="pointer-events-none absolute left-3 top-3.5 text-gray-400"/><input aria-label="Buscar huertos" value={query} maxLength={120} onChange={event => { setQuery(event.target.value); setPage(1) }} placeholder="Buscar huerto, familia o comunidad" className={`${formControlClassName} pl-10`}/></label>
+          <select aria-label="Estado" className={`${formControlClassName} w-full sm:w-44`} value={status} onChange={event => { setStatus(event.target.value as Status); setPage(1) }}><option value="TODOS">Todos los estados</option><option value="ACTIVO">Activos</option><option value="PLANIFICADO">Planificados</option><option value="INACTIVO">Inactivos</option></select>
+          <Badge variant="neutral">{filtered.length} resultados</Badge>
         </div>
-      </article>)}</div>}
-    </ComponentCard>
+        {loading && <LoadingState label="Consultando huertos..." />}
+        {!loading && !error && !filtered.length && <div className="rounded-xl border border-dashed border-gray-300 p-10 text-center text-sm text-gray-500 dark:border-gray-700">No hay huertos con los filtros actuales.</div>}
+        {!loading && !error && <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
+          {shown.map(garden => <article key={garden.id} className="min-w-0 rounded-2xl border border-gray-200 bg-white p-5 shadow-theme-xs transition-colors hover:border-brand-300 dark:border-gray-800 dark:bg-gray-900">
+            <div className="flex items-start justify-between gap-3"><h3 className="break-words text-base font-semibold text-gray-900 dark:text-white">{garden.nombre || `Huerto #${garden.id}`}</h3><Badge variant={garden.estado === 'ACTIVO' ? 'success' : 'neutral'}>{statusLabels[garden.estado] || garden.estado}</Badge></div>
+            <div className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-300"><p className="font-medium text-gray-900 dark:text-white">{garden.familia.nombreReferencia}</p><p>{garden.familia.comunidad.nombre}</p><p>{garden.entornoCultivo ? entornoLabels[garden.entornoCultivo] : 'Sin clasificar'} · {formatAgriculturalDate(garden.fechaInicio)}</p></div>
+            <div className="mt-5 flex flex-wrap gap-2"><BtnLink to={`/gestion-agricola/huertos/${garden.id}`} primary><Warehouse size={16}/> Abrir huerto <ArrowUpRight size={14}/></BtnLink>{canCreate && <Button type="button" variant="secondary" size="sm" disabled={!online} onClick={() => setEditingId(current => current === garden.id ? null : garden.id)}>{editingId === garden.id ? 'Cerrar edición' : 'Editar clasificación'}</Button>}</div>
+            {canCreate && editingId === garden.id && <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-800"><EditGardenClassification key={garden.id} garden={garden} onCancel={() => setEditingId(null)} onSaved={updated => { setGardens(prev => prev.map(item => item.id === updated.id ? updated : item)); setEditingId(null); setNotice('Clasificación actualizada.') }} /></div>}
+          </article>)}
+        </div>}
+        {!loading && totalPages > 1 && <div className="mt-6 flex items-center justify-end gap-3"><Button type="button" variant="secondary" size="sm" disabled={actualPage === 1} onClick={() => setPage(n => n - 1)}><ChevronLeft size={16}/> Anterior</Button><span className="text-xs text-gray-500">{actualPage} de {totalPages}</span><Button type="button" variant="secondary" size="sm" disabled={actualPage === totalPages} onClick={() => setPage(n => n + 1)}>Siguiente <ChevronRight size={16}/></Button></div>}
+      </ComponentCard>
+    </section>}
   </>
 }
 
@@ -148,12 +202,12 @@ export function CreateGardenPage() {
 
   return <>
     <PageMeta title="Registrar huerto | ViviendasLeón" description="Asociar un huerto con una familia." />
-    <PageHeader title="Agregar huerto" description="Registra los datos principales del huerto y, opcionalmente, adjunta una imagen satelital." actions={<Link to={lockedFamilyId ? `/familias/${lockedFamilyId}?tab=gardens` : '/gestion-agricola/huertos'} className="text-sm text-brand-600 underline">Volver</Link>} />
+    <PageHeader title="Agregar huerto" description="" actions={<Link to={lockedFamilyId ? `/familias/${lockedFamilyId}?tab=gardens` : '/gestion-agricola/huertos'} className="text-sm text-brand-600 underline">Volver</Link>} />
     {!online && <Alert variant="warning" title="Conexión requerida" className="mb-5">El alta y la carga de imágenes se guardan en el servidor y requieren conexión.</Alert>}
     {!canCreate && <Alert variant="warning" title="Acceso de solo lectura" className="mb-5">Tu perfil no tiene permiso para registrar huertos.</Alert>}
     {error && <Alert variant="error" title="No se pudo completar el registro" className="mb-5">{error}</Alert>}
     <form onSubmit={(event) => void submit(event)} className="space-y-6">
-      <ComponentCard title="Datos del huerto" description="Información vinculada al expediente de la familia beneficiaria.">
+      <ComponentCard title="Datos del huerto" description="">
         <FormGrid>
           <FormField label="Familia beneficiaria" required hint="El huerto quedará asociado a esta familia."><select className={formControlClassName} required disabled={loading || saving || !canCreate || Boolean(lockedFamilyId)} value={familyId} onChange={(event) => setFamilyId(event.target.value)}><option value="">Seleccionar familia...</option>{families.map((f) => <option key={f.id} value={f.id}>{f.nombreReferencia} · {f.comunidad.nombre} ({f.estado})</option>)}</select></FormField>
           <FormField label="Nombre del huerto" hint="Opcional según la base de datos."><input className={formControlClassName} maxLength={120} value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej. Huerto principal" /></FormField>
@@ -163,8 +217,8 @@ export function CreateGardenPage() {
           <div className="sm:col-span-2"><FormField label="Observaciones"><textarea className={`${formControlClassName} min-h-28 h-auto`} rows={4} maxLength={2000} value={observaciones} onChange={(e) => setObservaciones(e.target.value)} placeholder="Detalles del terreno, estructura y condiciones iniciales" /></FormField></div>
         </FormGrid>
       </ComponentCard>
-      <ComponentCard title="Imagen satelital o fotografía del espacio" description="Almacenamiento local temporal de la API; admite JPG, PNG y WebP (máximo 5 MB).">
-        <label className="block cursor-pointer rounded-xl border-2 border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 hover:border-brand-500 dark:border-slate-700 dark:hover:border-brand-500"><ImagePlus size={32} className="mx-auto mb-3" /><span className="block font-semibold text-slate-700 dark:text-slate-200">Seleccionar imagen del huerto</span><span>Haz clic para elegir un archivo</span><input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setFile(event.target.files?.[0] || null)} /></label>
+      <ComponentCard title="Imagen del espacio" description="">
+        <label className="block cursor-pointer rounded-xl border-2 border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 hover:border-brand-500 dark:border-slate-700 dark:hover:border-brand-500"><ImagePlus size={32} className="mx-auto mb-3" /><span className="block font-semibold text-slate-700 dark:text-slate-200">Seleccionar imagen del huerto</span><span>JPG, PNG o WebP · máximo 5 MB</span><input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setFile(event.target.files?.[0] || null)} /></label>
         {file && <div className="mt-4 space-y-2"><p className="break-all text-sm text-slate-600 dark:text-slate-300">{file.name} · {(file.size / 1024 / 1024).toFixed(2)} MB</p>{preview && <img src={preview} alt="Vista previa de imagen elegida" className="max-h-72 w-full rounded-lg object-contain" />}<Button type="button" variant="secondary" size="sm" onClick={() => setFile(null)}>Quitar imagen</Button></div>}
       </ComponentCard>
       <div className="flex flex-wrap justify-end gap-3"><Link to={lockedFamilyId ? `/familias/${lockedFamilyId}?tab=gardens` : '/gestion-agricola/huertos'} className="inline-flex min-h-11 items-center rounded-lg border border-slate-300 px-5 text-sm font-medium dark:border-slate-700">Cancelar</Link><Button type="submit" disabled={!canCreate || !online || saving || loading}>{saving ? 'Guardando...' : 'Guardar huerto'}</Button></div>

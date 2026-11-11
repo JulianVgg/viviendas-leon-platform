@@ -60,6 +60,7 @@ export const SCREEN_PERMISSIONS: Record<string, string> = {
 export function permissionForPath(path: string): string | null {
   if (SCREEN_PERMISSIONS[path]) return SCREEN_PERMISSIONS[path]
   if (/^\/gestion-agricola\/ciclos\/[1-9]\d*$/.test(path)) return 'PANTALLA_CICLOS'
+  if (/^\/gestion-agricola\/huertos\/[1-9]\d*$/.test(path)) return 'PANTALLA_HUERTOS'
   if (/^\/familias\/[^/]+\/editar$/.test(path)) return 'PANTALLA_FAMILIAS_EDITAR'
   if (/^\/familias\/[^/]+$/.test(path)) return 'PANTALLA_FAMILIAS_DETALLE'
   return null

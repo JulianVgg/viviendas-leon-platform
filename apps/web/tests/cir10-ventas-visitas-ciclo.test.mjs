@@ -4,10 +4,16 @@ import { readFileSync } from 'node:fs'
 
 const read = (name) => readFileSync(new URL(`../src/${name}`, import.meta.url), 'utf8')
 
-test('la pantalla Producción no ofrece ventas ni captura manual de tipo de cambio', () => {
-  const view = read('features/agriculture/pages/ProduccionPage.tsx')
-  assert.doesNotMatch(view, /<SalesPanel|<ExchangeRatesPanel/)
-  assert.match(view, /Historial de cosechas/)
+test('Huertos reúne ciclos, evaluaciones y producción sin listados duplicados', () => {
+  const detail = read('features/agriculture/pages/HuertoDetallePage.tsx')
+  const routes = read('app/routes.tsx')
+  const navigation = read('app/navigation/navigation.tsx')
+  assert.match(detail, /CicloEvaluacionesSection/)
+  assert.match(detail, /CicloProduccionSection/)
+  assert.match(detail, /RegistrarCosechaDialog/)
+  assert.match(routes, /gestion-agricola\/ciclos.*Navigate to/)
+  assert.match(routes, /gestion-agricola\/produccion.*LegacyProductionRedirect/)
+  assert.doesNotMatch(navigation, /name: 'Ciclos agrícolas'|name: 'Producción'/)
 })
 
 test('las ventas se consultan por ciclo y se muestran junto a su cosecha', () => {
@@ -20,7 +26,7 @@ test('las ventas se consultan por ciclo y se muestran junto a su cosecha', () =>
 test('la visita conserva estimaciones distintas y envía movimientos reales si se confirman', () => {
   const view = read('features/visits/pages/VisitRegisterPage.tsx')
   assert.match(view, /validarMovimientoParaVisita/)
-  assert.match(view, /movimientoReal: c\.movimientoReal/)
-  assert.match(view, /VisitEconomicsFields/)
-  assert.match(view, /estimatedSaleQ|currencyTotal/)
+  assert.match(view, /movimientoReal: movimientos\.get\(c\.id\)/)
+  assert.match(view, /movimientoProduccion/)
+  assert.match(view, /currencyTotal/)
 })

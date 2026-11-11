@@ -65,6 +65,18 @@ gardensRouter.get('/', async (req, res, next) => {
   } catch (error) { next(error) }
 })
 
+// Consulta puntual: permite abrir también huertos que no estén entre los 500 más recientes.
+gardensRouter.get('/:id', async (req, res, next) => {
+  const id = parseGardenId(req.params.id)
+  if (id === null) { res.status(400).json(errorResponse('VALIDATION_ERROR', 'Identificador no válido.')); return }
+  try {
+    const garden = await getPrismaClient().huerto.findUnique({ where: { id }, select: gardenSelect })
+    if (!garden) { res.status(404).json(errorResponse('GARDEN_NOT_FOUND', 'El huerto no existe.')); return }
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.json({ data: serializeGarden(garden) })
+  } catch (error) { next(error) }
+})
+
 gardensRouter.post('/', requirePermission('HUERTOS_WRITE'), async (req, res, next) => {
   const result = validateGardenInput(req.body)
   if (!result.data) {
