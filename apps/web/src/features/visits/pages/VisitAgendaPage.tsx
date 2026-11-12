@@ -1,6 +1,6 @@
 import '../visits.css'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarDays, CheckCheck, ChevronLeft, ChevronRight, ClipboardList, Clock3, Edit3, RefreshCw, Trash2 } from 'lucide-react'
+import { CalendarDays, CheckCheck, ChevronLeft, ChevronRight, ClipboardList, Clock3, Edit3, RefreshCw, Trash2, CalendarCheck, Sprout } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router'
 import PageHeader from '@/components/common/PageHeader'
 import Dialog from '@/components/ui/Dialog'
@@ -14,7 +14,9 @@ import VisitDetailDialog from '@/features/visits/components/VisitDetailDialog'
 import WhatsAppReminderDialog from '@/features/visits/components/WhatsAppReminderDialog'
 import InvitacionDetalleDialog from '@/features/notifications/components/InvitacionDetalleDialog'
 import { obtenerMisInvitaciones, type DetalleInvitacion } from '@/features/notifications/services/invitationsService'
-import { addCivilDays } from '@/features/visits/services/visitPlanning'
+import { addCivilDays, getVisitPlanning, type FamilyVisitPlanning } from '@/features/visits/services/visitPlanning'
+import { listGardens, type Garden } from '@/features/agriculture/services/gardens'
+import FamilyStatusDot from '@/features/families/components/FamilyStatusDot'
 import { filtrarAgenda, filtrosIniciales, type FiltrosAgenda } from '@/features/visits/services/personalCalendarFilters'
 import ScheduleTrainingDialog from '@/features/training/components/ScheduleTrainingDialog'
 import { getTrainings, type Training } from '@/features/training/services/trainingService'
@@ -36,6 +38,9 @@ export default function VisitAgendaPage() {
   const targetSeguimientoId = searchParams.get('seguimiento')
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1))
   const [items, setItems] = useState<VisitListItem[]>([])
+  const [gardenFamilies, setGardenFamilies] = useState<Garden[]>([])
+  const [familyPlanning, setFamilyPlanning] = useState<FamilyVisitPlanning[]>([])
+  const [coverageError, setCoverageError] = useState(false)
   const [followups, setFollowups] = useState<VisitFollowUp[]>([])
   const [invitaciones, setInvitaciones] = useState<DetalleInvitacion[]>([])
   const [capacitaciones, setCapacitaciones] = useState<Training[]>([])
@@ -59,6 +64,7 @@ export default function VisitAgendaPage() {
   const [reminderView, setReminderView] = useState<'upcoming' | 'overdue' | 'undated' | 'all'>('upcoming')
   const [reminderDays, setReminderDays] = useState(30)
   const [schedulingDate, setSchedulingDate] = useState<string | null>(null)
+  const [scheduleFamilyId, setScheduleFamilyId] = useState<number | null>(null)
   const [expandedDay, setExpandedDay] = useState<string | null>(null)
   const carousel = useRef<HTMLDivElement>(null)
   const today = todayInGuatemala()
@@ -85,6 +91,13 @@ export default function VisitAgendaPage() {
         puedeConsultarCapacitaciones ? getTrainings({ mias: true }).then(data => ({ data, error: '' })).catch(() => ({ data: [] as Training[], error: 'No se pudieron consultar tus capacitaciones.' })) : Promise.resolve({ data: [] as Training[], error: '' }),
       ])
       setItems(visits.items); setFollowups(pending.items)
+      // La planificación incluye visitas realizadas/programadas de otros técnicos.
+      // No se inventa un estado cuando la API está inaccesible.
+      const [gardenResult, planningResult] = await Promise.allSettled([listGardens(), getVisitPlanning(usuario.id)])
+      if (gardenResult.status === 'fulfilled') setGardenFamilies(gardenResult.value.filter(item => item.estado === 'ACTIVO'))
+      if (planningResult.status === 'fulfilled') setFamilyPlanning(planningResult.value.rows)
+      setCoverageError(gardenResult.status !== 'fulfilled' || planningResult.status !== 'fulfilled' ||
+        (planningResult.status === 'fulfilled' && planningResult.value.local))
       setInvitaciones(eventos.data.filter(e => ['ACEPTADA','ASIGNADO'].includes(e.estado ?? '')))
       setCapacitaciones(mias.data); setAvisoCapacitaciones(mias.error)
       setLocal(visits.local || pending.local); setError('')
@@ -132,6 +145,27 @@ export default function VisitAgendaPage() {
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
   }, [refresh])
+
+  const coverage = useMemo(() => {
+    const unique = new Map<number, Garden>()
+    for (const garden of gardenFamilies) if (!unique.has(garden.familiaId)) unique.set(garden.familiaId, garden)
+    const info = new Map(familyPlanning.map(row => [row.familyId, row]))
+    const start = addCivilDays(today, -7)
+    return Array.from(unique.values()).map(garden => {
+      const planning = info.get(garden.familiaId)
+      const localVisits = items.filter(visit => visit.familyId === garden.familiaId)
+      const completed = Boolean((planning?.lastCompleted && planning.lastCompleted >= start && planning.lastCompleted <= today) ||
+        localVisits.some(visit => visit.status === 'REALIZADA' && visit.date >= start && visit.date <= today))
+      const scheduled = planning?.scheduled.find(visit => visit.date >= today) ??
+        localVisits.find(visit => visit.status === 'PROGRAMADA' && visit.date >= today)
+      const overdue = planning?.scheduled.find(visit => visit.date < today) ??
+        localVisits.find(visit => visit.status === 'PROGRAMADA' && visit.date < today)
+      const situation: 'realizada' | 'agendada' | 'vencida' | 'pendiente' = completed ? 'realizada' : scheduled ? 'agendada' : overdue ? 'vencida' : 'pendiente'
+      return { garden, planning, situation, scheduled }
+    }).sort((a, b) => ({ pendiente: 0, vencida: 1, agendada: 2, realizada: 3 }[a.situation] -
+      { pendiente: 0, vencida: 1, agendada: 2, realizada: 3 }[b.situation]) || a.garden.familia.nombreReferencia.localeCompare(b.garden.familia.nombreReferencia, 'es'))
+  }, [gardenFamilies, familyPlanning, items, today])
+  const missingCoverage = coverage.filter(row => row.situation === 'pendiente' || row.situation === 'vencida').length
 
   const byDate = useMemo(() => {
     const map = new Map<string, VisitListItem[]>()
@@ -269,7 +303,7 @@ export default function VisitAgendaPage() {
     <PageHeader title="Mi calendario" description="" />
     {error && <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-500/10 dark:text-red-300">{error}</div>}
     {avisoCapacitaciones && <p role="status" className="mb-3 text-xs text-amber-700 dark:text-amber-400">{avisoCapacitaciones}</p>}
-    {local && !error && <p className="mb-3 text-xs font-medium text-amber-700 dark:text-amber-300">Mostrando datos guardados en este dispositivo. Editar pendientes requiere conexión.</p>}
+    {local && !error && <p className="mb-3 text-xs font-medium text-amber-700 dark:text-amber-300">Datos locales · cambios pendientes al reconectar.</p>}
     <div className="mb-4 flex flex-wrap items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
       <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-brand-500"/>Programada</span>
       <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-full bg-violet-500"/>Evento</span>
@@ -340,7 +374,8 @@ export default function VisitAgendaPage() {
           })}</div>
         </div></div>
       </section>
-      <section className={`${card} self-start`} aria-label="Próximas visitas y recordatorios">
+      <aside className="min-w-0 space-y-4 self-start">
+      <section className={`${card} flex max-h-[50vh] min-h-0 flex-col overflow-hidden`} aria-label="Próximas visitas y recordatorios">
         <header className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-800"><h2 className="font-semibold text-gray-900 dark:text-white">Mis actividades</h2><Button type="button" variant="ghost" size="sm" onClick={()=>void refresh()} aria-label="Actualizar agenda" disabled={loading}><RefreshCw size={16}/></Button></header>
         <div className="grid gap-2 border-b border-gray-100 px-4 py-3 dark:border-gray-800">
           <select aria-label="Mostrar actividades" className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white" value={reminderView} onChange={e=>setReminderView(e.target.value as typeof reminderView)}>
@@ -351,14 +386,14 @@ export default function VisitAgendaPage() {
           </select>}
           <p className="text-xs text-gray-500 dark:text-gray-400">{reminders.length} actividad(es){reminders.length > visibleReminders.length ? ' · mostrando las primeras 12' : ''}</p>
         </div>
-        <div className="relative flex gap-2 p-4">
+        <div className="relative flex min-h-0 flex-1 gap-2 p-4">
           <div ref={carousel} onScroll={event => {
             const root = event.currentTarget
             const sections = root.querySelectorAll<HTMLElement>('[data-reminder]')
             let closest = 0; let distance = Infinity
             sections.forEach((section,i)=> { const d=Math.abs(section.offsetTop-root.offsetTop-root.scrollTop); if(d<distance){closest=i;distance=d} })
             setSlide(closest)
-          }} className="custom-scrollbar max-h-[450px] min-w-0 flex-1 snap-y snap-mandatory space-y-3 overflow-y-auto overscroll-contain">
+          }} className="custom-scrollbar min-h-0 min-w-0 flex-1 snap-y snap-mandatory space-y-3 overflow-y-auto overscroll-contain">
             {loading ? <p className="py-8 text-center text-sm text-gray-500">Cargando…</p> : reminders.length === 0 ? <div className="py-9 text-center text-sm text-gray-500"><CheckCheck className="mx-auto mb-2 text-emerald-500" size={27}/>Sin actividades para estos filtros.</div>
             : visibleReminders.map(item => <article key={item.key} data-reminder className="snap-start rounded-xl border border-gray-200 bg-gray-50/30 p-3 dark:border-gray-800 dark:bg-white/5">
               <div className="mb-2 flex items-center gap-2 text-xs font-semibold"><span className={`rounded-full px-2 py-1 ${item.type==='training' ? 'bg-cyan-50 text-cyan-700 dark:bg-cyan-500/10 dark:text-cyan-300' : item.type==='institutional' ? 'bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300' : item.type==='visit' ? item.date && item.date < today ? 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300' : 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300' : item.followup?.status === 'NO_CUMPLIDO' ? 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'}`}>{item.type==='training' ? 'Capacitación' : item.type==='institutional' ? 'Evento' : item.type==='visit' ? item.date && item.date < today ? 'Visita vencida' : 'Visita programada' : item.followup?.status === 'NO_CUMPLIDO' ? 'No cumplido' : 'Seguimiento'}</span><span className={item.date && item.date<today?'text-rose-600':'text-gray-500'}>{item.date ? dateLabel(item.date) : item.followup?.nextVisit ? 'Próxima visita' : 'Sin fecha'}{item.date && item.date<today?' · Vencido':''}</span></div>
@@ -381,8 +416,27 @@ export default function VisitAgendaPage() {
 
           </div>}
         </div>
-        <footer className="flex flex-wrap gap-3 border-t border-gray-200 px-5 py-4 text-xs dark:border-gray-800"><ClipboardList size={16} className="text-amber-500"/><span className="text-gray-600 dark:text-gray-400">{pendingCount} compromiso(s) por revisar</span><Link to="/visitas/historial" className="ml-auto font-medium text-brand-600 hover:underline dark:text-brand-400">Ver historial →</Link></footer>
+        <footer className="flex shrink-0 flex-wrap gap-3 border-t border-gray-200 px-5 py-3 text-xs dark:border-gray-800"><ClipboardList size={16} className="text-amber-500"/><span className="text-gray-600 dark:text-gray-400">{pendingCount} compromiso(s) por revisar</span><Link to="/visitas/historial" className="ml-auto font-medium text-brand-600 hover:underline dark:text-brand-400">Ver historial →</Link></footer>
       </section>
+      <section className={`${card} overflow-hidden`} aria-label="Cobertura de visitas por familia">
+        <header className="flex items-center justify-between gap-2 border-b border-gray-200 px-4 py-3 dark:border-gray-800"><div className="flex min-w-0 items-center gap-2"><Sprout size={17} className="text-brand-600"/><h2 className="text-sm font-semibold dark:text-white">Familias con huerto</h2></div><span className="text-xs font-semibold text-amber-700">{missingCoverage} por agendar</span></header>
+        <div className="max-h-[42vh] space-y-2 overflow-y-auto p-3 custom-scrollbar">
+          {coverageError && <p className="text-xs text-amber-700">Datos locales; se actualizarán al conectar.</p>}
+          {!coverage.length && <p className="py-5 text-center text-xs text-slate-500">Sin huertos disponibles en esta consulta.</p>}
+          {coverage.map(({ garden, situation, scheduled, planning }) => <div key={garden.familiaId}
+            className={`flex items-center gap-2 rounded-xl border p-3 text-xs ${situation === 'realizada' ? 'border-emerald-200 bg-emerald-50/80 dark:border-emerald-900 dark:bg-emerald-500/10' : situation === 'agendada' ? 'border-sky-200 bg-sky-50/60 dark:border-sky-900 dark:bg-sky-500/10' : 'border-slate-200 dark:border-slate-800'}`}>
+            <span aria-hidden="true" className={`flex size-7 shrink-0 items-center justify-center rounded-lg ${situation === 'realizada' ? 'bg-emerald-100 text-emerald-700' : situation === 'agendada' ? 'bg-sky-100 text-sky-700' : 'bg-amber-100 text-amber-700'}`}>
+              {situation === 'realizada' || situation === 'agendada' ? <CalendarCheck size={16}/> : <CalendarDays size={16}/>}</span>
+            <div className="min-w-0 flex-1"><p className={`flex items-center gap-1.5 truncate font-semibold text-slate-800 dark:text-white ${situation === 'realizada' || situation === 'agendada' ? 'line-through decoration-slate-400' : ''}`}><FamilyStatusDot state={garden.familia.estado}/>{garden.familia.nombreReferencia}</p>
+              <p className="mt-0.5 truncate text-slate-500">{situation === 'realizada' ? 'Visitada · últimos 8 días' : situation === 'agendada' ? `Agendada · ${scheduled?.date}` : situation === 'vencida' ? 'Cita vencida · reprogramar' : planning?.lastCompleted ? 'Visita por programar' : 'Sin visita reciente'}</p>
+            </div>
+            {situation === 'pendiente' && <button type="button" onClick={() => { setScheduleFamilyId(garden.familiaId); setSchedulingDate(today) }} className="shrink-0 rounded-lg bg-brand-500 px-2.5 py-2 font-semibold text-white hover:bg-brand-600">Agendar</button>}
+            {situation === 'vencida' && <span className="shrink-0 text-[10px] font-semibold text-rose-600">Vencida</span>}
+          </div>)}
+        </div>
+        <footer className="border-t border-gray-100 px-4 py-2 text-[11px] text-slate-500 dark:border-gray-800">Ciclo de 8 días · se actualiza con la agenda</footer>
+      </section>
+      </aside>
     </div>
     <Dialog open={Boolean(expandedDay)} onClose={() => setExpandedDay(null)} title="Registros del día"
       description={expandedDay ? new Date(`${expandedDay}T12:00:00`).toLocaleDateString('es-GT', {weekday:'long', day:'numeric', month:'long', year:'numeric'}) : undefined}
@@ -401,7 +455,7 @@ export default function VisitAgendaPage() {
       description={seleccionarTipoFecha ? dateLabel(seleccionarTipoFecha) : undefined}>
       <div className="grid gap-3 sm:grid-cols-2">
         <button type="button" className="rounded-xl border border-gray-200 p-5 text-left font-semibold transition hover:border-brand-500 hover:bg-brand-50 dark:border-gray-700 dark:hover:bg-gray-800"
-          onClick={()=>{setSchedulingDate(seleccionarTipoFecha);setSeleccionarTipoFecha(null)}}>Visita técnica</button>
+          onClick={()=>{setScheduleFamilyId(null);setSchedulingDate(seleccionarTipoFecha);setSeleccionarTipoFecha(null)}}>Visita técnica</button>
         <button type="button" disabled={!puedeAgendarCapacitaciones}
           className="rounded-xl border border-gray-200 p-5 text-left font-semibold transition hover:border-brand-500 hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:hover:bg-gray-800"
           onClick={()=>{setCapacitacionFecha(seleccionarTipoFecha);setSeleccionarTipoFecha(null)}}>Capacitación</button>
@@ -423,7 +477,7 @@ export default function VisitAgendaPage() {
       </dl>}
     </Dialog>
     <InvitacionDetalleDialog eventoId={eventoAbierto} onClose={()=>setEventoAbierto(null)} onResponded={()=>{void refresh()}} />
-    <ScheduleVisitDialog date={schedulingDate} onClose={() => setSchedulingDate(null)} onSaved={() => { setSchedulingDate(null); void refresh() }}/>
+    <ScheduleVisitDialog date={schedulingDate} initialFamilyId={scheduleFamilyId} onClose={() => { setSchedulingDate(null); setScheduleFamilyId(null) }} onSaved={() => { setSchedulingDate(null); setScheduleFamilyId(null); void refresh() }}/>
     <VisitDetailDialog key={selected?.operationId ?? selected?.id ?? 'dialog-visit'} visit={selected} onClose={()=>setSelected(null)} extra={selected ? <section className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
       {Boolean(selected.reprogramaciones?.length) && <section className="mb-4 rounded-lg bg-slate-50 p-3 text-xs dark:bg-slate-800"><h4 className="mb-2 font-semibold">Reprogramaciones</h4>{selected.reprogramaciones?.map(h=><p className="mb-1" key={h.id}>{h.oldDate} → {h.newDate} · {new Date(h.at).toLocaleString('es-GT')}{h.reason ? ` · ${h.reason}` : ''}</p>)}</section>}
       {selected.status === 'PROGRAMADA' && selected.date < today && <div role="alert" className="mb-3 rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800 dark:bg-rose-500/10 dark:text-rose-300">Esta visita está vencida. Reprográmala antes de registrarla.</div>}

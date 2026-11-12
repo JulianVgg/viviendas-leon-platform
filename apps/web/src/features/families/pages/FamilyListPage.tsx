@@ -15,6 +15,7 @@ import { fetchFamiliesWithOffline } from '@/features/families/services/familyOff
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import type { FamilyListResponse } from '@/features/families/types/family'
 import { familyStateLabel } from '@/features/families/services/familyRecord'
+import FamilyStatusDot from '@/features/families/components/FamilyStatusDot'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { canWriteFamilies } from '@/features/auth/screenPermissions'
 
@@ -27,12 +28,6 @@ const STATUS_OPTIONS = [
   { value: 'RETIRADA', label: 'Retirada' },
   { value: 'EGRESADA', label: 'Egresada' },
 ]
-
-function statusBadgeVariant(status: string): 'neutral' | 'success' | 'warning' {
-  if (status.toUpperCase() === 'ACTIVA') return 'success'
-  if (status.toUpperCase() === 'RETIRADA') return 'warning'
-  return 'neutral'
-}
 
 function formatDate(value: string | null) {
   if (!value) return 'Sin fecha'
@@ -129,16 +124,14 @@ export default function FamilyListPage({ mode = 'list' }: { mode?: 'list' | 'edi
       to={`/familias/${family.id}`}
       className="layout-focus inline-flex min-w-48 max-w-80 flex-col gap-1 rounded-md whitespace-normal text-brand-600 transition-colors hover:text-brand-700 motion-reduce:transition-none dark:text-brand-300 dark:hover:text-brand-100"
     >
-      <span className="font-semibold leading-5">{family.nombreReferencia}</span>
+      <span className="inline-flex items-center gap-2 font-semibold leading-5"><FamilyStatusDot state={family.estado}/>{family.nombreReferencia}</span>
       <span className="text-xs text-slate-500 dark:text-slate-400">Expediente #{family.id}</span>
     </Link>,
     <span key={`community-${family.id}`} className="block min-w-32 max-w-56 whitespace-normal leading-5">{family.comunidad.nombre}</span>,
     <span key={`programs-${family.id}`} className="block min-w-32 max-w-64 whitespace-normal leading-5">{family.programas.length > 0 ? family.programas.map((program) => program.nombre).join(', ') : 'Sin programa'}</span>,
     <span key={`members-${family.id}`} className="font-medium tabular-nums">{family.integrantes}</span>,
     formatDate(family.fechaIngreso),
-    <Badge key={`status-${family.id}`} variant={statusBadgeVariant(family.estado)}>
-      {familyStateLabel(family.estado)}
-    </Badge>,
+    <span key={`status-${family.id}`} title={familyStateLabel(family.estado)} className="inline-flex items-center gap-2 text-xs text-slate-500"><FamilyStatusDot state={family.estado}/>{familyStateLabel(family.estado) === 'Activa' ? 'Vigente' : 'No vigente'}</span>,
     ...(mode === 'edit' ? [canEdit ? <Link key={`edit-${family.id}`} to={`/familias/${family.id}/editar`} className="layout-focus inline-flex min-h-9 items-center justify-center rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600">Editar</Link> : <span key={`edit-${family.id}`} className="text-xs text-gray-500">Sin permiso</span>] : []),
   ]) ?? []
 

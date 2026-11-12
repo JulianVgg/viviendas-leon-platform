@@ -18,6 +18,7 @@ import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import FamilyProgramHistory from './FamilyProgramHistory'
 import FamilyGardensSection from '@/features/agriculture/components/FamilyGardensSection'
 import FamilyCoordinatesPanel from './FamilyCoordinatesPanel'
+import FamilyStatusDot from './FamilyStatusDot'
 
 const tabs = [
   { id: 'general', label: 'Información general' },
@@ -96,9 +97,11 @@ export default function FamilyIntegralRecord({ family, onRefresh }: { family: In
   ])
   return <div className="min-w-0 space-y-6">
     <Card aria-label="Identificación del expediente">
-      <CardBody><div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        {family.fotoUrl && <img src={family.fotoUrl} alt="Foto de la persona de referencia" className="size-20 shrink-0 rounded-xl object-cover" />}<div className="min-w-0"><p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Expediente #{family.id}{canManage ? ' · Administración habilitada' : ' · Solo lectura'}</p><h2 className="mt-2 break-words text-xl font-semibold text-slate-900 [overflow-wrap:anywhere] sm:text-2xl dark:text-white">{family.nombreReferencia}</h2><p className="mt-2 break-words text-sm leading-6 text-slate-600 [overflow-wrap:anywhere] dark:text-slate-300">{family.comunidad.nombre} · {family.comunidad.municipio.nombre}</p>{canManage && <Link to={`/familias/${family.id}/editar`} className="layout-focus mt-3 inline-flex min-h-9 items-center gap-2 rounded-lg px-2 text-sm font-medium text-brand-600 hover:bg-brand-50 dark:text-brand-300 dark:hover:bg-brand-500/10"><Pencil size={16} />Editar información</Link>}</div>
-        <div className="min-w-0 sm:max-w-64"><p className="mb-2 text-xs text-slate-500 dark:text-slate-400">Estado de la familia</p><Badge variant={familyStateVariant(family.estado)} className="max-w-full whitespace-normal break-words [overflow-wrap:anywhere]">{familyStateLabel(family.estado)}</Badge></div>
+      <CardBody><div className="flex min-w-0 flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-center">
+        {family.fotoUrl ? <img src={family.fotoUrl} alt={`Fotografía de referencia de ${family.nombreReferencia}`} className="aspect-[4/5] w-36 shrink-0 rounded-2xl border border-slate-200 object-cover shadow-sm sm:w-44 lg:w-48 dark:border-slate-700" /> : <div className="flex aspect-[4/5] w-36 shrink-0 items-center justify-center rounded-2xl bg-brand-50 text-3xl font-semibold text-brand-600 sm:w-44 dark:bg-brand-500/10">{initials(family.nombreReferencia)}</div>}
+        <div className="min-w-0"><p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Expediente #{family.id}{canManage ? ' · Administración habilitada' : ' · Solo lectura'}</p><h2 className="mt-2 break-words text-xl font-semibold text-slate-900 [overflow-wrap:anywhere] sm:text-2xl dark:text-white">{family.nombreReferencia}</h2><p className="mt-2 break-words text-sm leading-6 text-slate-600 [overflow-wrap:anywhere] dark:text-slate-300">{family.comunidad.nombre} · {family.comunidad.municipio.nombre}</p>{canManage && <Link to={`/familias/${family.id}/editar`} className="layout-focus mt-3 inline-flex min-h-9 items-center gap-2 rounded-lg px-2 text-sm font-medium text-brand-600 hover:bg-brand-50 dark:text-brand-300 dark:hover:bg-brand-500/10"><Pencil size={16} />Editar información</Link>}</div></div>
+        <div className="flex shrink-0 items-center gap-2"><FamilyStatusDot state={family.estado} /><span className="text-xs text-slate-500 dark:text-slate-400">Estado de familia</span></div>
       </div></CardBody>
     </Card>
     <div className="grid min-w-0 gap-4 sm:grid-cols-2">

@@ -15,7 +15,7 @@ export function GardenClassificationFields({ value, onChange, disabled = false }
   disabled?: boolean
 }) {
   return <>
-    <FormField label="Tipo de huerto">
+    <FormField label="Clasificación del huerto">
       <select className={formControlClassName} value={value.tipo ?? ''} disabled={disabled}
         onChange={event => onChange({ ...value, tipo: (event.target.value || null) as GardenClassification['tipo'] })}>
         <option value="">Sin clasificar</option>
@@ -23,7 +23,7 @@ export function GardenClassificationFields({ value, onChange, disabled = false }
         <option value="COMUNITARIO">Comunitario</option>
       </select>
     </FormField>
-    <FormField label="Entorno de cultivo">
+    <FormField label="Tipo de huerto">
       <select className={formControlClassName} value={value.entornoCultivo ?? ''} disabled={disabled}
         onChange={event => {
           const entornoCultivo = (event.target.value || null) as GardenClassification['entornoCultivo']

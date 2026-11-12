@@ -16,7 +16,7 @@ const gardenSelect = {
   id: true, familiaId: true, nombre: true, tipo: true, entornoCultivo: true,
   detalleEntorno: true, modalidadesProductivas: true, fechaInicio: true,
   estado: true, observaciones: true, imagenRuta: true, imagenActualizadaEn: true,
-  familia: { select: { id: true, nombreReferencia: true, comunidad: { select: { nombre: true } } } },
+  familia: { select: { id: true, nombreReferencia: true, estado: true, comunidad: { select: { nombre: true } } } },
 } satisfies Prisma.HuertoSelect
 
 type GardenRecord = Prisma.HuertoGetPayload<{ select: typeof gardenSelect }>
