@@ -28,6 +28,7 @@ export const SCREEN_PERMISSIONS: Record<string, string> = {
   '/visitas': 'PANTALLA_VISITAS_AGENDA',
   '/visitas/agenda': 'PANTALLA_VISITAS_AGENDA',
   '/visitas/nueva': 'PANTALLA_VISITAS_NUEVA',
+  '/visitas/preparar-campo': 'PANTALLA_VISITAS_NUEVA',
   '/visitas/historial': 'PANTALLA_VISITAS_HISTORIAL',
   '/actividades/visitas': 'PANTALLA_VISITAS_AGENDA',
   '/actividades': 'PANTALLA_ACTIVIDADES',
@@ -104,7 +105,7 @@ export function canWritePrograms(usuario: PermissionUser): boolean {
 
 export function canViewPath(usuario: PermissionUser, path: string): boolean {
   // La captura técnica queda reservada a personal operativo, incluso para Dirección.
-  if (path === '/visitas/nueva' && esSupervisorCalendario(usuario)) return false
+  if ((path === '/visitas/nueva' || path === '/visitas/preparar-campo') && esSupervisorCalendario(usuario)) return false
   if (isDireccionGeneral(usuario)) return true
   if (path === '/reportes/indicadores') return canViewPath(usuario, '/')
   if (path === '/calendario') return esSupervisorCalendario(usuario)

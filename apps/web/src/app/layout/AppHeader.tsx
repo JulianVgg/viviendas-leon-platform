@@ -6,14 +6,15 @@ import { useTheme } from '@/app/providers/ThemeContext'
 import { useAuth } from '@/features/auth/AuthProvider'
 import NotificationDropdown from '@/components/header/NotificationDropdown'
 import Button from '@/components/ui/Button'
-import SyncStatus from '@/components/ui/SyncStatus'
-import { useConnectivityStatus } from '@/hooks/useConnectivityStatus'
+import FieldSyncIndicator from './FieldSyncIndicator'
 import { canViewPath } from '@/features/auth/screenPermissions'
 import { esTecnicoCampo } from '@/features/auth/calendarAccess'
+import { listQueueOperations } from '@/services/pendingOperations'
+import { VISIT_SYNC_KIND } from '@/features/visits/services/visitService'
 
 export default function AppHeader() {
   const navigate = useNavigate()
-  const { usuario, cerrarSesion } = useAuth()
+  const { usuario, cerrarSesion, modoAcceso } = useAuth()
   const { isExpanded, isMobileOpen, toggleSidebar, toggleMobileSidebar } = useSidebar()
   const { theme, toggleTheme } = useTheme()
   const [userOpen, setUserOpen] = useState(false)
@@ -23,7 +24,6 @@ export default function AppHeader() {
   const [errorLogout, setErrorLogout] = useState('')
   const userRef = useRef<HTMLDivElement>(null)
   const roleButtonRef = useRef<HTMLButtonElement>(null)
-  const connectivity = useConnectivityStatus()
   const toggleMenu = () => window.innerWidth >= 1280 ? toggleSidebar() : toggleMobileSidebar()
   const canViewSettings = Boolean(usuario && canViewPath(usuario, '/administracion/configuracion'))
   const inicialesUsuario = usuario?.nombre.trim().split(/\s+/).filter(Boolean).slice(0, 2).map((parte) => parte.charAt(0)).join('').toUpperCase() || 'U'
@@ -56,6 +56,12 @@ export default function AppHeader() {
     setErrorLogout('')
     setCerrandoSesion(true)
     try {
+      if (usuario && esTecnicoCampo(usuario)) {
+        const operations = await listQueueOperations()
+        const pending = operations.filter(op => op.kind === VISIT_SYNC_KIND && op.status !== 'synced' &&
+          (op.payload as { ownerId?: number } | undefined)?.ownerId === usuario.id)
+        if (pending.length && !window.confirm(`Hay ${pending.length} visita(s) sin sincronizar. Se conservarán en este dispositivo, pero necesitarás volver a iniciar sesión para enviarlas. ¿Cerrar sesión?`)) return
+      }
       await cerrarSesion()
       setUserOpen(false)
       navigate('/login', { replace: true })
@@ -108,8 +114,9 @@ export default function AppHeader() {
             <p className="text-sm font-semibold text-slate-800 dark:text-white">{usuario?.nombre ?? 'Usuario'}</p>
             <p className="mt-1 break-all text-xs text-slate-500 dark:text-slate-400">{usuario?.correo}</p>
             <p className="mt-2 text-xs font-medium text-slate-600 dark:text-slate-300">{usuario?.roles.join(', ') || 'Sin rol asignado'}</p>
-            <Link to="/mi-perfil" onClick={() => setUserOpen(false)} className="layout-menu-item layout-menu-inactive layout-focus mt-3">Mi perfil</Link>
-            {canViewSettings && <Link to="/administracion/configuracion" onClick={() => setUserOpen(false)} className="layout-menu-item layout-menu-inactive layout-focus mt-3">Configuración de cuenta</Link>}
+            {modoAcceso === 'online' && <Link to="/mi-perfil" onClick={() => setUserOpen(false)} className="layout-menu-item layout-menu-inactive layout-focus mt-3">Mi perfil</Link>}
+            {usuario && esTecnicoCampo(usuario) && <Link to="/visitas/preparar-campo" onClick={() => setUserOpen(false)} className="layout-menu-item layout-menu-inactive layout-focus mt-3">Modo de campo</Link>}
+            {canViewSettings && modoAcceso === 'online' && <Link to="/administracion/configuracion" onClick={() => setUserOpen(false)} className="layout-menu-item layout-menu-inactive layout-focus mt-3">Configuración de cuenta</Link>}
             <Button type="button" variant="ghost" size="sm" className="mt-3 w-full" onClick={() => { setUserOpen(false); roleButtonRef.current?.focus() }}>Cerrar menú</Button>
             <button type="button" disabled={cerrandoSesion} onClick={() => void handleLogout()} className="mt-3 w-full rounded-lg border border-red-200 px-4 py-2.5 text-sm font-medium text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900 dark:hover:bg-red-950/30">
               {cerrandoSesion ? 'Cerrando sesión...' : 'Cerrar sesión'}
@@ -118,21 +125,7 @@ export default function AppHeader() {
           </div>}
         </div>
       </div>
-    </div><div className="border-t border-slate-100 px-3 py-2 sm:px-6 dark:border-slate-800"><SyncStatus state={connectivity.status} /></div>
-    {connectivity.status === 'offline' && (
-      <p role="status" className="px-4 pb-2 text-xs text-slate-600 dark:text-slate-300">
-        Sin conexión. Las operaciones guardadas localmente permanecen disponibles.
-      </p>
-    )}
-    {connectivity.status === 'server-unavailable' && (
-      <p role="status" className="px-4 pb-2 text-xs text-amber-700 dark:text-amber-300">
-        La API no responde. Las visitas pendientes permanecen guardadas en este dispositivo.
-      </p>
-    )}
-    {connectivity.status === 'connected' && connectivity.recoveredAt && usuario && esTecnicoCampo(usuario) && (
-      <p role="status" className="px-4 pb-2 text-xs text-emerald-700 dark:text-emerald-300">
-        Conexión recuperada. Las visitas pendientes se sincronizan automáticamente cuando la API está disponible. Consulta su estado en Historial de visitas.
-      </p>
-    )}
+    </div><div className="border-t border-slate-100 px-3 py-2 sm:px-6 dark:border-slate-800"><FieldSyncIndicator /></div>
+    {modoAcceso === 'offline' && <p role="status" className="px-4 pb-2 text-xs font-medium text-amber-700 dark:text-amber-300">Modo de campo local · pendiente de validar sesión con Railway</p>}
   </header>
 }

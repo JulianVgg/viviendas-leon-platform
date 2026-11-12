@@ -19,6 +19,7 @@ import LegacyProductionRedirect from '@/features/agriculture/pages/LegacyProduct
 import InsumosPage from '@/features/agriculture/pages/InsumosPage'
 
 import OfflineTestPage from '@/features/offline/pages/OfflineTestPage'
+import FieldPreparationPage from '@/features/offline/pages/FieldPreparationPage'
 import OfflineOperationsTestPage from '@/features/offline/pages/OfflineOperationsTestPage'
 import OfflineQueueTestPage from '@/features/offline/pages/OfflineQueueTestPage'
 import OfflineConnectivityTestPage from '@/features/offline/pages/OfflineConnectivityTestPage'
@@ -176,6 +177,8 @@ export default function AppRoutes() {
             path="visitas/nueva"
             element={<VisitRegisterPage />}
           />
+
+          <Route path="visitas/preparar-campo" element={<FieldPreparationPage />} />
 
           <Route
             path="visitas/historial"
