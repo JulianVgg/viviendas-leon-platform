@@ -17,7 +17,7 @@ export type Garden = GardenClassification & {
   tieneImagen: boolean
   imagenUrl: string | null
   imagenActualizadaEn: string | null
-  familia: { id: number; nombreReferencia: string; comunidad: { nombre: string } }
+  familia: { id: number; nombreReferencia: string; estado: string; comunidad: { nombre: string } }
 }
 export type FamilyOption = { id: number; nombreReferencia: string; estado: string; comunidad: { nombre: string } }
 export type GardenInput = GardenClassification & {

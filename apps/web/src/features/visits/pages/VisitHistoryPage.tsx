@@ -72,7 +72,7 @@ export default function VisitHistoryPage() {
       try {
         const result = await getVisitFollowUps(usuario.id)
         setFollowups(result.items)
-        setFollowUpError(result.local ? 'Los compromisos pueden no estar actualizados porque se consultan datos locales.' : '')
+        setFollowUpError('')
       } catch (cause) {
         setFollowups([])
         setFollowUpError(cause instanceof Error ? cause.message : 'No se pudieron consultar los seguimientos.')
@@ -122,8 +122,8 @@ export default function VisitHistoryPage() {
       <Button type="button" variant="secondary" size="sm" disabled={loading || connectivity.status !== 'connected'} onClick={() => void refresh()}><RefreshCw size={15} /> Reintentar sincronización</Button>
     </div>}
     {error && <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-500/10 dark:text-red-300">{error}</div>}
-    {followUpError && <p role="status" className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-200">Seguimientos: {followUpError}. No se debe interpretar una ausencia de indicadores como cumplimiento.</p>}
-    {local && !error && <p className="mb-3 text-xs font-medium text-amber-700 dark:text-amber-300">Mostrando datos guardados en este dispositivo</p>}
+    {followUpError && <p role="status" className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-200">Datos locales. Los seguimientos se actualizarán al reconectar.</p>}
+    {local && !error && <p className="mb-3 text-xs font-medium text-amber-700 dark:text-amber-300">Datos locales</p>}
     <div className="mb-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {([['Visitas realizadas', completed], ['Programadas', upcoming], ['Pendientes de sincronizar', pending], ['Visitas con incumplimientos', followUpError ? '—' : failures]] as const).map(([title, count]) =>
         <div key={title} className={`${card} p-5`}><p className="text-sm text-gray-500 dark:text-gray-400">{title}</p><p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{count}</p></div>

@@ -6,6 +6,7 @@ import FormField, { formControlClassName } from '@/components/ui/FormField'
 import SearchableSelect from '@/features/visits/components/SearchableSelect'
 import { fetchFamilies, FamilyApiError } from '@/features/families/services/familyService'
 import type { FamilyListItem } from '@/features/families/types/family'
+import FamilyStatusDot, { familySelectLabel } from '@/features/families/components/FamilyStatusDot'
 import { getOfflineData, saveOfflineData } from '@/db/offlineDb'
 import { saveVisitCapture, todayInGuatemala, type VisitCapture, type VisitTimeSlot } from '@/features/visits/services/visitService'
 import { useAuth } from '@/features/auth/AuthProvider'
@@ -16,8 +17,9 @@ import type { ConfigRecordatorios } from '@/features/notifications/services/remi
 const validDate = (text: string) => /^\d{4}-\d{2}-\d{2}$/.test(text) && !Number.isNaN(Date.parse(`${text}T12:00:00Z`)) && new Date(`${text}T12:00:00Z`).toISOString().slice(0, 10) === text
 
 /** Una cita en agenda no es una visita realizada: se registra como PROGRAMADA. */
-export default function ScheduleVisitDialog({ date, onClose, onSaved }: {
+export default function ScheduleVisitDialog({ date, initialFamilyId, onClose, onSaved }: {
   date: string | null
+  initialFamilyId?: number | null
   onClose: () => void
   onSaved: () => void
 }) {
@@ -64,7 +66,7 @@ export default function ScheduleVisitDialog({ date, onClose, onSaved }: {
     if (!date || !usuario) return
     let mounted = true
     setScheduledDate(date)
-    setFamilyId('')
+    setFamilyId(initialFamilyId ? String(initialFamilyId) : '')
     setTimeSlot('MANANA')
     setRecordatorios([{ tipo: 'DIA_ANTES' }])
     setError('')
@@ -91,7 +93,7 @@ export default function ScheduleVisitDialog({ date, onClose, onSaved }: {
         } catch { if (mounted) setError('No se pudieron cargar las familias.') }
       }).finally(() => { if (mounted) setLoading(false) })
     return () => { mounted = false; controller.abort() }
-  }, [date, usuario])
+  }, [date, usuario, initialFamilyId])
 
   const chooseProposed = () => {
     if (!proposed || !canChooseProposed) return
@@ -133,7 +135,7 @@ export default function ScheduleVisitDialog({ date, onClose, onSaved }: {
       {!planningLoading && suggestedFamilies.length > 0 && <section aria-label="Familias sugeridas" className="rounded-xl border border-brand-200 bg-brand-50/40 p-3 dark:border-brand-800 dark:bg-brand-500/10">
         <h3 className="mb-2 text-sm font-semibold text-gray-900 dark:text-white">Familias sugeridas para esta fecha</h3>
         <div className="space-y-2">{suggestedFamilies.map(({family, due}) => <div key={family.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white p-2.5 text-sm dark:border-gray-700 dark:bg-gray-900">
-          <div><p className="font-medium text-gray-900 dark:text-white">{family.nombreReferencia}</p><p className="text-xs text-gray-500">{family.comunidad.nombre} · Siguiente visita: {due}</p></div>
+          <div><p className="inline-flex items-center gap-2 font-medium text-gray-900 dark:text-white"><FamilyStatusDot state={family.estado}/>{family.nombreReferencia}</p><p className="text-xs text-gray-500">{family.comunidad.nombre} · Siguiente visita: {due}</p></div>
           <Button type="button" variant="secondary" size="sm" disabled={saving || Boolean(success) || familyId === String(family.id)} onClick={()=>setFamilyId(String(family.id))}>{familyId === String(family.id) ? 'Seleccionada' : 'Seleccionar'}</Button>
         </div>)}</div>
       </section>}
@@ -141,7 +143,7 @@ export default function ScheduleVisitDialog({ date, onClose, onSaved }: {
         disabled={loading || saving || Boolean(success)} placeholder={loading ? 'Cargando familias…' : 'Buscar familia o comunidad…'}
         options={families.map(f => {
           const info = planning.find(v => v.familyId === f.id)
-          return { value: String(f.id), label: `${f.nombreReferencia} — ${f.comunidad.nombre}${info?.scheduled.some(v => visitsSameCycle(v.date, scheduledDate)) ? ' · Con visita' : ''}` }
+          return { value: String(f.id), label: `${familySelectLabel(f.nombreReferencia, f.estado)} — ${f.comunidad.nombre}${info?.scheduled.some(v => visitsSameCycle(v.date, scheduledDate)) ? ' · Con visita' : ''}` }
         })}/>
       {selected && <div className={`rounded-lg border p-3 text-sm ${blocked ? 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-700 dark:bg-amber-500/10 dark:text-amber-200' : 'border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/40'}`}>
         <div className="flex flex-wrap items-center justify-between gap-2">

@@ -9,9 +9,9 @@ import Button from '@/components/ui/Button'
 import Card, { CardBody, CardHeader } from '@/components/ui/Card'
 import LoadingState from '@/components/ui/LoadingState'
 import { useAuth } from '@/features/auth/AuthProvider'
-import { canViewPath, canWriteProduction, isDireccionGeneral } from '@/features/auth/screenPermissions'
+import { canViewPath, canWriteGardens, canWriteProduction, isDireccionGeneral } from '@/features/auth/screenPermissions'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
-import { listCycles, type Cycle } from '../services/cyclesService'
+import { finishCycle, listCycles, type Cycle } from '../services/cyclesService'
 import { gardenImageUrl, getGarden, type Garden } from '../services/gardens'
 import GardenScene from '../components/GardenScene'
 import { entornoLabels, modalidadLabels } from '../components/GardenClassificationFields'
@@ -20,8 +20,10 @@ import RegisterSowingDialog from '../components/RegisterSowingDialog'
 import CicloEvaluacionesSection from '../components/CicloEvaluacionesSection'
 import CicloProduccionSection from '../components/CicloProduccionSection'
 import RegistrarCosechaDialog from '../components/RegistrarCosechaDialog'
+import EditGardenClassification from '../components/EditGardenClassification'
+import FamilyStatusDot from '@/features/families/components/FamilyStatusDot'
 
-function CycleCard({ cycle, selected, onSelect }: { cycle: Cycle; selected: boolean; onSelect: () => void }) {
+function CycleCard({ cycle, number, selected, onSelect }: { cycle: Cycle; number: number; selected: boolean; onSelect: () => void }) {
   return <button
     type="button"
     onClick={onSelect}
@@ -29,7 +31,7 @@ function CycleCard({ cycle, selected, onSelect }: { cycle: Cycle; selected: bool
   >
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Ciclo #{cycle.id}</p>
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Ciclo {number}</p>
         <h3 className="mt-1 break-words text-sm font-semibold text-slate-900 dark:text-white">{cycle.cultivo.nombre}</h3>
       </div>
       <Badge variant={cycle.estado === 'ACTIVO' ? 'success' : 'neutral'}>{cycle.estado}</Badge>
@@ -52,6 +54,7 @@ export default function HuertoDetallePage() {
   const canReadProduction = Boolean(usuario && canViewPath(usuario, '/gestion-agricola/produccion'))
   const canRegisterHarvest = Boolean(canReadProduction && usuario && canWriteProduction(usuario))
   const canRegisterCycle = Boolean(usuario && (isDireccionGeneral(usuario) || usuario.permisos.includes('CICLOS_WRITE')))
+  const canEditGarden = Boolean(usuario && canWriteGardens(usuario))
   const [garden, setGarden] = useState<Garden | null>(null)
   const [cycles, setCycles] = useState<Cycle[]>([])
   const [loading, setLoading] = useState(true)
@@ -62,6 +65,9 @@ export default function HuertoDetallePage() {
   const [showPhoto, setShowPhoto] = useState(false)
   const [harvestOpen, setHarvestOpen] = useState(params.get('registrarCosecha') === '1')
   const [harvestRefresh, setHarvestRefresh] = useState(0)
+  const [editing, setEditing] = useState(false)
+  const [closingId, setClosingId] = useState<number | null>(null)
+  const [cycleError, setCycleError] = useState('')
 
   useEffect(() => {
     if (!Number.isInteger(numericId) || numericId <= 0) {
@@ -90,11 +96,25 @@ export default function HuertoDetallePage() {
   const selectedCycle = useMemo(() => cycles.find((cycle) => cycle.id === selectedCycleId) ?? cycles[0] ?? null, [cycles, selectedCycleId])
   const activeCycles = cycles.filter((cycle) => cycle.estado === 'ACTIVO')
   const historicalCycles = cycles.filter((cycle) => cycle.estado !== 'ACTIVO')
+  // Numeración visual por huerto: nunca se guarda ni reemplaza los IDs de PostgreSQL.
+  const cycleNumbers = new Map([...cycles].sort((a, b) => a.id - b.id).map((item, index) => [item.id, index + 1]))
+  const activeCropNames = Array.from(new Set(activeCycles.map(item => item.cultivo.nombre)))
+  async function finishSelectedCycle() {
+    if (!selectedCycle || !online || closingId !== null) return
+    if (!window.confirm(`¿Finalizar el cultivo ${selectedCycle.cultivo.nombre}? Se conservarán sus visitas, evaluaciones y cosechas.`)) return
+    setClosingId(selectedCycle.id); setCycleError('')
+    try {
+      const updated = await finishCycle(selectedCycle.id)
+      setCycles(current => current.map(item => item.id === updated.id ? updated : item))
+      setNotice('Cultivo finalizado. Ya puedes registrar una nueva siembra.')
+    } catch (cause) { setCycleError(cause instanceof Error ? cause.message : 'No se pudo finalizar el cultivo.') }
+    finally { setClosingId(null) }
+  }
 
   return <>
     <PageMeta title="Detalle de huerto | Viviendas León Guatemala" description="Consulta integral del huerto y sus ciclos agrícolas." />
     <PageHeader
-      title={garden?.nombre || 'Detalle de huerto'}
+      title={garden?.entornoCultivo ? entornoLabels[garden.entornoCultivo] : 'Detalle de huerto'}
       description={garden ? `${garden.familia.nombreReferencia} · ${garden.familia.comunidad.nombre}` : 'Consulta del huerto'}
       actions={<div className="flex flex-wrap gap-2">
         {garden && <Link to={`/familias/${garden.familiaId}?tab=gardens`} className="layout-focus inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-theme-xs hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">Volver al expediente</Link>}
@@ -115,7 +135,7 @@ export default function HuertoDetallePage() {
               {garden.tieneImagen && <Button type="button" size="sm" variant="secondary" onClick={() => setShowPhoto(value => !value)}>{showPhoto ? 'Ver ilustración' : 'Ver fotografía'}</Button>}
             </div>
             {showPhoto && gardenImageUrl(garden)
-              ? <img src={gardenImageUrl(garden)!} alt={`Fotografía del huerto ${garden.nombre || garden.id}`} loading="lazy" className="h-64 w-full rounded-2xl object-cover sm:h-80" />
+              ? <img src={gardenImageUrl(garden)!} alt={`Fotografía del huerto de ${garden.familia.nombreReferencia}`} loading="lazy" className="h-64 w-full rounded-2xl object-cover sm:h-80" />
               : <GardenScene garden={garden} cycles={cycles} className="rounded-2xl" />}
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-900/70"><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Estado</p><div className="mt-2"><Badge variant={garden.estado === 'ACTIVO' ? 'success' : 'neutral'}>{garden.estado}</Badge></div></div>
@@ -127,21 +147,27 @@ export default function HuertoDetallePage() {
         </Card>
 
         <Card>
-          <CardHeader title="Información del huerto" actions={garden.estado === 'ACTIVO' && canRegisterCycle ? <Button type="button" size="sm" onClick={() => setRegisterOpen(true)}><Plus size={16} /> Registrar siembra</Button> : undefined} />
+          <CardHeader title="Información del huerto" actions={<div className="flex flex-wrap gap-2">
+            {canEditGarden && <Button type="button" size="sm" variant="secondary" disabled={!online} onClick={() => setEditing(value => !value)}>{editing ? 'Cerrar edición' : 'Editar clasificación'}</Button>}
+            {garden.estado === 'ACTIVO' && canRegisterCycle && <Button type="button" size="sm" disabled={!online} onClick={() => setRegisterOpen(true)}><Plus size={16} /> Registrar siembra</Button>}
+          </div>} />
           <CardBody className="space-y-5">
+            {editing && <EditGardenClassification garden={garden} onCancel={() => setEditing(false)} onSaved={updated => { setGarden(updated); setEditing(false); setNotice('Clasificación guardada.') }} />}
             <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-900/70">
-              <div className="flex items-start gap-3"><Warehouse className="mt-0.5 text-brand-600 dark:text-brand-300" size={18} /><div><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Huerto</p><p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{garden.nombre || `Huerto #${garden.id}`}</p></div></div>
-              <div className="flex items-start gap-3"><Sprout className="mt-0.5 text-brand-600 dark:text-brand-300" size={18} /><div><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Familia asignada</p><Link to={`/familias/${garden.familiaId}?tab=gardens`} className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:underline dark:text-brand-300">{garden.familia.nombreReferencia}<ChevronRight size={14} /></Link></div></div>
+              <div className="flex items-start gap-3"><Warehouse className="mt-0.5 text-brand-600 dark:text-brand-300" size={18} /><div><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Estructura</p><p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{garden.entornoCultivo ? entornoLabels[garden.entornoCultivo] : 'Sin clasificar'}</p></div></div>
+              <div className="flex items-start gap-3"><Sprout className="mt-0.5 text-brand-600 dark:text-brand-300" size={18} /><div><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Familia asignada</p><Link to={`/familias/${garden.familiaId}?tab=gardens`} className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:underline dark:text-brand-300"><FamilyStatusDot state={garden.familia.estado}/>{garden.familia.nombreReferencia}<ChevronRight size={14} /></Link></div></div>
               <div className="flex items-start gap-3"><MapPin className="mt-0.5 text-brand-600 dark:text-brand-300" size={18} /><div><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Comunidad</p><p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{garden.familia.comunidad.nombre}</p></div></div>
               <div className="flex items-start gap-3"><CalendarDays className="mt-0.5 text-brand-600 dark:text-brand-300" size={18} /><div><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Fecha de inicio</p><p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{formatAgriculturalDate(garden.fechaInicio)}</p></div></div>
             </div>
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Modalidades</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {garden.modalidadesProductivas.length
-                  ? garden.modalidadesProductivas.map((item) => <Badge key={item} variant="neutral">{modalidadLabels[item]}</Badge>)
-                  : <Badge variant="neutral">Sin clasificar</Badge>}
-              </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Clasificación</p><p className="mt-2 text-sm font-semibold dark:text-white">{garden.tipo === 'FAMILIAR' ? 'Familiar' : garden.tipo === 'COMUNITARIO' ? 'Comunitario' : 'Sin clasificar'}</p></div>
+              <div><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Modalidades</p><div className="mt-2 flex flex-wrap gap-1.5">{garden.modalidadesProductivas.length
+                ? garden.modalidadesProductivas.map(item => <Badge key={item} variant="neutral">{modalidadLabels[item]}</Badge>)
+                : <span className="text-xs text-slate-500">Sin definir</span>}</div></div>
+            </div>
+            <div><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Cultivos activos</p>
+              <div className="mt-2 flex flex-wrap gap-2">{activeCropNames.length ? activeCropNames.map(name => <Badge key={name} variant="success">{name}</Badge>) : <span className="text-xs text-slate-500">Sin cultivos activos</span>}</div>
+              {canRegisterCycle && <p className="mt-2 text-xs text-slate-500">Para cambiar cultivos, finaliza el ciclo anterior y registra una nueva siembra.</p>}
             </div>
             {garden.observaciones && <div>
               <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Observaciones</p>
@@ -160,19 +186,23 @@ export default function HuertoDetallePage() {
           {canReadCycles && cycles.length > 0 && <>
             <section className="space-y-3">
               <div className="flex items-center gap-2"><Leaf size={16} className="text-success-600" /><h3 className="text-sm font-semibold text-slate-900 dark:text-white">Activos</h3></div>
-              {activeCycles.length ? <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">{activeCycles.map((cycle) => <CycleCard key={cycle.id} cycle={cycle} selected={selectedCycle?.id === cycle.id} onSelect={() => setSelectedCycleId(cycle.id)} />)}</div> : <p className="text-sm text-slate-500">No hay ciclos activos.</p>}
+              {activeCycles.length ? <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">{activeCycles.map((cycle) => <CycleCard key={cycle.id} cycle={cycle} number={cycleNumbers.get(cycle.id) ?? 1} selected={selectedCycle?.id === cycle.id} onSelect={() => setSelectedCycleId(cycle.id)} />)}</div> : <p className="text-sm text-slate-500">No hay ciclos activos.</p>}
             </section>
             {historicalCycles.length > 0 && <section className="space-y-3">
               <div className="flex items-center gap-2"><Leaf size={16} className="text-slate-500" /><h3 className="text-sm font-semibold text-slate-900 dark:text-white">Históricos</h3></div>
-              <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">{historicalCycles.map((cycle) => <CycleCard key={cycle.id} cycle={cycle} selected={selectedCycle?.id === cycle.id} onSelect={() => setSelectedCycleId(cycle.id)} />)}</div>
+              <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">{historicalCycles.map((cycle) => <CycleCard key={cycle.id} cycle={cycle} number={cycleNumbers.get(cycle.id) ?? 1} selected={selectedCycle?.id === cycle.id} onSelect={() => setSelectedCycleId(cycle.id)} />)}</div>
             </section>}
           </>}
         </CardBody>
       </Card>
 
       {canReadCycles && selectedCycle && <>
+        {cycleError && <Alert variant="error">{cycleError}</Alert>}
         <Card>
-          <CardHeader title={selectedCycle.cultivo.nombre} description={`Ciclo #${selectedCycle.id}`} actions={canRegisterHarvest ? <Button type="button" size="sm" disabled={!online} onClick={() => setHarvestOpen(true)}>Registrar cosecha</Button> : undefined} />
+          <CardHeader title={selectedCycle.cultivo.nombre} description={`Ciclo ${cycleNumbers.get(selectedCycle.id) ?? 1}`} actions={<div className="flex flex-wrap gap-2">
+            {canRegisterCycle && selectedCycle.estado === 'ACTIVO' && <Button type="button" variant="secondary" size="sm" disabled={!online || closingId !== null} onClick={() => void finishSelectedCycle()}>{closingId === selectedCycle.id ? 'Finalizando…' : 'Finalizar cultivo'}</Button>}
+            {canRegisterHarvest && selectedCycle.estado === 'ACTIVO' && <Button type="button" size="sm" disabled={!online} onClick={() => setHarvestOpen(true)}>Registrar cosecha</Button>}
+          </div>} />
           <CardBody>
             <dl className="grid gap-4 sm:grid-cols-3">
               <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-900/70"><dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Inicio de siembra</dt><dd className="mt-2 text-sm font-semibold text-slate-900 dark:text-white">{formatAgriculturalDate(selectedCycle.fechaSiembra)}</dd></div>
@@ -189,12 +219,12 @@ export default function HuertoDetallePage() {
       </>}
     </div>}
 
-    {selectedCycle && harvestOpen && canRegisterHarvest && <RegistrarCosechaDialog key={selectedCycle.id} cycle={selectedCycle} onClose={() => setHarvestOpen(false)} onSaved={() => { setHarvestOpen(false); setHarvestRefresh(current => current + 1); setNotice('Cosecha registrada correctamente.') }} />}
+    {selectedCycle && harvestOpen && canRegisterHarvest && <RegistrarCosechaDialog key={selectedCycle.id} cycle={selectedCycle} cycleNumber={cycleNumbers.get(selectedCycle.id) ?? 1} onClose={() => setHarvestOpen(false)} onSaved={() => { setHarvestOpen(false); setHarvestRefresh(current => current + 1); setNotice('Cosecha registrada correctamente.') }} />}
 
     {garden && registerOpen && <RegisterSowingDialog
       key={garden.id}
       huertoId={garden.id}
-      huerto={garden.nombre || `Huerto #${garden.id}`}
+      huerto={garden.entornoCultivo ? entornoLabels[garden.entornoCultivo] : 'Huerto'}
       familia={garden.familia.nombreReferencia}
       onClose={() => setRegisterOpen(false)}
       onSaved={(cycle) => {

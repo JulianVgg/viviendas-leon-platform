@@ -29,6 +29,7 @@ import SearchableSelect, { catalogOptions } from '@/features/visits/components/S
 import { getVisitFollowUps, getVisitList, type VisitListItem, type VisitFollowUp, type FollowUpStatus } from '@/features/visits/services/visitService'
 import VisitEvidencePicker from '@/features/visits/components/VisitEvidencePicker'
 import type { FamilyListItem } from '@/features/families/types/family'
+import { familySelectLabel } from '@/features/families/components/FamilyStatusDot'
 import { stages, qualities, weatherOptions, damage } from '@/features/visits/data/visitCatalogs'
 
 type Finding = { id: string; type: 'plaga' | 'enfermedad'; name: string; damage: string }
@@ -583,7 +584,7 @@ export default function VisitRegisterPage() {
         <div className="grid gap-4 md:grid-cols-2">
           <SearchableSelect id="visit-family" label="Familia" required disabled={familiesLoading || Boolean(recovery)} value={familyId} onChange={value => { setFamilyId(value); setScheduledVisitId(null) }}
             placeholder={familiesLoading ? 'Cargando familias...' : 'Buscar familia o comunidad...'}
-            options={familyOptions.map(f => ({ value: String(f.id), label: `${f.nombreReferencia} — ${f.comunidad.nombre}` }))} />
+            options={familyOptions.map(f => ({ value: String(f.id), label: `${familySelectLabel(f.nombreReferencia, f.estado)} — ${f.comunidad.nombre}` }))} />
           <FormField id="visit-date" label="Fecha de visita" required><input id="visit-date" type="date" className={input} value={date} min={recovery ? date : today} max={recovery ? date : today} disabled={Boolean(recovery)} onChange={e => setDate(e.target.value)}/></FormField>
           {familyId && lastFamilyVisit && <div className="md:col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">Última visita: <strong>{lastFamilyVisit.date}</strong> · Próxima sugerida: <strong>{addCivilDays(lastFamilyVisit.date, DIAS_CICLO_VISITA)}</strong></div>}
           {familyId && overdueVisits.some(v => String(v.familyId) === familyId) && <div role="alert" className="md:col-span-2 rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-800 dark:bg-rose-500/10 dark:text-rose-300">Esta familia tiene una visita programada vencida. <Link className="font-semibold underline" to="/visitas/agenda">Ir al calendario para reprogramarla</Link> antes de registrarla.</div>}
@@ -625,7 +626,7 @@ export default function VisitRegisterPage() {
             {!familyId ? <p className="mt-3 text-sm text-gray-500">Selecciona una familia para consultar los pendientes.</p>
               : followUpError ? null
               : followUpLoading ? <p className="mt-3 text-sm text-gray-500">Consultando compromisos anteriores…</p>
-              : previousFollowUps.length === 0 ? <p className="mt-3 rounded-lg bg-white p-3 text-sm text-gray-500 dark:bg-gray-900">{followUpLocal ? 'No hay seguimientos de esta familia disponibles en el caché de este dispositivo. Conecta con la API y vuelve a intentar para confirmar los pendientes.' : 'No hay compromisos anteriores pendientes para esta familia. En la primera visita podrás agregarlos en el paso 3.'}</p>
+              : previousFollowUps.length === 0 ? <p className="mt-3 rounded-lg bg-white p-3 text-sm text-gray-500 dark:bg-gray-900">{followUpLocal ? 'Sin seguimientos locales. Se actualizarán al reconectar.' : 'No hay compromisos anteriores pendientes para esta familia. En la primera visita podrás agregarlos en el paso 3.'}</p>
               : <div className="mt-3 space-y-3">{previousFollowUps.map(f => <div key={f.id} className="rounded-xl border border-gray-200 bg-white p-3 dark:border-gray-700 dark:bg-gray-900">
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">{f.text}</p>
                 <p className="mt-1 text-xs text-gray-500">Responsable: {f.category}{f.due ? ` · Revisar: ${f.due}` : ''}{f.local ? ' · Pendiente de sincronizar' : ''}</p>
