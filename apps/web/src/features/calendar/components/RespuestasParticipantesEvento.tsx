@@ -5,13 +5,15 @@ import { obtenerParticipantesInvitacion, type ParticipanteRespuesta } from '@/fe
 const etiquetas: Record<string, string> = {
   PENDIENTE: 'Pendiente',
   ACEPTADA: 'Confirmada',
-  RECHAZADA: 'Rechazada',
+  RECHAZADA: 'Rechazada (histórica)',
+  REPROGRAMACION: 'Solicitó reprogramación',
   ASIGNADO: 'Asignación anterior',
 }
 const estilos: Record<string, string> = {
   PENDIENTE: 'bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300',
   ACEPTADA: 'bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300',
   RECHAZADA: 'bg-red-50 text-red-800 dark:bg-red-500/10 dark:text-red-300',
+  REPROGRAMACION: 'bg-blue-50 text-blue-800 dark:bg-blue-500/10 dark:text-blue-300',
   ASIGNADO: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
 }
 
@@ -38,6 +40,7 @@ export default function RespuestasParticipantesEvento({ eventoId }: { eventoId: 
 
   const aceptaron = personas.filter(p => p.estado === 'ACEPTADA').length
   const pendientes = personas.filter(p => p.estado === 'PENDIENTE').length
+  const reprogramaciones = personas.filter(p => p.estado === 'REPROGRAMACION').length
   const rechazaron = personas.filter(p => p.estado === 'RECHAZADA').length
 
   return <section aria-label="Confirmaciones del evento" className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
@@ -51,7 +54,7 @@ export default function RespuestasParticipantesEvento({ eventoId }: { eventoId: 
       </button>
     </div>
     <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-      {aceptaron} confirmadas · {pendientes} pendientes · {rechazaron} rechazadas
+      {aceptaron} confirmadas · {pendientes} pendientes · {reprogramaciones} solicitando reprogramación · {rechazaron} rechazos históricos
     </p>
     {cargando && <p role="status" className="mt-3 text-xs text-gray-500">Cargando respuestas...</p>}
     {error && <p role="alert" className="mt-3 text-xs text-red-600 dark:text-red-400">{error}</p>}

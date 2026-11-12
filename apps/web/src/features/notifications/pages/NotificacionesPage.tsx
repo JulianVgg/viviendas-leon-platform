@@ -11,6 +11,7 @@ import PushDeliveryPreferences from '../components/PushDeliveryPreferences'
 import CrearInvitacionButton, { puedeGestionarInvitaciones } from '../components/CrearInvitacionButton'
 import InvitacionDetalleDialog from '../components/InvitacionDetalleDialog'
 import SeguimientoInvitaciones from '../components/SeguimientoInvitaciones'
+import SolicitudesReprogramacion from '../components/SolicitudesReprogramacion'
 import { eventoDeNotificacion } from '../services/invitationsService'
 import {
   emitirCambioNotificaciones, marcarNotificacionLeida, marcarTodasNotificacionesLeidas,
@@ -160,7 +161,10 @@ export default function NotificacionesPage() {
         </div>
       </div>}
     </div>
-    {gestionar && <SeguimientoInvitaciones />}
+    {gestionar && <div className="space-y-5">
+      <SolicitudesReprogramacion />
+      <SeguimientoInvitaciones />
+    </div>}
     </div>
     <div className="mt-5"><ReminderPreferences usuarioId={usuario?.id} /></div>
     <PushPreferences usuarioId={usuario?.id} />

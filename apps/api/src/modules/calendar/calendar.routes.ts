@@ -1,5 +1,4 @@
 import { Router, type Request, type Response } from 'express'
-import { Prisma } from '../../generated/prisma/client.js'
 import { getPrismaClient } from '../../config/prisma.js'
 import { requireAuth } from '../auth/auth.middleware.js'
 import { getAuthenticatedUser } from '../auth/auth.service.js'
@@ -9,7 +8,8 @@ import { actualizarRecordatorios, cancelarRecordatorios, configGuardada, configP
 import { descripcionAvisoCalendario, eventoTieneCambios, planificarCambioCalendario, type EventoResumen, type TipoAvisoCalendario } from '../notifications/notifications.activity.js'
 import { eventoYaFinalizo } from './event-history.js'
 import { fechaAnteriorAHoy } from './guatemala-date.js'
-import { horariosSeCruzan, interpretarHorario, type HorarioEvento } from './calendar-schedule.rules.js'
+import { interpretarHorario } from './calendar-schedule.rules.js'
+import { verificarCruceInstitucional, ConflictoHorario } from './calendar-conflicts.js'
 
 export const calendarRouter = Router()
 calendarRouter.use(requireAuth)
@@ -87,28 +87,7 @@ function parseEvent(input: unknown) {
   return { titulo: title, categoria, descripcion, date, participantesIds: participants as number[], recordatorios, ...horario }
 }
 
-// Serializa asignaciones del mismo día entre procesos distintos. Las visitas técnicas
-// tienen agenda propia y no participan en esta validación institucional.
-class ConflictoHorario extends Error {
-  constructor() { super('Uno o más participantes ya tienen otro evento en ese horario.') }
-}
-type TxCalendario = Prisma.TransactionClient
-async function verificarCruceInstitucional(tx: TxCalendario, fecha: string, horario: HorarioEvento,
-  participantesIds: number[], exceptId?: number) {
-  if (!participantesIds.length) return
-  const dayNumber = Math.floor(Date.parse(`${fecha}T00:00:00Z`) / 86400000)
-  // pg_advisory_xact_lock(2 x int4): libera el bloqueo al completar la transacción.
-  await tx.$queryRaw`SELECT pg_advisory_xact_lock(${81315}, ${dayNumber})::text`
-  const existentes = await tx.eventoInstitucional.findMany({
-    where: {
-      fechaInicio: new Date(`${fecha}T12:00:00Z`),
-      ...(exceptId ? { id: { not: exceptId } } : {}),
-      participantes: { some: { usuarioId: { in: participantesIds }, estadoInvitacion: { not: 'RECHAZADA' } } },
-    },
-    select: { horaInicio: true, horaFin: true },
-  })
-  if (existentes.some(evento => horariosSeCruzan(horario, evento))) throw new ConflictoHorario()
-}
+// Las comprobaciones de cruces se comparten con las reprogramaciones CIR-25.
 
 // El destinatario se determina en el servidor a partir de participantes reales.
 function avisoCalendario(eventoId: number, version: string, usuarioId: number,
@@ -403,6 +382,27 @@ calendarRouter.put('/:id', async (req: Request, res: Response) => {
             .map(usuarioId => ({ usuarioId, estadoInvitacion: 'PENDIENTE' })),
         },
       } })
+      // Cualquier edición manual deja sin efecto propuestas basadas en la versión anterior.
+      const solicitudesAnuladas = await tx.solicitudReprogramacionInvitacion.findMany({
+        where: { eventoId: id, estado: 'PENDIENTE' },
+        select: { solicitanteId: true },
+      })
+      if (solicitudesAnuladas.length) {
+        await tx.solicitudReprogramacionInvitacion.updateMany({
+          where: { eventoId: id, estado: 'PENDIENTE' },
+          data: { estado: 'ANULADA', resueltoPorId: req.session.userId!, resueltoEn: new Date() },
+        })
+        await tx.eventoInstitucionalParticipante.updateMany({
+          where: { eventoId: id, estadoInvitacion: 'REPROGRAMACION' },
+          data: { estadoInvitacion: 'PENDIENTE', respondidaEn: null },
+        })
+        await tx.notificacion.createMany({ data: solicitudesAnuladas.map(solicitud => ({
+          usuarioId: solicitud.solicitanteId, tipo: 'INVITACION_REPROGRAMACION_RESUELTA',
+          titulo: 'Solicitud de reprogramación actualizada',
+          mensaje: `La actividad ${data.titulo} cambió y tu propuesta anterior quedó sin efecto. Consulta la invitación nuevamente.`,
+          referencia: `/notificaciones?invitacion=${id}`,
+        })) })
+      }
       await actualizarRecordatorios(tx, 'CALENDARIO', id, data.date, data.participantesIds, data.recordatorios)
       await crearNotificacionesDeActividad(cambios.map(cambio =>
         avisoCalendario(id, `V${actualizado.versionNotificacion}`, cambio.usuarioId, cambio.tipo,

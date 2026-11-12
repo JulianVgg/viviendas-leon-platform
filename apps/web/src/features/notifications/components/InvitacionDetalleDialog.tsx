@@ -8,7 +8,8 @@ import { canViewPath } from '@/features/auth/screenPermissions'
 import { puedeConsultarAgendaVisitas } from '../utils/pushAccess'
 import { eventoHaPasado } from '@/features/calendar/services/eventHistory'
 import {
-  obtenerDetalleInvitacion, responderInvitacion, type DetalleInvitacion,
+  obtenerDetalleInvitacion, obtenerMiReprogramacion, responderInvitacion,
+  solicitarReprogramacion, type DetalleInvitacion, type SolicitudPropia,
 } from '../services/invitationsService'
 
 type Props = { eventoId: number | null; onClose: () => void; onResponded: () => void }
@@ -28,13 +29,22 @@ function Campo({ icono: Icono, nombre, valor }: { icono: typeof CalendarDays; no
 }
 
 const etiquetas: Record<string, string> = {
-  PENDIENTE: 'Pendiente de respuesta', ACEPTADA: 'Aceptada', RECHAZADA: 'Rechazada', ASIGNADO: 'Asignación anterior',
+  PENDIENTE: 'Pendiente de respuesta', ACEPTADA: 'Aceptada', RECHAZADA: 'Rechazada (histórica)',
+  REPROGRAMACION: 'Reprogramación solicitada', ASIGNADO: 'Asignación anterior',
 }
+
+const hoyEnGuatemala = () => new Intl.DateTimeFormat('sv-SE', {
+  timeZone: 'America/Guatemala', year: 'numeric', month: '2-digit', day: '2-digit',
+}).format(new Date())
 
 export default function InvitacionDetalleDialog({ eventoId, onClose, onResponded }: Props) {
   const { usuario } = useAuth()
   const navigate = useNavigate()
   const [detalle, setDetalle] = useState<DetalleInvitacion | null>(null)
+  const [solicitudActual, setSolicitudActual] = useState<SolicitudPropia | null>(null)
+  const [mostrarFormulario, setMostrarFormulario] = useState(false)
+  const [fechaPropuesta, setFechaPropuesta] = useState('')
+  const [motivo, setMotivo] = useState('')
   const [error, setError] = useState('')
   const [cargando, setCargando] = useState(false)
   const [guardando, setGuardando] = useState(false)
@@ -43,26 +53,59 @@ export default function InvitacionDetalleDialog({ eventoId, onClose, onResponded
     if (eventoId === null) return
     const controller = new AbortController()
     setDetalle(null)
+    setSolicitudActual(null)
+    setMostrarFormulario(false)
+    setFechaPropuesta('')
+    setMotivo('')
     setError('')
     setCargando(true)
-    void obtenerDetalleInvitacion(eventoId, controller.signal)
-      .then(result => { if (!controller.signal.aborted) setDetalle(result) })
-      .catch(cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'No se pudo cargar la invitación.') })
-      .finally(() => { if (!controller.signal.aborted) setCargando(false) })
+    void Promise.all([
+      obtenerDetalleInvitacion(eventoId, controller.signal),
+      obtenerMiReprogramacion(eventoId, controller.signal),
+    ]).then(([invitacion, propuesta]) => {
+      if (controller.signal.aborted) return
+      setDetalle(invitacion)
+      setSolicitudActual(propuesta.data)
+    }).catch(cause => {
+      if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : 'No se pudo cargar la invitación.')
+    }).finally(() => { if (!controller.signal.aborted) setCargando(false) })
     return () => controller.abort()
   }, [eventoId])
 
-  async function responder(estado: 'ACEPTADA' | 'RECHAZADA') {
-    if (!detalle || !['PENDIENTE', 'ACEPTADA', 'RECHAZADA'].includes(detalle.estado ?? '') ||
-        detalle.estado === estado || eventoHaPasado(detalle.fechaFin) || guardando) return
+  async function responder() {
+    if (!detalle || !['PENDIENTE', 'RECHAZADA'].includes(detalle.estado ?? '') ||
+        eventoHaPasado(detalle.fechaFin) || guardando) return
     setGuardando(true)
     setError('')
     try {
-      const result = await responderInvitacion(detalle.eventoId, estado)
+      const result = await responderInvitacion(detalle.eventoId, 'ACEPTADA')
       setDetalle(actual => actual ? { ...actual, estado: result.estado, respondidaEn: result.respondidaEn } : actual)
+      setMostrarFormulario(false)
       onResponded()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No fue posible registrar tu respuesta.')
+    } finally { setGuardando(false) }
+  }
+
+  async function enviarPropuesta() {
+    if (!detalle || guardando || eventoHaPasado(detalle.fechaFin)) return
+    const explicacion = motivo.trim()
+    if (!fechaPropuesta || fechaPropuesta < hoyEnGuatemala() || fechaPropuesta === detalle.fechaInicio ||
+        explicacion.length < 5 || explicacion.length > 500) {
+      setError('Selecciona otra fecha válida e indica un motivo de 5 a 500 caracteres.')
+      return
+    }
+    setGuardando(true)
+    setError('')
+    try {
+      const result = await solicitarReprogramacion(detalle.eventoId, fechaPropuesta, explicacion)
+      setDetalle(actual => actual ? { ...actual, estado: 'REPROGRAMACION', respondidaEn: new Date().toISOString() } : actual)
+      setSolicitudActual({ id: result.id, estado: 'PENDIENTE', fechaOriginal: detalle.fechaInicio,
+        fechaPropuesta, motivo: explicacion, resolucion: null, creadoEn: new Date().toISOString(), resueltoEn: null })
+      setMostrarFormulario(false)
+      onResponded()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No fue posible enviar la propuesta.')
     } finally { setGuardando(false) }
   }
 
@@ -111,19 +154,46 @@ export default function InvitacionDetalleDialog({ eventoId, onClose, onResponded
         Has rechazado la invitación. La actividad no aparecerá en tu agenda personal.
       </p>}
       {puedeResponder && detalle.estado !== 'PENDIENTE' && <p className="text-xs text-gray-500 dark:text-gray-400">
-        Puedes cambiar tu respuesta mientras la actividad no haya finalizado.
+        Puedes solicitar una nueva fecha mientras la actividad no haya finalizado.
       </p>}
+      {detalle.estado === 'REPROGRAMACION' && <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
+        La reprogramación está pendiente de la decisión del organizador.
+      </div>}
+      {solicitudActual && <div className="rounded-xl border border-gray-200 p-3 text-sm dark:border-gray-700">
+        <p className="font-semibold text-gray-800 dark:text-gray-200">Última propuesta: {solicitudActual.estado === 'PENDIENTE' ? 'En revisión' : solicitudActual.estado === 'APROBADA' ? 'Aprobada' : solicitudActual.estado === 'MANTENIDA' ? 'No aprobada' : 'Sin efecto'}</p>
+        <p className="mt-1 text-gray-600 dark:text-gray-300">Fecha propuesta: {mostrarFecha(solicitudActual.fechaPropuesta)}</p>
+        <p className="mt-1 whitespace-pre-wrap text-gray-600 dark:text-gray-300">Motivo: {solicitudActual.motivo}</p>
+      </div>}
+    </div>}
+    {mostrarFormulario && puedeResponder && <div className="mt-4 space-y-3 rounded-xl border border-brand-200 bg-brand-50/30 p-4 dark:border-brand-700 dark:bg-brand-500/5">
+      <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-100">Proponer nueva fecha</h3>
+      <label htmlFor="invitacion-nueva-fecha" className="block text-xs font-medium text-gray-700 dark:text-gray-300">Nueva fecha</label>
+      <input id="invitacion-nueva-fecha" type="date" required min={hoyEnGuatemala()} value={fechaPropuesta}
+        onChange={e => setFechaPropuesta(e.target.value)} disabled={guardando}
+        className="layout-focus min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" />
+      <label htmlFor="invitacion-motivo" className="block text-xs font-medium text-gray-700 dark:text-gray-300">Motivo de reprogramación</label>
+      <textarea id="invitacion-motivo" required minLength={5} maxLength={500} rows={3} value={motivo}
+        onChange={e => setMotivo(e.target.value)} disabled={guardando}
+        placeholder="Explica brevemente por qué necesitas cambiar la fecha"
+        className="layout-focus w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200" />
+      <p className="text-xs text-gray-500 dark:text-gray-400">El cambio se aplicará únicamente si el organizador lo aprueba.</p>
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button variant="secondary" type="button" disabled={guardando} onClick={() => setMostrarFormulario(false)}>Cancelar</Button>
+        <Button type="button" disabled={guardando || !fechaPropuesta || fechaPropuesta < hoyEnGuatemala() || fechaPropuesta === detalle?.fechaInicio || motivo.trim().length < 5 || motivo.trim().length > 500} onClick={() => void enviarPropuesta()}>
+          {guardando ? 'Enviando...' : 'Enviar propuesta'}
+        </Button>
+      </div>
     </div>}
     {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">{error}</p>}
     <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
       <Button variant="secondary" type="button" onClick={onClose}>Cerrar</Button>
       {puedeResponder && <>
-        {detalle?.estado !== 'RECHAZADA' && <Button variant="danger" type="button" disabled={guardando} onClick={() => void responder('RECHAZADA')}>
-          {detalle?.estado === 'ACEPTADA' ? 'Cambiar a rechazada' : 'Rechazar'}
+        {detalle?.estado !== 'ACEPTADA' && <Button type="button" disabled={guardando} onClick={() => void responder()}>
+          Aceptar
         </Button>}
-        {detalle?.estado !== 'ACEPTADA' && <Button type="button" disabled={guardando} onClick={() => void responder('ACEPTADA')}>
-          {detalle?.estado === 'RECHAZADA' ? 'Cambiar a aceptada' : 'Aceptar'}
-        </Button>}
+        <Button variant="secondary" type="button" disabled={guardando} onClick={() => { setError(''); setMostrarFormulario(actual => !actual) }}>
+          {mostrarFormulario ? 'Ocultar formulario' : 'Reprogramar'}
+        </Button>
       </>}
       {detalle?.estado === 'ACEPTADA' && (puedeVerCalendario || puedeVerAgenda) && <Button type="button" onClick={() => { onClose(); navigate(puedeVerCalendario ? '/calendario' : '/visitas/agenda') }}>{puedeVerCalendario ? 'Ver calendario' : 'Ver agenda de visitas'}</Button>}
     </div>

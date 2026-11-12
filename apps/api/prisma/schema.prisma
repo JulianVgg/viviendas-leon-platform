@@ -900,6 +900,9 @@ model Usuario {
   eventosResponsable EventoInstitucional[] @relation("EventoResponsable")
   eventosCreados EventoInstitucional[] @relation("EventoCreador")
   eventosParticipante EventoInstitucionalParticipante[]
+  reprogramacionesSolicitadas SolicitudReprogramacionInvitacion[] @relation("ReprogramacionSolicitante")
+  reprogramacionesResueltas SolicitudReprogramacionInvitacion[] @relation("ReprogramacionResolutor")
+  reprogramacionesReemplazo SolicitudReprogramacionInvitacion[] @relation("ReprogramacionReemplazo")
   capacitacionesAsignadas Capacitacion[] @relation("CapacitacionesAsignadas")
   solicitudesAnalisisIa AnalisisIaSolicitud[]
   tiposCambioRegistrados TipoCambio[]
@@ -1065,6 +1068,7 @@ model EventoInstitucional {
   responsable Usuario @relation("EventoResponsable", fields: [responsableId], references: [id], onDelete: Restrict)
   creadoPor Usuario @relation("EventoCreador", fields: [creadoPorId], references: [id], onDelete: Restrict)
   participantes EventoInstitucionalParticipante[]
+  solicitudesReprogramacion SolicitudReprogramacionInvitacion[]
 
   @@index([fechaInicio, fechaFin], map: "evento_institucional_fechas_idx")
   @@index([responsableId], map: "evento_institucional_responsable_idx")
@@ -1075,7 +1079,7 @@ model EventoInstitucionalParticipante {
   eventoId Int @map("evento_id")
   usuarioId Int @map("usuario_id")
 
-  estadoInvitacion String @default("ASIGNADO") @map("estado_invitacion") @db.VarChar(12)
+  estadoInvitacion String @default("ASIGNADO") @map("estado_invitacion") @db.VarChar(16)
   respondidaEn DateTime? @map("respondida_en") @db.Timestamptz(6)
 
   evento EventoInstitucional @relation(fields: [eventoId], references: [id], onDelete: Cascade)
@@ -1084,6 +1088,33 @@ model EventoInstitucionalParticipante {
   @@id([eventoId, usuarioId])
   @@index([usuarioId], map: "evento_institucional_participante_usuario_idx")
   @@map("evento_institucional_participante")
+}
+
+// CIR-25: las propuestas y decisiones se conservan incluso si se reemplaza al invitado.
+// El evento vigente sigue siendo la unica fuente de fecha y participantes efectivos.
+model SolicitudReprogramacionInvitacion {
+  id Int @id @default(autoincrement())
+  eventoId Int @map("evento_id")
+  solicitanteId Int @map("solicitante_id")
+  fechaOriginal DateTime @map("fecha_original") @db.Date
+  fechaPropuesta DateTime @map("fecha_propuesta") @db.Date
+  versionEvento Int @map("version_evento")
+  motivo String @db.VarChar(500)
+  estado String @default("PENDIENTE") @db.VarChar(16)
+  resolucion String? @db.VarChar(20)
+  reemplazoUsuarioId Int? @map("reemplazo_usuario_id")
+  resueltoPorId Int? @map("resuelto_por_id")
+  creadoEn DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+  resueltoEn DateTime? @map("resuelto_en") @db.Timestamptz(6)
+
+  evento EventoInstitucional @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+  solicitante Usuario @relation("ReprogramacionSolicitante", fields: [solicitanteId], references: [id], onDelete: Restrict)
+  resueltoPor Usuario? @relation("ReprogramacionResolutor", fields: [resueltoPorId], references: [id], onDelete: Restrict)
+  reemplazoUsuario Usuario? @relation("ReprogramacionReemplazo", fields: [reemplazoUsuarioId], references: [id], onDelete: Restrict)
+
+  @@index([eventoId, estado], map: "reprogramacion_inv_evento_estado_idx")
+  @@index([solicitanteId, creadoEn], map: "reprogramacion_inv_solicitante_fecha_idx")
+  @@map("solicitud_reprogramacion_invitacion")
 }
 
 // NTF-04: recordatorios PENDIENTES; NTF-05 los despachará.

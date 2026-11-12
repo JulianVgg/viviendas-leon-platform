@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express'
 import { getPrismaClient } from '../../config/prisma.js'
+import { reprogrammingRouter } from './invitations-reprogramming.routes.js'
 import { getAuthenticatedUser } from '../auth/auth.service.js'
 import { requireAuth } from '../auth/auth.middleware.js'
 import { esDireccionGeneral } from '../auth/require-permission.middleware.js'
@@ -13,8 +14,8 @@ import { eventoYaFinalizo } from './event-history.js'
 export const invitationsRouter = Router()
 invitationsRouter.use(requireAuth)
 
-type EstadoRespuesta = 'ACEPTADA' | 'RECHAZADA'
-const pendientes = ['PENDIENTE', 'ACEPTADA', 'RECHAZADA']
+type EstadoRespuesta = 'ACEPTADA'
+const pendientes = ['PENDIENTE', 'ACEPTADA', 'RECHAZADA', 'REPROGRAMACION']
 const nombre = (persona: { nombre: string; apellido: string | null }) =>
   [persona.nombre, persona.apellido].filter(Boolean).join(' ')
 const fecha = (valor: Date) => valor.toISOString().slice(0, 10)
@@ -157,12 +158,14 @@ invitationsRouter.patch('/:id/respuesta', async (req: Request, res: Response) =>
   }
   const id = esIdValido(String(req.params.id))
   const estado = req.body?.estado as unknown
-  if (id === null || (estado !== 'ACEPTADA' && estado !== 'RECHAZADA')) {
+  if (id === null || estado !== 'ACEPTADA') {
     res.status(400).json({ error: 'Evento o respuesta inválidos.' }); return
   }
   try {
     const usuarioId = req.session.userId!
     const resultado = await getPrismaClient().$transaction(async tx => {
+      // Compartir el bloqueo de evento con las propuestas y ediciones del calendario.
+      await tx.$queryRaw`SELECT "id" FROM "evento_institucional" WHERE "id" = ${id} FOR UPDATE`
       await tx.$queryRaw`SELECT "evento_id" FROM "evento_institucional_participante" WHERE "evento_id" = ${id} AND "usuario_id" = ${usuarioId} FOR UPDATE`
       const invitacion = await tx.eventoInstitucionalParticipante.findUnique({
         where: { eventoId_usuarioId: { eventoId: id, usuarioId } },
@@ -170,6 +173,7 @@ invitationsRouter.patch('/:id/respuesta', async (req: Request, res: Response) =>
       })
       if (!invitacion || invitacion.estadoInvitacion === 'ASIGNADO') return null
       if (eventoYaFinalizo(invitacion.evento.fechaFin)) return 'FINALIZADO' as const
+      if (invitacion.estadoInvitacion === 'REPROGRAMACION') return 'SOLICITUD_ABIERTA' as const
       if (invitacion.estadoInvitacion === estado) {
         return { estado, respondidaEn: invitacion.respondidaEn, sinCambios: true }
       }
@@ -186,14 +190,18 @@ invitationsRouter.patch('/:id/respuesta', async (req: Request, res: Response) =>
       })
       if (responsables.length) await tx.notificacion.createMany({ data: responsables.map(destinatario => ({
         usuarioId: destinatario.id, tipo: 'INVITACION_RESPUESTA',
-        titulo: estado === 'ACEPTADA' ? 'Invitación aceptada' : 'Invitación rechazada',
-        mensaje: `${nombre(invitacion.usuario)} ${estado === 'ACEPTADA' ? 'aceptó' : 'rechazó'} la invitación a ${invitacion.evento.titulo}.`,
+        titulo: 'Invitación aceptada',
+        mensaje: `${nombre(invitacion.usuario)} aceptó la invitación a ${invitacion.evento.titulo}.`,
         referencia: '/notificaciones',
       })) })
       return { estado, respondidaEn, sinCambios: false }
     })
     if (resultado === 'FINALIZADO') { res.status(409).json({ error: 'La actividad ya finalizó. La invitación es de solo consulta.' }); return }
+    if (resultado === 'SOLICITUD_ABIERTA') { res.status(409).json({ error: 'Hay una propuesta de reprogramación pendiente.' }); return }
     if (!resultado) { res.status(404).json({ error: 'No se encontró una invitación válida para responder.' }); return }
     res.json(resultado)
   } catch (error) { console.error('Error respondiendo invitación:', error); res.status(503).json({ error: 'No se pudo registrar tu respuesta.' }) }
 })
+
+// CIR-25: rutas de solicitud, consulta y resolución; requieren sesión por el router padre.
+invitationsRouter.use(reprogrammingRouter)
