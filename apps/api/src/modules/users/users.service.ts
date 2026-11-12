@@ -2,11 +2,13 @@
 import { getPrismaClient } from '../../config/prisma.js'
 import argon2 from 'argon2'
 import { randomBytes } from 'node:crypto'
+import { ESTADO_ELIMINADO, esEliminado, validarEliminacion } from './users.soft-delete.js'
 
 export async function listarUsuarios() {
   const prisma = getPrismaClient()
 
   return prisma.usuario.findMany({
+    where: { estado: { not: ESTADO_ELIMINADO } },
     select: {
       id: true,
       nombre: true,
@@ -191,7 +193,7 @@ export async function editarUsuario(
     }),
   ])
 
-  if (!existente) {
+  if (!existente || esEliminado(existente.estado)) {
     throw new ErrorUsuario(404, 'Usuario no encontrado.')
   }
 
@@ -201,7 +203,7 @@ export async function editarUsuario(
 
   try {
     return await prisma.usuario.update({
-      where: { id },
+      where: { id, estado: { not: ESTADO_ELIMINADO } },
       data: {
         nombre,
         apellido,
@@ -266,12 +268,12 @@ export async function cambiarEstadoUsuario(
     where: { id },
   })
 
-  if (!usuario) {
+  if (!usuario || esEliminado(usuario.estado)) {
     throw new ErrorUsuario(404, 'Usuario no encontrado.')
   }
 
   return prisma.usuario.update({
-    where: { id },
+    where: { id, estado: { not: ESTADO_ELIMINADO } },
     data: { estado },
     select: {
       id: true,
@@ -280,4 +282,18 @@ export async function cambiarEstadoUsuario(
       estado: true,
     },
   })
+}
+
+// CIR-24: conservación de registros y relaciones históricas; no usa prisma.usuario.delete.
+export async function eliminarUsuarioLogicamente(id: number, actorId: number) {
+  const problema = validarEliminacion(id, actorId)
+  if (problema === 'ID_INVALIDO') throw new ErrorUsuario(400, 'ID de usuario inválido.')
+  if (problema === 'CUENTA_PROPIA') throw new ErrorUsuario(403, 'No puedes eliminar tu propia cuenta.')
+  const prisma = getPrismaClient()
+  const resultado = await prisma.usuario.updateMany({
+    where: { id, estado: { not: ESTADO_ELIMINADO } },
+    data: { estado: ESTADO_ELIMINADO },
+  })
+  if (resultado.count !== 1) throw new ErrorUsuario(404, 'Usuario no encontrado.')
+  return { id, estado: ESTADO_ELIMINADO }
 }
