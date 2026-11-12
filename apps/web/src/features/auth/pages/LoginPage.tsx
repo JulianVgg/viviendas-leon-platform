@@ -3,11 +3,16 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router'
 import { useAuth } from '../AuthProvider'
 import BrandMark from '@/components/common/BrandMark'
+import { fieldAccessExists } from '../services/fieldAccess'
 
 export default function LoginPage() {
   const navigate = useNavigate()
-  const { verificarSesion } = useAuth()
+  const { verificarSesion, accederModoCampo } = useAuth()
 
+  const [offlineAvailable, setOfflineAvailable] = useState(false)
+  const [offlineKey, setOfflineKey] = useState('')
+  const [offlineBusy, setOfflineBusy] = useState(false)
+  const [offlineError, setOfflineError] = useState('')
   const [correo, setCorreo] = useState('')
   const [password, setPassword] = useState('')
   const [mostrarPassword, setMostrarPassword] = useState(false)
@@ -20,6 +25,19 @@ export default function LoginPage() {
   useEffect(() => () => {
     if (temporizadorSalida.current !== null) clearTimeout(temporizadorSalida.current)
   }, [])
+  useEffect(() => { void fieldAccessExists().then(setOfflineAvailable).catch(() => setOfflineAvailable(false)) }, [])
+
+  async function openOffline(event: FormEvent) {
+    event.preventDefault()
+    if (offlineBusy) return
+    setOfflineBusy(true); setOfflineError('')
+    try {
+      await accederModoCampo(offlineKey)
+      setOfflineKey('')
+      navigate('/visitas/nueva', { replace: true })
+    } catch (cause) { setOfflineError(cause instanceof Error ? cause.message : 'No se pudo abrir el modo de campo.') }
+    finally { setOfflineBusy(false) }
+  }
 
   async function iniciarSesion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -51,6 +69,8 @@ export default function LoginPage() {
         return
       }
 
+      // Nuevo inicio de sesión real: ya no queda un cierre local pendiente.
+      localStorage.removeItem('field:logout-pending')
       // AUTH-02: Comprobar que el servidor reconoce la sesión.
       const sesionValida = await verificarSesion()
 
@@ -196,6 +216,16 @@ export default function LoginPage() {
               {cargando ? 'Iniciando sesión...' : 'Iniciar sesión'}
             </button>
           </form>
+          {offlineAvailable && <section className="mt-8 border-t border-slate-200 pt-6 dark:border-slate-800">
+            <h2 className="text-base font-semibold text-slate-900 dark:text-white">Entrar sin conexión</h2>
+            <p className="mt-1 text-xs text-slate-500">Disponible solo si preparaste este teléfono con tu cuenta técnica.</p>
+            <form onSubmit={(event) => void openOffline(event)} className="mt-4 space-y-3">
+              <label htmlFor="offline-key" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Clave de campo</label>
+              <input id="offline-key" type="password" autoComplete="off" required minLength={8} value={offlineKey} onChange={event => setOfflineKey(event.target.value)} className="w-full rounded-lg border border-slate-300 bg-white px-4 py-3 text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
+              <button type="submit" disabled={offlineBusy} className="w-full rounded-lg border border-brand-500 px-4 py-3 font-semibold text-brand-600 disabled:opacity-50 dark:text-brand-300">{offlineBusy ? 'Verificando…' : 'Abrir modo de campo'}</button>
+              {offlineError && <p role="alert" className="text-sm text-red-600">{offlineError}</p>}
+            </form>
+          </section>}
         </div>
       </main>
 

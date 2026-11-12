@@ -3,7 +3,7 @@ import { Navigate, Outlet, useLocation } from 'react-router'
 import { useAuth } from '../AuthProvider'
 
 export default function ProtectedRoute() {
-  const { usuario, cargando } = useAuth()
+  const { usuario, cargando, modoAcceso } = useAuth()
   const location = useLocation()
 
   if (cargando) {
@@ -25,6 +25,12 @@ export default function ProtectedRoute() {
         replace
       />
     )
+  }
+
+  // La autorización local solo habilita las pantallas que operan con
+  // IndexedDB. El resto de la aplicación sigue requiriendo sesión real.
+  if (modoAcceso === 'offline' && !['/visitas/nueva', '/visitas/historial', '/visitas/preparar-campo'].includes(location.pathname)) {
+    return <Navigate to="/visitas/nueva" replace />
   }
 
   const rutaPassword = '/establecer-password'

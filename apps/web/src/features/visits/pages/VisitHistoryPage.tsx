@@ -64,7 +64,7 @@ export default function VisitHistoryPage() {
     if (!usuario) { setLoading(false); return }
     setLoading(true)
     try {
-      await syncPendingVisits(usuario.id)
+      void syncPendingVisits(usuario.id, true).catch(() => {})
       const visits = await getVisitList(usuario.id)
       setRows(visits.items)
       setLocal(visits.local)

@@ -2,9 +2,12 @@ import type { MovimientoVisita } from './visitEconomics'
 import type { ConfigRecordatorios } from '@/features/notifications/services/remindersService'
 import { getOfflineData, saveOfflineData } from '@/db/offlineDb'
 import { getConnectivitySnapshot } from '@/services/connectivity'
+import { canRetryVisitSync, retryDelayMs } from './visitRetryPolicy'
 import { listQueueOperations, processQueueOperation, queueOfflineOperation, recoverInterruptedOperations, replaceFailedOperation, type PendingOperation, type SyncAcknowledgment } from '@/services/pendingOperations'
 
 export const VISIT_SYNC_KIND = 'visits.create.v1'
+export const VISIT_QUEUE_EVENT = 'viviendas-leon:visit-queue-changed'
+const notifyQueue = () => { if (typeof window !== 'undefined') window.dispatchEvent(new Event(VISIT_QUEUE_EVENT)) }
 export const MAX_VISIT_PHOTOS = 4
 export const MAX_VISIT_PHOTO_BYTES = 2 * 1024 * 1024
 export type FollowUpStatus = 'PENDIENTE' | 'CUMPLIDO' | 'NO_CUMPLIDO'
@@ -66,6 +69,7 @@ export async function getVisitList(userId: number): Promise<{ items: VisitListIt
   let rows: VisitListItem[] = []
   let local = false
   try {
+    if (['offline', 'server-unavailable'].includes(getConnectivitySnapshot().status)) throw new Error('Consulta local.')
     const response = await fetch('/api/v1/visitas', { cache: 'no-store', credentials: 'same-origin', headers: { Accept:'application/json' } })
     if (response.status === 401 || response.status === 403) throw new Error('Sesión no autorizada.')
     if (!response.ok) throw new Error('No se pudo consultar el historial.')
@@ -111,9 +115,21 @@ export async function getVisitList(userId: number): Promise<{ items: VisitListIt
   return { items: [...rows, ...extras].sort((a,b)=>b.date.localeCompare(a.date)), local }
 }
 
+/** Límite por petición: una señal intermitente no debe bloquear un formulario. */
+async function fetchVisitWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 12_000)
+  try {
+    return await fetch(url, { ...init, signal: controller.signal })
+  } catch (cause) {
+    if (controller.signal.aborted) throw new Error('Timeout de conexión al sincronizar la visita.')
+    throw cause
+  } finally { clearTimeout(timer) }
+}
+
 async function sendVisit(operation: PendingOperation): Promise<SyncAcknowledgment> {
   const p = operation.payload as OwnedVisitCapture
-  const response = await fetch('/api/v1/visitas/sync', {
+  const response = await fetchVisitWithTimeout('/api/v1/visitas/sync', {
     method: 'POST', credentials: 'same-origin', cache: 'no-store',
     headers: { 'Content-Type':'application/json', Accept:'application/json', 'X-Requested-With':'XMLHttpRequest' },
     body: JSON.stringify({ operationId: operation.id, kind: VISIT_SYNC_KIND, payload: p.capture }),
@@ -121,7 +137,9 @@ async function sendVisit(operation: PendingOperation): Promise<SyncAcknowledgmen
   if (!response.ok) {
     if (response.status === 401) throw new Error('Inicia sesión para sincronizar.')
     const detail = await response.json().catch(() => null) as { error?: string } | null
-    throw new Error(detail?.error ?? `No se pudo sincronizar la visita (HTTP ${response.status}).`)
+    throw new Error(response.status >= 500 || response.status === 429
+      ? `Error temporal de API (HTTP ${response.status}).`
+      : detail?.error ?? `No se pudo sincronizar la visita (HTTP ${response.status}).`)
   }
   const result = await response.json() as { operationId?: string; accepted?: boolean }
   if (result.operationId !== operation.id || result.accepted !== true) throw new Error('El servidor no confirmó la visita.')
@@ -129,7 +147,7 @@ async function sendVisit(operation: PendingOperation): Promise<SyncAcknowledgmen
   // Las fotos van como bytes binarios en peticiones separadas; no se incluyen en el JSON.
   // Si falla cualquier foto, la misma operación se reintenta con el mismo UUID y la API evita duplicados.
   for (const photo of p.photos ?? []) {
-    const uploaded = await fetch(`/api/v1/visitas/${operation.id}/evidencias/${photo.id}`, {
+    const uploaded = await fetchVisitWithTimeout(`/api/v1/visitas/${operation.id}/evidencias/${photo.id}`, {
       method: 'POST', credentials: 'same-origin', cache: 'no-store',
       headers: { 'Content-Type': 'image/jpeg', 'X-Requested-With': 'XMLHttpRequest', 'X-File-Name': encodeURIComponent(photo.name) },
       body: photo.blob,
@@ -140,7 +158,7 @@ async function sendVisit(operation: PendingOperation): Promise<SyncAcknowledgmen
 }
 
 let active: Promise<void> | null = null
-export function syncPendingVisits(userId: number): Promise<void> {
+export function syncPendingVisits(userId: number, automatic = false): Promise<void> {
   if (active) return active
   active = (async () => {
     if (getConnectivitySnapshot().status !== 'connected') return
@@ -150,9 +168,13 @@ export function syncPendingVisits(userId: number): Promise<void> {
       if (getConnectivitySnapshot().status !== 'connected') break
       if (op.kind !== VISIT_SYNC_KIND || !['pending','failed'].includes(op.status)) continue
       if ((op.payload as OwnedVisitCapture | undefined)?.ownerId !== userId) continue
+      // El proceso de fondo no reenvía errores de validación (HTTP 4xx).
+      // Los errores temporales reintentan con espera exponencial.
+      if (automatic && op.status === 'failed' && (!canRetryVisitSync(op.lastError) ||
+        Date.now() < Date.parse(op.lastAttemptAt ?? op.createdAt) + retryDelayMs(op.attempts ?? 1))) continue
       try { await processQueueOperation(op.id, sendVisit, 'server') } catch { /* reclamación concurrente */ }
     }
-  })().finally(() => { active = null })
+  })().finally(() => { active = null; notifyQueue() })
   return active
 }
 
@@ -167,9 +189,11 @@ export async function saveVisitCapture(userId: number, familyName: string, commu
   }
   // Una única operación durable garantiza que visita y fotos se conserven juntas en IndexedDB.
   const operation = await queueOfflineOperation(VISIT_SYNC_KIND, { ownerId: userId, familyName, community, capture, photos } satisfies OwnedVisitCapture)
-  if (getConnectivitySnapshot().status === 'connected') await syncPendingVisits(userId)
-  const updated = (await listQueueOperations()).find(o => o.id === operation.id)
-  return { status: updated?.status === 'synced' ? 'synced' : updated?.status === 'failed' ? 'failed' : 'pending', id: operation.id }
+  notifyQueue()
+  // El guardado nunca espera a Railway ni a otras visitas pendientes.
+  // IndexedDB ya confirmó el guardado antes de mostrar el resultado.
+  if (getConnectivitySnapshot().status === 'connected') void syncPendingVisits(userId, true).catch(() => {})
+  return { status: 'pending', id: operation.id }
 }
 
 // Solo se puede modificar una operación rechazada antes de confirmarse en el servidor.
@@ -211,9 +235,9 @@ export async function correctFailedVisitCapture(userId: number, previous: VisitR
     }
     return { ...original, capture, photos }
   })
-  if (getConnectivitySnapshot().status === 'connected') await syncPendingVisits(userId)
-  const updated = (await listQueueOperations()).find(op => op.id === previous.id)
-  return { id: previous.id, status: updated?.status === 'synced' ? 'synced' : updated?.status === 'failed' ? 'failed' : 'pending' }
+  notifyQueue()
+  if (getConnectivitySnapshot().status === 'connected') void syncPendingVisits(userId, true).catch(() => {})
+  return { id: previous.id, status: 'pending' }
 }
 
 // La agenda consulta la tabla de seguimientos; IndexedDB mantiene copia para trabajo de campo.
@@ -222,6 +246,7 @@ export async function getVisitFollowUps(userId: number): Promise<{ items: VisitF
   let items: VisitFollowUp[] = []
   let local = false
   try {
+    if (['offline', 'server-unavailable'].includes(getConnectivitySnapshot().status)) throw new Error('Consulta local.')
     const response = await fetch('/api/v1/visitas/seguimientos', { credentials: 'same-origin', cache: 'no-store' })
     if ([401, 403].includes(response.status)) throw new Error('Sesión no autorizada.')
     if (!response.ok) throw new Error('No se pudieron consultar los seguimientos.')

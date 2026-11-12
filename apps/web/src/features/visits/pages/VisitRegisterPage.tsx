@@ -1,5 +1,5 @@
 import '../visits.css'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router'
 import PageHeader from '@/components/common/PageHeader'
 import PageMeta from '@/components/common/PageMeta'
@@ -7,6 +7,10 @@ import Button from '@/components/ui/Button'
 import FormField, { formControlClassName } from '@/components/ui/FormField'
 import { FamilyApiError, fetchFamilies } from '@/features/families/services/familyService'
 import { getOfflineData, saveOfflineData } from '@/db/offlineDb'
+import { fieldAccessActive } from '@/features/auth/services/fieldAccess'
+import { getConnectivitySnapshot, subscribeConnectivity } from '@/services/connectivity'
+import { FIELD_REFRESH_EVENT } from '@/app/layout/ConnectivitySyncBridge'
+import { clearVisitDraft, getVisitDraft, saveVisitDraft, saveVisitDraftPhotos } from '@/features/visits/services/visitDraft'
 import { useAuth } from '@/features/auth/AuthProvider'
 import { esSupervisorCalendario } from '@/features/auth/calendarAccess'
 import { CyclesApiError, listCycles, type Cycle } from '@/features/agriculture/services/cyclesService'
@@ -39,6 +43,12 @@ type CropEntry = {
   originalCrop?: CropCapture
 }
 type Commitment = { id: string; text: string; due: string; nextVisit: boolean; category: string }
+type VisitFormDraft = {
+  familyId: string; date: string; turno: VisitTimeSlot; weather: string; scheduledVisitId: number | null
+  crops: CropEntry[]; commitments: Commitment[]; observations: string
+  reviewStates: Record<string, FollowUpStatus>; step: number
+}
+
 const steps = ['Información general', 'Evaluación de cultivos', 'Compromisos y observaciones']
 const input = `${formControlClassName} w-full`
 const area = `${formControlClassName} h-auto min-h-24 resize-y`
@@ -131,7 +141,28 @@ export default function VisitRegisterPage() {
   const [recoveryError, setRecoveryError] = useState('')
   const [saved, setSaved] = useState<{ status: 'synced' | 'pending' | 'failed'; id: string; type: 'PROGRAMADA' | 'REALIZADA' } | null>(null)
   const [error, setError] = useState('')
+  const [storedDraft, setStoredDraft] = useState<{ draft: VisitFormDraft; photos: VisitPhotoFile[] } | null>(null)
+  const [draftReady, setDraftReady] = useState(false)
+  const [restoreDraftRequested, setRestoreDraftRequested] = useState(false)
+  const [draftError, setDraftError] = useState('')
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null)
+  const lastCycleFamily = useRef<string | null>(null)
   const cacheKey = usuario ? `visits:family-options:v1:user:${usuario.id}` : null
+
+  useEffect(() => {
+    let previous = getConnectivitySnapshot().status
+    const detach = subscribeConnectivity(() => {
+      const current = getConnectivitySnapshot().status
+      if (current === 'connected' && previous !== 'connected') setRefresh(n => n + 1)
+      previous = current
+    })
+    const onFieldRefresh = (event: Event) => {
+      const detail = (event as CustomEvent<{ state?: string }>).detail
+      if (detail?.state === 'ready') setRefresh(n => n + 1)
+    }
+    window.addEventListener(FIELD_REFRESH_EVENT, onFieldRefresh)
+    return () => { detach(); window.removeEventListener(FIELD_REFRESH_EVENT, onFieldRefresh) }
+  }, [])
 
   useEffect(() => {
     if (!recoverId || !usuario) return
@@ -238,13 +269,18 @@ export default function VisitRegisterPage() {
 
   useEffect(() => {
     const controller = new AbortController()
-    if (!recoverId) setCrops([])
+    // Solo limpiar cultivos al cambiar de familia, no al actualizar la fecha.
+    // De otro modo se pierde un borrador recuperado y cualquier evaluación escrita.
+    if (!recoverId && lastCycleFamily.current !== familyId) setCrops([])
+    lastCycleFamily.current = familyId
     setAvailableCycles([])
     setCyclesWarning('')
     setCyclesLoading(Boolean(usuario && familyId))
     if (!usuario || !familyId) return () => controller.abort()
     const key = `visits:cycles:v1:user:${usuario.id}:family:${familyId}`
-    listCycles({ familiaId: Number(familyId) }, controller.signal).then(records => {
+    ;(['offline', 'server-unavailable'].includes(getConnectivitySnapshot().status)
+      ? Promise.reject(new Error('Consulta local'))
+      : listCycles({ familiaId: Number(familyId) }, controller.signal)).then(records => {
       if (controller.signal.aborted) return
       // Un ciclo sembrado ya es evaluable, aunque su trasplante esté programado para más adelante.
       setAvailableCycles(records.filter(record => isVisitCycleAvailable(record, Number(familyId), date)))
@@ -263,14 +299,16 @@ export default function VisitRegisterPage() {
       } catch { if (!controller.signal.aborted) setCyclesWarning('No se pudieron consultar ciclos agrícolas.') }
     }).finally(() => { if (!controller.signal.aborted) setCyclesLoading(false) })
     return () => controller.abort()
-  }, [familyId, usuario?.id, date])
+  }, [familyId, usuario?.id, date, refresh])
 
   useEffect(() => {
     const controller = new AbortController()
     if (!cacheKey) { setFamiliesLoading(false); return }
     setFamiliesLoading(true)
     setFamiliesError('')
-    fetchFamilies({ limit: 100, page: 1 }, controller.signal)
+    ;(['offline', 'server-unavailable'].includes(getConnectivitySnapshot().status)
+      ? Promise.reject(new Error('Consulta local'))
+      : fetchFamilies({ limit: 100, page: 1 }, controller.signal))
       .then(result => {
         if (controller.signal.aborted) return
         setFamilyOptions(result.data)
@@ -286,7 +324,7 @@ export default function VisitRegisterPage() {
           const cached = await getOfflineData<FamilyListItem[]>(cacheKey)
           if (!controller.signal.aborted && cached) { setFamilyOptions(cached.data); return }
         } catch { /* avisar al usuario */ }
-        if (!controller.signal.aborted) setFamiliesError('No fue posible cargar las familias.')
+        if (!controller.signal.aborted) setFamiliesError('No hay familias disponibles en este teléfono. Conéctate y activa una vez el acceso de campo para guardarlas automáticamente.')
       })
       .finally(() => { if (!controller.signal.aborted) setFamiliesLoading(false) })
     return () => controller.abort()
@@ -309,6 +347,74 @@ export default function VisitRegisterPage() {
     }).finally(() => { if (active) setScheduleLoading(false) })
     return () => { active = false }
   }, [usuario])
+
+  // El borrador cifrado se recupera al volver a abrir la PWA. No interferir
+  // con la recuperación de una visita rechazada ni con una cita de agenda.
+  useEffect(() => {
+    if (!usuario || recoverId) { setDraftReady(false); return }
+    let active = true
+    void getVisitDraft<VisitFormDraft>(usuario.id).then(value => {
+      if (!active) return
+      if (value?.draft && typeof value.draft.familyId === 'string' && Array.isArray(value.draft.crops)) {
+        setStoredDraft(value)
+      } else setDraftReady(true)
+    }).catch(() => { if (active) setDraftError('No se pudo recuperar el borrador cifrado.') })
+    return () => { active = false }
+  }, [usuario?.id, recoverId, initialFamily, initialScheduled])
+
+  useEffect(() => {
+    if (!restoreDraftRequested || !storedDraft || storedDraft.draft.familyId !== familyId) return
+    const draft = storedDraft.draft
+    setDate(draft.date)
+    setTurno(draft.turno)
+    setWeather(draft.weather)
+    setScheduledVisitId(draft.scheduledVisitId)
+    setCrops(draft.crops)
+    setCommitments(draft.commitments)
+    setObservations(draft.observations)
+    setReviewStates(draft.reviewStates)
+    setPhotos(storedDraft.photos)
+    setStep(Math.min(steps.length - 1, Math.max(0, draft.step)))
+    setStoredDraft(null)
+    setRestoreDraftRequested(false)
+    setDraftReady(true)
+  }, [familyId, restoreDraftRequested, storedDraft])
+
+  useEffect(() => {
+    if (!draftReady || !usuario || saved || recoverId) return
+    // Un registro totalmente vacío no sustituye un borrador útil.
+    if (!familyId && !cropsState.length && !commitments.length && !observations.trim()) return
+    const userId = usuario.id
+    const draft: VisitFormDraft = { familyId, date, turno, weather, scheduledVisitId,
+      crops: cropsState, commitments, observations, reviewStates, step }
+    const timer = window.setTimeout(() => {
+      void saveVisitDraft(userId, draft).then(() => setDraftSavedAt(new Date().toISOString()))
+        .catch(() => setDraftError('No se pudo guardar el borrador local. Revisa el almacenamiento.'))
+    }, 1100)
+    return () => window.clearTimeout(timer)
+  }, [draftReady, usuario?.id, saved, recoverId, familyId, date, turno, weather, scheduledVisitId, cropsState, commitments, observations, reviewStates, step])
+
+  useEffect(() => {
+    if (!draftReady || !usuario || saved || recoverId) return
+    const userId = usuario.id
+    const timer = window.setTimeout(() => {
+      void saveVisitDraftPhotos(userId, photos).catch(() => setDraftError('No se pudieron guardar las fotos del borrador.'))
+    }, 800)
+    return () => window.clearTimeout(timer)
+  }, [draftReady, usuario?.id, saved, recoverId, photos])
+
+  const resumeDraft = () => {
+    if (!storedDraft) return
+    setRestoreDraftRequested(true)
+    setFamilyId(storedDraft.draft.familyId)
+  }
+  const discardDraft = () => {
+    if (!usuario) return
+    const userId = usuario.id
+    setStoredDraft(null)
+    setDraftReady(true)
+    void clearVisitDraft(userId).catch(() => setDraftError('No se pudo descartar el borrador.'))
+  }
 
   const lastFamilyVisit = useMemo(() => previousVisits.filter(visit => String(visit.familyId) === familyId).sort((a,b)=>b.date.localeCompare(a.date))[0], [previousVisits, familyId])
   const familyScheduled = useMemo(() => scheduledVisits.filter(visit =>
@@ -336,7 +442,7 @@ export default function VisitRegisterPage() {
       }
     }).finally(() => { if (active) setFollowUpLoading(false) })
     return () => { active = false }
-  }, [usuario, familyId, followUpRefresh])
+  }, [usuario, familyId, followUpRefresh, refresh])
   useEffect(() => {
     const recheck = () => setFollowUpRefresh(n => n + 1)
     window.addEventListener('focus', recheck)
@@ -446,6 +552,8 @@ export default function VisitRegisterPage() {
         ? await correctFailedVisitCapture(usuario.id, recovery, payload, photos)
         : await saveVisitCapture(usuario.id, selectedFamily.nombreReferencia, selectedFamily.comunidad.nombre, payload, photos)
       setSaved({ ...result, type })
+      // El envío durable ya está en la cola: el borrador deja de ser necesario.
+      void clearVisitDraft(usuario.id).catch(() => {})
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : 'No se pudo guardar la visita en este dispositivo.')
     } finally { setSaving(false) }
@@ -455,7 +563,13 @@ export default function VisitRegisterPage() {
 
   return <>
     <PageMeta title="Registrar visita técnica | Viviendas León" description="Formulario guiado de evaluación agrícola." />
-    <PageHeader title={recovery ? 'Corregir visita técnica' : 'Registrar visita técnica'} description="" actions={<Link to="/visitas/agenda" className="inline-flex min-h-11 items-center rounded-lg border border-slate-300 px-4 py-2.5 text-sm dark:border-slate-700">Volver a agenda</Link>} />
+    <PageHeader title={recovery ? 'Corregir visita técnica' : 'Registrar visita técnica'} description="" actions={<div className="flex flex-wrap gap-2"><Link to="/visitas/preparar-campo" className="inline-flex min-h-11 items-center rounded-lg border border-brand-300 px-4 py-2.5 text-sm font-medium text-brand-600 dark:border-brand-700 dark:text-brand-300">Modo de campo</Link><Link to="/visitas/agenda" className="inline-flex min-h-11 items-center rounded-lg border border-slate-300 px-4 py-2.5 text-sm dark:border-slate-700">Volver a agenda</Link></div>} />
+    {storedDraft && !recoverId && <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-200 bg-brand-50 p-4 text-sm dark:border-brand-800 dark:bg-brand-500/10">
+      <span className="font-medium text-slate-800 dark:text-white">Tienes una visita guardada en este dispositivo.</span>
+      <div className="flex gap-2"><Button type="button" size="sm" onClick={resumeDraft}>Continuar borrador</Button><Button type="button" size="sm" variant="secondary" onClick={discardDraft}>Descartar</Button></div>
+    </div>}
+    {draftError && <div role="alert" className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">{draftError}</div>}
+    {draftSavedAt && !saved && <p role="status" className="mb-3 text-xs text-emerald-700 dark:text-emerald-300">{usuario && fieldAccessActive(usuario.id) ? 'Borrador cifrado guardado en este teléfono.' : 'Borrador temporal guardado durante esta sesión.'}</p>}
     {recoverId && <div role={recoveryError ? 'alert' : 'status'} className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
       {recoveryError || (recovery ? `Editando la visita de ${recovery.familyName}. Se conservarán las fotografías y los movimientos originales hasta que elijas modificarlos.` : 'Recuperando visita guardada en este dispositivo…')}
       {recoveryError && <Link to="/visitas/historial" className="ml-2 font-semibold underline">Volver al historial</Link>}
