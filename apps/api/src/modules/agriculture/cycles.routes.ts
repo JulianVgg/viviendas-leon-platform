@@ -7,6 +7,7 @@ import { parseCycleId, validateCycleInput } from './cycles.validation.js'
 import { plantingDates, duplicatePlantingFilter } from './cycles.relations.js'
 import { parseEvaluationObservations } from './followup-format.js'
 import { estimacionDeCaptura } from './visit-estimate.js'
+import { datosEvaluacionDeCaptura } from './visit-evaluation-fields.js'
 
 export const cyclesRouter = Router()
 cyclesRouter.use(requireAuth)
@@ -108,14 +109,43 @@ cyclesRouter.get('/:id/seguimientos', requirePermission('PANTALLA_CICLOS'), asyn
         usuarioResponsableId: record.visita.usuarioResponsableId,
         responsable: [record.visita.usuarioResponsable.nombre, record.visita.usuarioResponsable.apellido]
           .filter(Boolean).join(' ') || `Usuario #${record.visita.usuarioResponsableId}`,
-        etapa: record.etapaCultivo?.nombre ?? null,
-        calidad: record.calidad?.nombre ?? null,
+        etapa: record.etapaCultivo?.nombre ?? datosEvaluacionDeCaptura(capturasPorVisita.get(record.visitaId), id).etapa,
+        calidad: record.calidad?.nombre ?? datosEvaluacionDeCaptura(capturasPorVisita.get(record.visitaId), id).calidad,
         ...parseEvaluationObservations(record.observaciones),
         estimacion: estimacionDeCaptura(capturasPorVisita.get(record.visitaId), id),
       })),
       pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
     } })
   } catch (err) { next(err) }
+})
+
+// Al cambiar el cultivo se conserva el historial de evaluaciones, cosechas y ventas.
+cyclesRouter.patch('/:id/finalizar', requirePermission('CICLOS_WRITE'), async (req, res, next) => {
+  const id = parseCycleId(req.params.id)
+  if (!id) { res.status(400).json(issue('VALIDATION_ERROR', 'El ciclo no es válido.')); return }
+  try {
+    const prisma = getPrismaClient()
+    const result = await prisma.$transaction(async tx => {
+      // La lectura bloqueada evita carreras entre dos técnicos finalizando el mismo ciclo.
+      const rows = await tx.$queryRaw<Array<{ id: number; estado: string; fechaSiembra: Date | null; fechaTrasplante: Date | null }>>`
+        SELECT id, estado, fecha_siembra AS "fechaSiembra", fecha_trasplante AS "fechaTrasplante"
+        FROM ciclo_cultivo WHERE id = ${id} FOR UPDATE
+      `
+      const current = rows[0]
+      if (!current) return { status: 404, message: 'No se encontró el cultivo.' }
+      if (current.estado !== 'ACTIVO') return { status: 409, message: 'El ciclo ya está finalizado.' }
+      const localDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guatemala', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+      const fin = new Date(`${localDate}T12:00:00Z`)
+      if ((current.fechaSiembra && current.fechaSiembra > fin) || (current.fechaTrasplante && current.fechaTrasplante > fin))
+        return { status: 409, message: 'No se puede finalizar una siembra futura.' }
+      const updated = await tx.cicloCultivo.update({ where: { id }, data: { estado: 'FINALIZADO', fechaFin: fin }, select: cycleSelect })
+      await tx.bitacora.create({ data: { usuarioId: req.session.userId!, entidad: 'ciclo_cultivo', registroId: String(id), accion: 'UPDATE', fecha: new Date(), descripcion: 'Ciclo agrícola finalizado; historial conservado.' } })
+      return { status: 200, data: serialize(updated) }
+    })
+    if (result.status !== 200) { res.status(result.status).json(issue('CYCLE_CLOSE_ERROR', 'message' in result && typeof result.message === 'string' ? result.message : 'No se pudo finalizar.')); return }
+    res.setHeader('Cache-Control', 'no-store')
+    res.json({ data: result.data })
+  } catch (cause) { next(cause) }
 })
 
 cyclesRouter.post('/', requirePermission('CICLOS_WRITE'), async (req, res, next) => {

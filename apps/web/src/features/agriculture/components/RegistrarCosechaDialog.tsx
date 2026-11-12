@@ -17,8 +17,9 @@ function todayGuatemala() {
 }
 
 /** Un solo registro de cosecha, ligado al ciclo seleccionado del huerto. */
-export default function RegistrarCosechaDialog({ cycle, onClose, onSaved }: {
+export default function RegistrarCosechaDialog({ cycle, cycleNumber, onClose, onSaved }: {
   cycle: Cycle
+  cycleNumber: number
   onClose: () => void
   onSaved: () => void
 }) {
@@ -72,7 +73,7 @@ export default function RegistrarCosechaDialog({ cycle, onClose, onSaved }: {
     } finally { setSaving(false) }
   }
 
-  return <Dialog open title="Registrar cosecha" description={`${cycle.cultivo.nombre} · Ciclo #${cycle.id}`} onClose={() => { if (!saving) onClose() }}>
+  return <Dialog open title="Registrar cosecha" description={`${cycle.cultivo.nombre} · Ciclo ${cycleNumber}`} onClose={() => { if (!saving) onClose() }}>
     <form className="space-y-4" onSubmit={(event) => void submit(event)}>
       {error && <Alert variant="error" title="No se pudo registrar">{error}</Alert>}
       {unitError && <Alert variant="error">{unitError}</Alert>}

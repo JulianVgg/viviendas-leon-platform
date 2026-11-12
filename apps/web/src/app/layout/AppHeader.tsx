@@ -126,6 +126,5 @@ export default function AppHeader() {
         </div>
       </div>
     </div><div className="border-t border-slate-100 px-3 py-2 sm:px-6 dark:border-slate-800"><FieldSyncIndicator /></div>
-    {modoAcceso === 'offline' && <p role="status" className="px-4 pb-2 text-xs font-medium text-amber-700 dark:text-amber-300">Modo de campo local · pendiente de validar sesión con Railway</p>}
   </header>
 }

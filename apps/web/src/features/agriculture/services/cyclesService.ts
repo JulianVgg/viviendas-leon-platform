@@ -60,3 +60,4 @@ export const getCycle = (id: number, signal?: AbortSignal) => request<Cycle>(`/$
 export const listCycleSeguimientos = (id: number, page = 1, signal?: AbortSignal) =>
   request<CycleSeguimientosPage>(`/${id}/seguimientos?page=${page}`, { signal })
 export const createCycle = (input: CycleInput) => request<Cycle>('', { method: 'POST', body: JSON.stringify(input) })
+export const finishCycle = (id: number) => request<Cycle>(`/${id}/finalizar`, { method: 'PATCH' })

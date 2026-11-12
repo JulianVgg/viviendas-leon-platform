@@ -18,10 +18,10 @@ import CicloProduccionSection from './CicloProduccionSection'
 import { formatAgriculturalDate } from './agriculturalDate'
 import GardenScene from './GardenScene'
 
-function CycleOption({ cycle, selected, onSelect }: { cycle: Cycle; selected: boolean; onSelect: () => void }) {
+function CycleOption({ cycle, number, selected, onSelect }: { cycle: Cycle; number: number; selected: boolean; onSelect: () => void }) {
   return <button type="button" aria-pressed={selected} onClick={onSelect} className={`layout-focus group flex min-h-28 w-full flex-col justify-between gap-3 rounded-2xl border p-4 text-left transition-colors duration-150 ${selected ? 'border-brand-500 bg-brand-50/70 ring-1 ring-brand-500/20 dark:bg-brand-500/10' : 'border-gray-200 bg-white hover:border-brand-300 hover:bg-gray-50 dark:border-gray-800 dark:bg-white/[0.03] dark:hover:border-brand-600 dark:hover:bg-white/[0.06]'}`}>
     <div className="flex items-start justify-between gap-2">
-      <div className="min-w-0"><p className="text-xs font-medium uppercase tracking-wide text-gray-500">Ciclo #{cycle.id}</p><p className="mt-1 break-words text-sm font-semibold text-gray-900 dark:text-white">{cycle.cultivo.nombre}</p></div>
+      <div className="min-w-0"><p className="text-xs font-medium uppercase tracking-wide text-gray-500">Ciclo {number}</p><p className="mt-1 break-words text-sm font-semibold text-gray-900 dark:text-white">{cycle.cultivo.nombre}</p></div>
       <Badge variant={cycle.estado === 'ACTIVO' ? 'success' : 'neutral'} className="shrink-0">{cycle.estado}</Badge>
     </div>
     <div className="flex items-end justify-between gap-2 text-xs text-gray-500 dark:text-gray-400"><div><p>Siembra: {formatAgriculturalDate(cycle.fechaSiembra)}</p><p>Plantas: {cycle.cantidadPlantas ?? 'Sin dato'}</p></div><ChevronRight size={16} className={selected ? 'text-brand-600' : 'text-gray-400'} /></div>
@@ -67,6 +67,7 @@ export default function FamilyGardensSection({ familyId }: { familyId: number })
     : []
   const currentGarden = familyGardens.find((garden) => garden.id === selectedGardenId) ?? familyGardens[0]
   const gardenCycles = currentGarden ? familyCycles.filter((cycle) => cycle.huertoId === currentGarden.id) : []
+  const cycleNumbers = new Map([...gardenCycles].sort((a, b) => a.id - b.id).map((cycle, index) => [cycle.id, index + 1]))
   const selectedCycle = useMemo(() => gardenCycles.find((cycle) => cycle.id === selectedCycleId) ?? gardenCycles.find((cycle) => cycle.estado === 'ACTIVO') ?? gardenCycles[0] ?? null, [gardenCycles, selectedCycleId])
 
   return <ComponentCard title="Huertos y cultivos" description="" actions={canCreate ? <Link
@@ -100,7 +101,7 @@ export default function FamilyGardensSection({ familyId }: { familyId: number })
               <button type="button" onClick={() => { setSelectedGardenId(garden.id); setSelectedCycleId(null) }} className="block w-full text-left">
                 <GardenScene garden={garden} cycles={familyCycles.filter((cycle) => cycle.huertoId === garden.id)} compact showLegend={false} />
                 <div className="space-y-3 p-4">
-                  <div className="flex items-start justify-between gap-2"><div className="min-w-0"><h4 className="break-words text-sm font-semibold text-gray-900 dark:text-white">{garden.nombre || `Huerto #${garden.id}`}</h4><p className="mt-1 text-xs text-gray-500">{garden.entornoCultivo ? entornoLabels[garden.entornoCultivo] : 'Sin clasificar'}</p></div><Badge variant={garden.estado === 'ACTIVO' ? 'success' : 'neutral'}>{garden.estado}</Badge></div>
+                  <div className="flex items-start justify-between gap-2"><div className="min-w-0"><h4 className="break-words text-sm font-semibold text-gray-900 dark:text-white">{garden.entornoCultivo ? entornoLabels[garden.entornoCultivo] : 'Sin clasificar'}</h4><p className="mt-1 text-xs text-gray-500">{garden.tipo === 'FAMILIAR' ? 'Familiar' : garden.tipo === 'COMUNITARIO' ? 'Comunitario' : 'Sin clasificación'}</p></div><Badge variant={garden.estado === 'ACTIVO' ? 'success' : 'neutral'}>{garden.estado}</Badge></div>
                   <p className="text-xs text-gray-500">{garden.modalidadesProductivas.length ? garden.modalidadesProductivas.map((item) => modalidadLabels[item]).join(', ') : 'Sin clasificar'}</p>
                 </div>
               </button>
@@ -110,7 +111,7 @@ export default function FamilyGardensSection({ familyId }: { familyId: number })
           {currentGarden && <div className="space-y-4">
             <div className="rounded-[1.6rem] border border-gray-200 bg-white p-5 shadow-theme-xs dark:border-gray-800 dark:bg-gray-900">
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0"><p className="text-xs font-medium uppercase tracking-wide text-gray-500">Huerto seleccionado</p><h3 className="mt-1 break-words text-xl font-semibold text-gray-900 dark:text-white">{currentGarden.nombre || `Huerto #${currentGarden.id}`}</h3><p className="mt-1 text-sm text-gray-500">{currentGarden.entornoCultivo ? entornoLabels[currentGarden.entornoCultivo] : 'Sin clasificar'} · {currentGarden.fechaInicio ? formatAgriculturalDate(currentGarden.fechaInicio) : 'Sin fecha'}</p></div>
+                <div className="min-w-0"><p className="text-xs font-medium uppercase tracking-wide text-gray-500">Huerto seleccionado</p><h3 className="mt-1 break-words text-xl font-semibold text-gray-900 dark:text-white">{currentGarden.entornoCultivo ? entornoLabels[currentGarden.entornoCultivo] : 'Sin clasificar'}</h3><p className="mt-1 text-sm text-gray-500">{currentGarden.entornoCultivo ? entornoLabels[currentGarden.entornoCultivo] : 'Sin clasificar'} · {currentGarden.fechaInicio ? formatAgriculturalDate(currentGarden.fechaInicio) : 'Sin fecha'}</p></div>
                 <div className="flex flex-wrap gap-2"><Badge variant={currentGarden.estado === 'ACTIVO' ? 'success' : 'neutral'}>{currentGarden.estado}</Badge><Link to={`/gestion-agricola/huertos/${currentGarden.id}`} className="layout-focus inline-flex min-h-9 items-center gap-1 rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-white dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">Abrir huerto <ChevronRight size={14} /></Link></div>
               </div>
               {currentGarden.observaciones && <p className="mt-4 whitespace-pre-wrap break-words text-sm text-gray-600 dark:text-gray-300">{currentGarden.observaciones}</p>}
@@ -118,14 +119,14 @@ export default function FamilyGardensSection({ familyId }: { familyId: number })
             </div>
 
             {!canReadCycles ? <Alert variant="warning">No tienes permiso para consultar los ciclos agrícolas de este huerto.</Alert> : <div className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-2">{gardenCycles.length ? gardenCycles.map((cycle) => <CycleOption key={cycle.id} cycle={cycle} selected={selectedCycle?.id === cycle.id} onSelect={() => setSelectedCycleId(cycle.id)} />) : <div className="rounded-2xl border border-dashed border-gray-300 px-5 py-10 text-center text-sm text-gray-500 dark:border-gray-700">Aún no hay ciclos agrícolas para este huerto.</div>}</div>
+              <div className="grid gap-3 md:grid-cols-2">{gardenCycles.length ? gardenCycles.map((cycle) => <CycleOption key={cycle.id} cycle={cycle} number={cycleNumbers.get(cycle.id) ?? 1} selected={selectedCycle?.id === cycle.id} onSelect={() => setSelectedCycleId(cycle.id)} />) : <div className="rounded-2xl border border-dashed border-gray-300 px-5 py-10 text-center text-sm text-gray-500 dark:border-gray-700">Aún no hay ciclos agrícolas para este huerto.</div>}</div>
             </div>}
           </div>}
         </section>
 
         {canReadCycles && selectedCycle && <section id="family-agricultural-cycle-history" aria-label={`Historial de ${selectedCycle.cultivo.nombre}`} className="space-y-4 scroll-mt-6">
           <div className="rounded-2xl border border-gray-200 bg-gradient-to-r from-gray-50 to-white p-4 sm:p-5 dark:border-gray-800 dark:from-white/[0.04] dark:to-white/[0.02]">
-            <div className="flex flex-wrap items-start justify-between gap-3"><div className="flex min-w-0 items-start gap-3"><div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-400"><Leaf aria-hidden="true" size={23} /></div><div className="min-w-0"><p className="text-xs font-medium text-gray-500">Ciclo seleccionado #{selectedCycle.id}</p><h3 className="mt-1 break-words text-lg font-semibold text-gray-900 dark:text-white">{selectedCycle.cultivo.nombre}</h3></div></div><div className="flex flex-wrap items-center gap-2"><Badge variant={selectedCycle.estado === 'ACTIVO' ? 'success' : 'neutral'}>{selectedCycle.estado}</Badge><Link to={`/gestion-agricola/ciclos/${selectedCycle.id}`} className="layout-focus inline-flex min-h-9 items-center gap-1 rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-white dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">Detalle completo <ChevronRight aria-hidden="true" size={15} /></Link></div></div>
+            <div className="flex flex-wrap items-start justify-between gap-3"><div className="flex min-w-0 items-start gap-3"><div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-success-50 text-success-700 dark:bg-success-500/15 dark:text-success-400"><Leaf aria-hidden="true" size={23} /></div><div className="min-w-0"><p className="text-xs font-medium text-gray-500">Cultivo seleccionado</p><h3 className="mt-1 break-words text-lg font-semibold text-gray-900 dark:text-white">{selectedCycle.cultivo.nombre}</h3></div></div><div className="flex flex-wrap items-center gap-2"><Badge variant={selectedCycle.estado === 'ACTIVO' ? 'success' : 'neutral'}>{selectedCycle.estado}</Badge><Link to={`/gestion-agricola/ciclos/${selectedCycle.id}`} className="layout-focus inline-flex min-h-9 items-center gap-1 rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-white dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">Detalle completo <ChevronRight aria-hidden="true" size={15} /></Link></div></div>
             <dl className="mt-4 grid gap-3 border-t border-gray-200 pt-4 sm:grid-cols-2 dark:border-gray-800"><div className="flex items-start gap-2"><CalendarDays aria-hidden="true" size={16} className="mt-0.5 shrink-0 text-gray-400" /><div><dt className="text-xs text-gray-500">Inicio de siembra</dt><dd className="mt-1 text-sm font-medium text-gray-800 dark:text-white">{formatAgriculturalDate(selectedCycle.fechaSiembra)}</dd></div></div><div className="flex items-start gap-2"><Sprout aria-hidden="true" size={16} className="mt-0.5 shrink-0 text-gray-400" /><div><dt className="text-xs text-gray-500">Plantas iniciales</dt><dd className="mt-1 text-sm font-medium text-gray-800 dark:text-white">{selectedCycle.cantidadPlantas ?? 'Sin registro'}</dd></div></div></dl>
             {selectedCycle.observaciones && <p className="mt-4 whitespace-pre-wrap break-words text-sm text-gray-600 dark:text-gray-300">{selectedCycle.observaciones}</p>}
           </div>
@@ -135,7 +136,7 @@ export default function FamilyGardensSection({ familyId }: { familyId: number })
           </div>
         </section>}
       </>}
-      {gardenToRegister && <RegisterSowingDialog key={gardenToRegister.id} huertoId={gardenToRegister.id} huerto={gardenToRegister.nombre || `Huerto #${gardenToRegister.id}`}
+      {gardenToRegister && <RegisterSowingDialog key={gardenToRegister.id} huertoId={gardenToRegister.id} huerto={gardenToRegister.entornoCultivo ? entornoLabels[gardenToRegister.entornoCultivo] : 'Huerto'}
         familia={gardenToRegister.familia.nombreReferencia} onClose={() => setGardenToRegister(null)}
         onSaved={(cycle) => { setCycles((current) => [cycle, ...current]); setSelectedGardenId(cycle.huertoId); setSelectedCycleId(cycle.id); setNotice('Siembra registrada correctamente.'); setGardenToRegister(null) }} />}
     </div>

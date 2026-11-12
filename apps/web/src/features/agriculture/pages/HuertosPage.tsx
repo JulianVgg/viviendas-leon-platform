@@ -18,6 +18,7 @@ import { GardenClassificationFields, entornoLabels } from '../components/GardenC
 import EditGardenClassification from '../components/EditGardenClassification'
 import GardenScene from '../components/GardenScene'
 import { formatAgriculturalDate } from '../components/agriculturalDate'
+import FamilyStatusDot, { familySelectLabel } from '@/features/families/components/FamilyStatusDot'
 import { mainStructures, matchesGardenGroup, type GardenGroup } from '../services/gardenGroups'
 
 const PAGE_SIZE = 6
@@ -132,8 +133,8 @@ export default function HuertosPage() {
         {!loading && !error && !filtered.length && <div className="rounded-xl border border-dashed border-gray-300 p-10 text-center text-sm text-gray-500 dark:border-gray-700">No hay huertos con los filtros actuales.</div>}
         {!loading && !error && <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
           {shown.map(garden => <article key={garden.id} className="min-w-0 rounded-2xl border border-gray-200 bg-white p-5 shadow-theme-xs transition-colors hover:border-brand-300 dark:border-gray-800 dark:bg-gray-900">
-            <div className="flex items-start justify-between gap-3"><h3 className="break-words text-base font-semibold text-gray-900 dark:text-white">{garden.nombre || `Huerto #${garden.id}`}</h3><Badge variant={garden.estado === 'ACTIVO' ? 'success' : 'neutral'}>{statusLabels[garden.estado] || garden.estado}</Badge></div>
-            <div className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-300"><p className="font-medium text-gray-900 dark:text-white">{garden.familia.nombreReferencia}</p><p>{garden.familia.comunidad.nombre}</p><p>{garden.entornoCultivo ? entornoLabels[garden.entornoCultivo] : 'Sin clasificar'} · {formatAgriculturalDate(garden.fechaInicio)}</p></div>
+            <div className="flex items-start justify-between gap-3"><h3 className="break-words text-base font-semibold text-gray-900 dark:text-white">{garden.entornoCultivo ? entornoLabels[garden.entornoCultivo] : 'Sin clasificar'}</h3><Badge variant={garden.estado === 'ACTIVO' ? 'success' : 'neutral'}>{statusLabels[garden.estado] || garden.estado}</Badge></div>
+            <div className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-300"><p className="inline-flex items-center gap-2 font-medium text-gray-900 dark:text-white"><FamilyStatusDot state={garden.familia.estado}/>{garden.familia.nombreReferencia}</p><p>{garden.familia.comunidad.nombre}</p><p>{garden.entornoCultivo ? entornoLabels[garden.entornoCultivo] : 'Sin clasificar'} · {formatAgriculturalDate(garden.fechaInicio)}</p></div>
             <div className="mt-5 flex flex-wrap gap-2"><BtnLink to={`/gestion-agricola/huertos/${garden.id}`} primary><Warehouse size={16}/> Abrir huerto <ArrowUpRight size={14}/></BtnLink>{canCreate && <Button type="button" variant="secondary" size="sm" disabled={!online} onClick={() => setEditingId(current => current === garden.id ? null : garden.id)}>{editingId === garden.id ? 'Cerrar edición' : 'Editar clasificación'}</Button>}</div>
             {canCreate && editingId === garden.id && <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-800"><EditGardenClassification key={garden.id} garden={garden} onCancel={() => setEditingId(null)} onSaved={updated => { setGardens(prev => prev.map(item => item.id === updated.id ? updated : item)); setEditingId(null); setNotice('Clasificación actualizada.') }} /></div>}
           </article>)}
@@ -154,7 +155,6 @@ export function CreateGardenPage() {
   const [loading, setLoading] = useState(true)
   const lockedFamilyId = params.get('familiaId')
   const [familyId, setFamilyId] = useState(lockedFamilyId || '')
-  const [nombre, setNombre] = useState('')
   const [classification, setClassification] = useState<GardenClassification>({
     tipo: 'FAMILIAR', entornoCultivo: null, detalleEntorno: null, modalidadesProductivas: [],
   })
@@ -190,7 +190,7 @@ export function CreateGardenPage() {
     }
     setSaving(true)
     try {
-      const garden = await createGarden({ familiaId: Number(familyId), nombre: nombre.trim() || null, ...classification, fechaInicio: fechaInicio || null, estado, observaciones: observaciones.trim() || null })
+      const garden = await createGarden({ familiaId: Number(familyId), nombre: null, ...classification, fechaInicio: fechaInicio || null, estado, observaciones: observaciones.trim() || null })
       if (file) {
         try { await uploadGardenImage(garden.id, file) }
         catch { navigate(params.has('familiaId') ? `/familias/${garden.familiaId}?tab=gardens&creado=1&imagenError=${garden.id}` : `/gestion-agricola/huertos?imagenError=${garden.id}`); return }
@@ -209,8 +209,7 @@ export function CreateGardenPage() {
     <form onSubmit={(event) => void submit(event)} className="space-y-6">
       <ComponentCard title="Datos del huerto" description="">
         <FormGrid>
-          <FormField label="Familia beneficiaria" required hint="El huerto quedará asociado a esta familia."><select className={formControlClassName} required disabled={loading || saving || !canCreate || Boolean(lockedFamilyId)} value={familyId} onChange={(event) => setFamilyId(event.target.value)}><option value="">Seleccionar familia...</option>{families.map((f) => <option key={f.id} value={f.id}>{f.nombreReferencia} · {f.comunidad.nombre} ({f.estado})</option>)}</select></FormField>
-          <FormField label="Nombre del huerto" hint="Opcional según la base de datos."><input className={formControlClassName} maxLength={120} value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Ej. Huerto principal" /></FormField>
+          <FormField label="Familia beneficiaria" required hint="El huerto quedará asociado a esta familia."><select className={formControlClassName} required disabled={loading || saving || !canCreate || Boolean(lockedFamilyId)} value={familyId} onChange={(event) => setFamilyId(event.target.value)}><option value="">Seleccionar familia...</option>{families.map((f) => <option key={f.id} value={f.id}>{familySelectLabel(f.nombreReferencia, f.estado)} · {f.comunidad.nombre}</option>)}</select></FormField>
           <GardenClassificationFields value={classification} onChange={setClassification} disabled={saving || !canCreate} />
           <FormField label="Fecha de inicio"><input className={formControlClassName} type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} /></FormField>
           <FormField label="Estado" required><select className={formControlClassName} required value={estado} onChange={(e) => setEstado(e.target.value)}><option value="PLANIFICADO">Planificado</option><option value="ACTIVO">Activo</option><option value="INACTIVO">Inactivo</option></select></FormField>
