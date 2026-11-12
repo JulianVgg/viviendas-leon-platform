@@ -16,7 +16,7 @@ import {
   cambiarEstadoUsuario,
 } from './users.service.js'
 
-import { listarUsuarios } from './users.service.js'
+import { listarUsuarios, eliminarUsuarioLogicamente } from './users.service.js'
 
 export async function obtenerUsuarios(
   _req: Request,
@@ -180,6 +180,23 @@ export async function actualizarEstadoUsuario(
       return
     }
 
+    next(error)
+  }
+}
+export async function eliminarUsuario(req: Request, res: Response, next: NextFunction) {
+  try {
+    const actorId = req.session.userId
+    if (!actorId) {
+      res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Debes iniciar sesión.' } })
+      return
+    }
+    const usuario = await eliminarUsuarioLogicamente(Number(req.params.id), actorId)
+    res.status(200).json({ message: 'Usuario eliminado lógicamente.', usuario })
+  } catch (error) {
+    if (error instanceof ErrorUsuario) {
+      res.status(error.status).json({ error: { code: 'USER_ERROR', message: error.message } })
+      return
+    }
     next(error)
   }
 }

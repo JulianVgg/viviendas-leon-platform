@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
-import { Plus, RefreshCcw, UserRound } from 'lucide-react'
+import { Plus, RefreshCcw, Trash2, UserRound } from 'lucide-react'
 import { useAuth } from '@/features/auth/AuthProvider'
+import { isDireccionGeneral } from '@/features/auth/screenPermissions'
 
 type Rol = { id: number; nombre: string; activo?: boolean }
 type UsuarioApi = {
@@ -55,6 +56,9 @@ async function solicitar(url: string, opciones?: RequestInit): Promise<unknown> 
 
 export default function UsuariosPage() {
   const { usuario: actual } = useAuth()
+  const puedeEliminar = actual ? isDireccionGeneral(actual) : false
+  const [usuarioAEliminar, setUsuarioAEliminar] = useState<UsuarioApi | null>(null)
+  const [eliminando, setEliminando] = useState(false)
   const [usuarios, setUsuarios] = useState<UsuarioApi[]>([])
   const [roles, setRoles] = useState<Rol[]>([])
   const [modal, setModal] = useState(false)
@@ -154,10 +158,27 @@ export default function UsuariosPage() {
     finally { setGuardando(false) }
   }
 
+  async function confirmarEliminacion() {
+    const objetivo = usuarioAEliminar
+    if (!objetivo || !puedeEliminar || objetivo.id === actual?.id || eliminando) return
+    setEliminando(true)
+    setError('')
+    setMensaje('')
+    try {
+      await solicitar(`/api/v1/usuarios/${objetivo.id}`, { method: 'DELETE' })
+      setUsuarios((prev) => prev.filter((u) => u.id !== objetivo.id))
+      setUsuarioAEliminar(null)
+      setMensaje('Usuario eliminado correctamente.')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo eliminar el usuario.')
+    } finally {
+      setEliminando(false)
+    }
+  }
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div><h1 className="text-2xl font-bold text-gray-900 dark:text-white">Usuarios</h1><p className="mt-1 text-sm text-gray-500">Crear, editar, activar y desactivar cuentas. Solo Directora.</p></div>
+        <div><h1 className="text-2xl font-bold text-gray-900 dark:text-white">Usuarios</h1><p className="mt-1 text-sm text-gray-500">Crear, editar, activar, desactivar y eliminar lógicamente cuentas. La eliminación es exclusiva de Dirección general.</p></div>
         <div className="flex gap-2">
           <button type="button" onClick={() => void cargar().catch((e: unknown) => setError(e instanceof Error ? e.message : 'Error de conexión.'))} className="rounded-lg border border-gray-300 p-2.5 dark:border-gray-700" aria-label="Actualizar listado"><RefreshCcw size={18} /></button>
           <button type="button" onClick={abrirNuevo} className={`${boton} inline-flex items-center gap-2`}><Plus size={18} /> Nuevo usuario</button>
@@ -192,6 +213,9 @@ export default function UsuariosPage() {
                     <td className="px-3 py-4"><div className="flex gap-2">
                       <button className="rounded border border-gray-300 px-3 py-1.5 dark:border-gray-700" onClick={() => abrirEdicion(usuario)} disabled={usuario.id === actual?.id}>Editar</button>
                       <button className="rounded border border-gray-300 px-3 py-1.5 dark:border-gray-700" disabled={guardando || usuario.id === actual?.id} onClick={() => void alternarEstado(usuario)}>{usuario.estado === 'ACTIVO' ? 'Desactivar' : 'Activar'}</button>
+                      {puedeEliminar && usuario.id !== actual?.id && (
+                        <button type="button" className="inline-flex items-center gap-1 rounded border border-red-300 px-3 py-1.5 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950" disabled={guardando || eliminando} onClick={() => { setUsuarioAEliminar(usuario); setError(''); setMensaje('') }}><Trash2 size={15} aria-hidden="true" /> Eliminar</button>
+                      )}
                     </div></td>
                   </tr>
                 ))}
@@ -201,6 +225,21 @@ export default function UsuariosPage() {
           </div>
         )}
       </section>
+
+      {usuarioAEliminar && createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4" role="presentation">
+          <section role="alertdialog" aria-modal="true" aria-labelledby="eliminar-titulo" aria-describedby="eliminar-descripcion" className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 text-gray-900 shadow-2xl dark:border-gray-800 dark:bg-gray-900 dark:text-white">
+            <h2 id="eliminar-titulo" className="text-xl font-semibold">Confirmar eliminación de usuario</h2>
+            <p id="eliminar-descripcion" className="mt-4 text-sm">¿Estás seguro que quieres borrar el usuario de: <strong>{usuarioAEliminar.nombre} {usuarioAEliminar.apellido ?? ''}</strong>?</p>
+
+            {error && <p role="alert" className="mt-3 text-sm text-red-600">{error}</p>}
+            <div className="mt-6 flex justify-end gap-2">
+              <button type="button" autoFocus disabled={eliminando} className="rounded-lg border border-gray-300 px-4 py-2 dark:border-gray-700" onClick={() => setUsuarioAEliminar(null)}>Cancelar</button>
+              <button type="button" disabled={eliminando} className="rounded-lg bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700 disabled:opacity-50" onClick={() => void confirmarEliminacion()}>{eliminando ? 'Eliminando...' : 'Eliminar usuario'}</button>
+            </div>
+          </section>
+        </div>, document.body
+      )}
 
       {modal && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4" role="presentation">

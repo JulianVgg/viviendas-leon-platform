@@ -13,6 +13,8 @@ import {
 
 import { requirePermission } from '../auth/require-permission.middleware.js'
 import { protectDirectorAccounts } from './protect-director-accounts.middleware.js'
+import { requireDirectora } from '../auth/require-directora.middleware.js'
+import { eliminarUsuario } from './users.controller.js'
 
 import { obtenerUsuarios } from
   './users.controller.js'
@@ -33,3 +35,5 @@ usersRouter.post('/', registrarUsuario)
 
 usersRouter.put('/:id', actualizarUsuario)
 usersRouter.patch('/:id/estado', actualizarEstadoUsuario)
+// Exclusivo de Dirección general, verificado en el servidor.
+usersRouter.delete('/:id', requireDirectora, eliminarUsuario)
