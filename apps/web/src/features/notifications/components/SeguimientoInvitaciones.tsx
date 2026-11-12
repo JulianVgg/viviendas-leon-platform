@@ -3,11 +3,12 @@ import { BarChart3, RefreshCw } from 'lucide-react'
 import { NOTIFICACIONES_ACTUALIZADAS } from '../services/notificationsService'
 import { obtenerResumenInvitaciones, type ResumenInvitacion } from '../services/invitationsService'
 
-const nombres: Record<string, string> = { ACEPTADA: 'Aceptó', PENDIENTE: 'Pendiente', RECHAZADA: 'Rechazó', ASIGNADO: 'Asignado' }
+const nombres: Record<string, string> = { ACEPTADA: 'Aceptó', PENDIENTE: 'Pendiente', RECHAZADA: 'Rechazó (histórico)', REPROGRAMACION: 'Propuso nueva fecha', ASIGNADO: 'Asignado' }
 const clases: Record<string, string> = {
   ACEPTADA: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300',
   PENDIENTE: 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300',
   RECHAZADA: 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300',
+  REPROGRAMACION: 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300',
 }
 
 export default function SeguimientoInvitaciones() {
@@ -56,9 +57,10 @@ export default function SeguimientoInvitaciones() {
     {evento && <>
       <div className="grid grid-cols-3 gap-2">
         <div className="rounded-lg bg-emerald-50 p-2.5 text-center dark:bg-emerald-500/10"><p className="text-xl font-semibold text-emerald-700 dark:text-emerald-300">{evento.aceptaron}</p><p className="text-xs text-emerald-800 dark:text-emerald-200">Aceptaron</p></div>
-        <div className="rounded-lg bg-amber-50 p-2.5 text-center dark:bg-amber-500/10"><p className="text-xl font-semibold text-amber-700 dark:text-amber-300">{evento.pendientes}</p><p className="text-xs text-amber-800 dark:text-amber-200">Pendientes</p></div>
-        <div className="rounded-lg bg-red-50 p-2.5 text-center dark:bg-red-500/10"><p className="text-xl font-semibold text-red-700 dark:text-red-300">{evento.rechazaron}</p><p className="text-xs text-red-800 dark:text-red-200">Rechazaron</p></div>
+        <div className="rounded-lg bg-amber-50 p-2.5 text-center dark:bg-amber-500/10"><p className="text-xl font-semibold text-amber-700 dark:text-amber-200">{evento.pendientes}</p><p className="text-xs text-amber-800 dark:text-amber-200">Pendientes</p></div>
+        <div className="rounded-lg bg-blue-50 p-2.5 text-center dark:bg-blue-500/10"><p className="text-xl font-semibold text-blue-700 dark:text-blue-300">{evento.participantes.filter(p => p.estado === 'REPROGRAMACION').length}</p><p className="text-xs text-blue-800 dark:text-blue-200">Reprogramar</p></div>
       </div>
+      {evento.rechazaron > 0 && <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{evento.rechazaron} rechazo(s) histórico(s)</p>}
       <p className="mt-5 mb-2 text-sm font-semibold text-gray-800 dark:text-gray-200">Participantes ({evento.invitados})</p>
       <ul className="divide-y divide-gray-100 dark:divide-gray-800">
         {evento.participantes.map(persona => <li key={persona.usuarioId} className="flex items-center justify-between gap-2 py-3">

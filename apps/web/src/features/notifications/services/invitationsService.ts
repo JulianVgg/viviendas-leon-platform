@@ -1,6 +1,6 @@
 import type { Notificacion } from './notificationsService'
 
-export type EstadoInvitacion = 'PENDIENTE' | 'ACEPTADA' | 'RECHAZADA' | 'ASIGNADO'
+export type EstadoInvitacion = 'PENDIENTE' | 'ACEPTADA' | 'RECHAZADA' | 'REPROGRAMACION' | 'ASIGNADO'
 
 export type DetalleInvitacion = {
   eventoId: number
@@ -34,6 +34,37 @@ export type ResumenInvitacion = {
   pendientes: number
   participantes: ParticipanteRespuesta[]
 }
+
+export type SolicitudPropia = {
+  id: number
+  estado: 'PENDIENTE' | 'APROBADA' | 'MANTENIDA' | 'ANULADA'
+  fechaOriginal: string
+  fechaPropuesta: string
+  motivo: string
+  resolucion: string | null
+  creadoEn: string
+  resueltoEn: string | null
+}
+
+export type SolicitudReprogramacionPendiente = {
+  id: number
+  eventoId: number
+  eventoTitulo: string
+  solicitanteId: number
+  solicitante: string
+  fechaOriginal: string
+  fechaPropuesta: string
+  fechaVigente: string
+  motivo: string
+  creadoEn: string
+  horaInicio: string | null
+  horaFin: string | null
+}
+
+export type ResolverReprogramacion =
+  | { decision: 'ACEPTAR_FECHA' }
+  | { decision: 'MANTENER_FECHA'; resolucion: 'SOLO_ORGANIZADOR' }
+  | { decision: 'MANTENER_FECHA'; resolucion: 'OTRA_PERSONA'; reemplazoUsuarioId: number }
 
 // El servidor genera claves del tipo CAL:ID:CREACION:USUARIO o CAL:ID:Vn:USUARIO.
 // No se usa el mensaje (texto libre) para obtener identificadores.
@@ -73,7 +104,7 @@ export function obtenerResumenInvitaciones(signal?: AbortSignal) {
   return solicitud<{ data: ResumenInvitacion[] }>('/resumen', { signal })
 }
 
-export function responderInvitacion(id: number, estado: 'ACEPTADA' | 'RECHAZADA') {
+export function responderInvitacion(id: number, estado: 'ACEPTADA') {
   return solicitud<{ estado: EstadoInvitacion; respondidaEn: string; sinCambios: boolean }>(
     `/${id}/respuesta`, {
       method: 'PATCH',
@@ -86,4 +117,30 @@ export function responderInvitacion(id: number, estado: 'ACEPTADA' | 'RECHAZADA'
 /** Los datos individuales solo se entregan a Dirección y Coordinación. */
 export function obtenerParticipantesInvitacion(id: number, signal?: AbortSignal) {
   return solicitud<{ data: ParticipanteRespuesta[] }>(`/${id}/participantes`, { signal })
+}
+
+export function obtenerMiReprogramacion(id: number, signal?: AbortSignal) {
+  return solicitud<{ data: SolicitudPropia | null }>(`/${id}/reprogramacion`, { signal })
+}
+
+export function solicitarReprogramacion(id: number, fechaPropuesta: string, motivo: string) {
+  return solicitud<{ id: number; estado: 'PENDIENTE'; sinCambios: boolean }>(
+    `/${id}/reprogramacion`, {
+      method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      body: JSON.stringify({ fechaPropuesta, motivo }),
+    },
+  )
+}
+
+export function obtenerReprogramacionesPendientes(signal?: AbortSignal) {
+  return solicitud<{ data: SolicitudReprogramacionPendiente[] }>('/reprogramaciones/pendientes', { signal })
+}
+
+export function resolverReprogramacion(id: number, datos: ResolverReprogramacion) {
+  return solicitud<{ id: number; estado: 'APROBADA' | 'MANTENIDA'; sinCambios: boolean; fecha?: string }>(
+    `/reprogramaciones/${id}/resolver`, {
+      method: 'PATCH', headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      body: JSON.stringify(datos),
+    },
+  )
 }

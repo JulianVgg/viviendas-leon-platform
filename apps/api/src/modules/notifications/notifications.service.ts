@@ -46,7 +46,10 @@ export async function listarNotificaciones(
     usuarioId,
     ...(estado === 'no_leidas' ? { fechaLectura: null }
       : estado === 'leidas' ? { fechaLectura: { not: null } }
-        : estado === 'invitaciones' ? { tipo: 'INVITACION_EVENTO' } : {}),
+        : estado === 'invitaciones' ? { tipo: { in: [
+          'INVITACION_EVENTO', 'INVITACION_RESPUESTA',
+          'INVITACION_REPROGRAMACION_SOLICITUD', 'INVITACION_REPROGRAMACION_RESUELTA',
+        ] } } : {}),
   }
 
   const [notificaciones, total, noLeidas] = await prisma.$transaction([
