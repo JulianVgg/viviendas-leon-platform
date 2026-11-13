@@ -6,6 +6,7 @@ import type { FiltrosMon05 } from '../dashboard/mon05-filters.js'
 import { consultarAnalisisOpenAI } from './analysis.client.js'
 import { consultarAnalisisGemini } from './analysis.gemini.client.js'
 import { AnalysisError } from './analysis.errors.js'
+import type { EnfoqueAnalisis } from './analysis.focus.js'
 import { finalizarSolicitudAnalisis, limiteEntero, reservarCupoAnalisis } from './analysis.quota.js'
 
 /** Inyección de dependencias para probar sin red, credenciales ni conexión a PostgreSQL. */
@@ -27,7 +28,7 @@ export async function generarAnalisisIA(
   usuario: AuthenticatedUser,
   meses: number,
   filtros: FiltrosMon05 = {},
-  opts: { deps?: DependenciasAnalisisIA; env?: NodeJS.ProcessEnv; ahora?: Date } = {},
+  opts: { deps?: DependenciasAnalisisIA; env?: NodeJS.ProcessEnv; ahora?: Date; enfoque?: EnfoqueAnalisis } = {},
 ) {
   if (!puedeEditarPerfilCompleto(usuario.roles)) {
     throw new AnalysisError('FORBIDDEN', 403, 'No autorizado para análisis institucional.')
@@ -57,7 +58,7 @@ export async function generarAnalisisIA(
   try {
     // Pruebas con proveedor inyectado; en producción se selecciona por configuración.
     const consultar = opts.deps?.consultar ?? (proveedor === 'gemini' ? consultarAnalisisGemini : deps.consultar)
-    const resultado = await consultar(contexto, { apiKey, modelo })
+    const resultado = await consultar(contexto, { apiKey, modelo, enfoque: opts.enfoque ?? 'resumen' })
     await deps.finalizar(reserva.id, 'COMPLETADA', {
       tokensEntrada: resultado.tokens.entrada, tokensSalida: resultado.tokens.salida,
       proveedorId: resultado.proveedorId,
