@@ -1,5 +1,5 @@
 import { AnalysisError } from './analysis.errors.js'
-import { CHAT_SCHEMA, INSTRUCCIONES_CHAT, contenidoPreguntaChat, validarRespuestaChat,
+import { CHAT_SCHEMA, GEMINI_CHAT_SCHEMA, INSTRUCCIONES_CHAT, contenidoPreguntaChat, validarRespuestaChat,
   type MensajeChatIA, type RespuestaChatIA } from './analysis.chat.rules.js'
 import type { TokensIA } from './analysis.client.js'
 
@@ -25,45 +25,67 @@ export async function consultarChatGemini(
   contexto: object, pregunta: string, historial: MensajeChatIA[], opts: OpcionesChatProveedor,
 ): Promise<ResultadoChatProveedor> {
   const ultimo = contenidoPreguntaChat(contexto, pregunta)
-  let respuesta: Response
-  try {
-    respuesta = await (opts.fetcher ?? fetch)(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(opts.modelo)}:generateContent`,
-      {
-        method: 'POST',
-        headers: { 'x-goog-api-key': opts.apiKey, 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(opts.timeoutMs ?? 30_000),
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: INSTRUCCIONES_CHAT }] },
-          contents: [
-            ...historial.map(m => ({ role: m.rol === 'usuario' ? 'user' : 'model', parts: [{ text: m.texto }] })),
-            { role: 'user', parts: [{ text: ultimo }] },
-          ],
-          generationConfig: { responseMimeType: 'application/json', responseJsonSchema: CHAT_SCHEMA, maxOutputTokens: 2400 },
-        }),
-      },
-    )
-  } catch {
-    console.warn('[IA/Chat] No se pudo contactar al proveedor.')
-    throw new AnalysisError('AI_UNAVAILABLE', 503, 'El asistente no está disponible.')
+  for (let intento = 0; intento < 2; intento++) {
+    const reintento = intento > 0
+    let respuesta: Response
+    try {
+      respuesta = await (opts.fetcher ?? fetch)(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(opts.modelo)}:generateContent`,
+        {
+          method: 'POST',
+          headers: { 'x-goog-api-key': opts.apiKey, 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(opts.timeoutMs ?? 30_000),
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: INSTRUCCIONES_CHAT +
+              (reintento ? '\nRespeta el formato JSON, las longitudes y las referencias exactas.' : '') }] },
+            contents: [
+              ...historial.map(m => ({ role: m.rol === 'usuario' ? 'user' : 'model', parts: [{ text: m.texto }] })),
+              { role: 'user', parts: [{ text: ultimo }] },
+            ],
+            generationConfig: { responseMimeType: 'application/json', responseJsonSchema: GEMINI_CHAT_SCHEMA, maxOutputTokens: 3200 },
+          }),
+        },
+      )
+    } catch {
+      console.warn('[IA/Chat] Error de conexión o tiempo de espera.')
+      if (!reintento) { await new Promise(resolve => setTimeout(resolve, 350)); continue }
+      throw new AnalysisError('AI_UNAVAILABLE', 503, 'El asistente no está disponible.')
+    }
+    if (!respuesta.ok) {
+      console.warn(`[IA/Chat] Gemini HTTP ${respuesta.status}`)
+      if ([408, 500, 502, 503, 504].includes(respuesta.status) && !reintento) {
+        await new Promise(resolve => setTimeout(resolve, 350)); continue
+      }
+      falloProveedor(respuesta.status)
+    }
+    let datos: unknown
+    try { datos = await respuesta.json() }
+    catch {
+      if (!reintento) continue
+      throw new AnalysisError('AI_INVALID_RESPONSE', 502, 'La IA devolvió una respuesta inválida.')
+    }
+    const obj = datos && typeof datos === 'object' ? datos as Record<string, unknown> : {}
+    const candidatos = Array.isArray(obj.candidates) ? obj.candidates : []
+    const candidato = candidatos[0] as { finishReason?: string; content?: { parts?: Array<{ text?: unknown }> } } | undefined
+    if (!candidato || (candidato.finishReason && candidato.finishReason !== 'STOP')) {
+      if (candidato?.finishReason === 'MAX_TOKENS' && !reintento) continue
+      throw new AnalysisError('AI_INCOMPLETE', 502, 'La respuesta quedó incompleta.')
+    }
+    const texto = candidato.content?.parts?.map(p => typeof p.text === 'string' ? p.text : '').join('') ?? ''
+    let chat: RespuestaChatIA
+    try { chat = analizarSalida(texto) }
+    catch (error) {
+      if (error instanceof AnalysisError && error.code === 'AI_INVALID_RESPONSE' && !reintento) {
+        console.warn('[IA/Chat] Contrato de respuesta inválido: reintento único.')
+        continue
+      }
+      throw error
+    }
+    const uso = obj.usageMetadata && typeof obj.usageMetadata === 'object' ? obj.usageMetadata as Record<string, unknown> : {}
+    return { chat, tokens: { entrada: token(uso.promptTokenCount), salida: token(uso.candidatesTokenCount) },
+      proveedorId: typeof obj.responseId === 'string' ? obj.responseId.slice(0, 100) : null }
   }
-  if (!respuesta.ok) {
-    console.warn(`[IA/Chat] Gemini devolvió HTTP ${respuesta.status}`)
-    falloProveedor(respuesta.status)
-  }
-  let datos: unknown
-  try { datos = await respuesta.json() }
-  catch { throw new AnalysisError('AI_INVALID_RESPONSE', 502, 'La IA devolvió una respuesta inválida.') }
-  const obj = datos && typeof datos === 'object' ? datos as Record<string, unknown> : {}
-  const candidatos = Array.isArray(obj.candidates) ? obj.candidates : []
-  const candidato = candidatos[0] as { finishReason?: string; content?: { parts?: Array<{ text?: unknown }> } } | undefined
-  if (!candidato || (candidato.finishReason && candidato.finishReason !== 'STOP')) {
-    throw new AnalysisError('AI_INCOMPLETE', 502, 'La respuesta quedó incompleta.')
-  }
-  const texto = candidato.content?.parts?.map(p => typeof p.text === 'string' ? p.text : '').join('') ?? ''
-  const uso = obj.usageMetadata && typeof obj.usageMetadata === 'object' ? obj.usageMetadata as Record<string, unknown> : {}
-  return { chat: analizarSalida(texto), tokens: { entrada: token(uso.promptTokenCount), salida: token(uso.candidatesTokenCount) },
-    proveedorId: typeof obj.responseId === 'string' ? obj.responseId.slice(0, 100) : null }
+  throw new AnalysisError('AI_UNAVAILABLE', 503, 'El asistente no está disponible.')
 }
 
 export async function consultarChatOpenAI(
