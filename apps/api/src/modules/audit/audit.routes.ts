@@ -2,9 +2,60 @@ import { Router } from 'express'
 import { Prisma } from '../../generated/prisma/client.js'
 import { getPrismaClient } from '../../config/prisma.js'
 import { requirePermission } from '../auth/require-permission.middleware.js'
+import { requireDirectora } from '../auth/require-directora.middleware.js'
+import { validarFiltrosSemestrales } from '../reports/semester.rules.js'
+import { obtenerProduccionSemestral } from '../reports/semester.service.js'
+import { construirExcelControlFinanciero } from '../reports/semester.excel-views.js'
 
 export const auditRouter = Router()
-auditRouter.use(requirePermission('PANTALLA_BITACORA'))
+// La bitácora operativa es exclusiva de Dirección.
+// Contadora interna y Auditor consultan una vista financiera separada y de solo lectura.
+auditRouter.get('/control-financiero', requirePermission('PANTALLA_CONTROL_FINANCIERO'), async (req, res, next) => {
+  try {
+    const filtros = validarFiltrosSemestrales(req.query)
+    const informe = await obtenerProduccionSemestral(filtros)
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.json({ data: {
+      periodo: informe.periodo,
+      resumen: {
+        ventas: informe.resumen.ventas,
+        ventasConImporte: informe.resumen.ventasConImporte,
+        gtq: informe.resumen.totalVentasOriginalGTQ,
+        usd: informe.resumen.totalVentasOriginalUSD,
+      },
+      cultivos: informe.porCultivo.filter(c => c.ventas > 0).map(c => ({
+        nombre: c.cultivo, ventas: c.ventas, gtq: c.totalVentasOriginalGTQ, usd: c.totalVentasOriginalUSD,
+      })),
+      movimientos: [...informe.detalleVentas].sort((a, b) => String(b.fecha ?? '').localeCompare(String(a.fecha ?? '')) || Number(b.id) - Number(a.id)).slice(0, 40).map(v => ({
+        id: v.id, fecha: v.fecha, cultivo: v.cultivo, moneda: v.moneda, importe: v.importe,
+        cantidad: v.cantidad, unidad: v.unidad, visitaId: v.visitaOrigenId,
+      })),
+    } })
+  } catch (error) {
+    if (error instanceof Error && /Selecciona|Fecha inválida|Identificador|rango/i.test(error.message)) {
+      res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: error.message } }); return
+    }
+    next(error)
+  }
+})
+
+auditRouter.get('/control-financiero.xlsx', requirePermission('PANTALLA_CONTROL_FINANCIERO'), async (req, res, next) => {
+  try {
+    const filtros = validarFiltrosSemestrales(req.query)
+    const informe = await obtenerProduccionSemestral(filtros)
+    const bytes = await construirExcelControlFinanciero(informe)
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="Control_Ventas_Agricolas_${informe.periodo.desde}_${informe.periodo.hasta}.xlsx"`)
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+    res.end(bytes)
+  } catch (error) {
+    if (error instanceof Error && /Selecciona|Fecha inválida|Identificador|rango/i.test(error.message)) {
+      res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: error.message } }); return
+    }
+    next(error)
+  }
+})
 
 function getString(value: unknown, max: number): string | null {
   if (value === undefined || value === '') return ''
@@ -17,7 +68,7 @@ function validDay(s: string): boolean {
 }
 
 /** Usuarios con entradas de auditoría para el filtro, sin divulgar roles ni datos sensibles. */
-auditRouter.get('/usuarios', async (_req, res, next) => {
+auditRouter.get('/usuarios', requireDirectora, async (_req, res, next) => {
   try {
     const users = await getPrismaClient().usuario.findMany({
       where: { bitacoras: { some: {} } },
@@ -28,7 +79,7 @@ auditRouter.get('/usuarios', async (_req, res, next) => {
   } catch (error) { next(error) }
 })
 
-auditRouter.get('/bitacora', async (req, res, next) => {
+auditRouter.get('/bitacora', requireDirectora, async (req, res, next) => {
   const pageString = getString(req.query.page, 7) || '1'
   const limitString = getString(req.query.limit, 3) || '20'
   const userString = getString(req.query.usuarioId, 15)

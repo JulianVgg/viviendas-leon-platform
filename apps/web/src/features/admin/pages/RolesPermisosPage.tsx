@@ -60,8 +60,9 @@ const GRUPOS: Grupo[] = [
     { codigo: 'PANTALLA_CONFIGURACION', nombre: 'Configuración', ruta: '/administracion/configuracion' },
   ] },
   { titulo: 'Auditoría', pantallas: [
-    { codigo: 'PANTALLA_AUDITORIA', nombre: 'Vista general de auditoría', ruta: '/auditoria' },
-    { codigo: 'PANTALLA_BITACORA', nombre: 'Bitácora', ruta: '/auditoria/bitacora' },
+    { codigo: 'PANTALLA_AUDITORIA', nombre: 'Auditoría', ruta: '/auditoria' },
+    { codigo: 'PANTALLA_CONTROL_FINANCIERO', nombre: 'Control financiero de ventas agrícolas', ruta: '/auditoria/control-financiero' },
+    { codigo: 'PANTALLA_BITACORA', nombre: 'Bitácora técnica (solo Dirección)', ruta: '/auditoria/bitacora', especial: true },
   ] },
   { titulo: 'Herramientas de prueba (solo desarrollo)', pantallas: [
     { codigo: 'PANTALLA_OFFLINE_TEST', nombre: 'Prueba offline', ruta: '/offline-test', detalle: 'No está disponible en producción' },

@@ -17,11 +17,11 @@ export function familiasDeComunidad(opciones: OpcionesReporte, comunidadId?: num
   return opciones.familias.filter(familia => !comunidadId || familia.comunidadId === comunidadId)
 }
 
-export function nombreArchivoReporte(filtros: FiltrosReporte) {
+export function nombreArchivoReporte(filtros: FiltrosReporte, vista: 'agricola' | 'ventas-cultivo' | 'ventas-detalle' = 'agricola') {
   const alcance = filtros.familiaId ? `_F${filtros.familiaId}` : filtros.comunidadId ? `_C${filtros.comunidadId}` : ''
   const periodo = filtros.desde && filtros.hasta
     ? `${filtros.desde}_${filtros.hasta}` : `${filtros.anio}_S${filtros.semestre}`
-  return `Producciones_Agricolas_${periodo}${alcance}.xlsx`
+  return `Producciones_Agricolas_${periodo}${alcance}${vista === 'agricola' ? '' : `_${vista}`}.xlsx`
 }
 
 

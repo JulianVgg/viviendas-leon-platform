@@ -51,6 +51,7 @@ export const SCREEN_PERMISSIONS: Record<string, string> = {
   '/administracion/configuracion': 'PANTALLA_CONFIGURACION',
   '/auditoria': 'PANTALLA_AUDITORIA',
   '/auditoria/bitacora': 'PANTALLA_BITACORA',
+  '/auditoria/control-financiero': 'PANTALLA_CONTROL_FINANCIERO',
   '/offline-test': 'PANTALLA_OFFLINE_TEST',
   '/offline-operations-test': 'PANTALLA_OFFLINE_OPERACIONES',
   '/offline-queue-test': 'PANTALLA_OFFLINE_COLA',
@@ -104,6 +105,8 @@ export function canWritePrograms(usuario: PermissionUser): boolean {
 }
 
 export function canViewPath(usuario: PermissionUser, path: string): boolean {
+  // La bitácora técnica permanece exclusiva de Dirección.
+  if (path === '/auditoria/bitacora') return isDireccionGeneral(usuario)
   // La captura técnica queda reservada a personal operativo, incluso para Dirección.
   if ((path === '/visitas/nueva' || path === '/visitas/preparar-campo') && esSupervisorCalendario(usuario)) return false
   if (isDireccionGeneral(usuario)) return true

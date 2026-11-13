@@ -4,7 +4,8 @@ import { requireAuth } from '../auth/auth.middleware.js'
 import { requirePermission } from '../auth/require-permission.middleware.js'
 import { getAuthenticatedUser } from '../auth/auth.service.js'
 import type { Request, Response, NextFunction } from 'express'
-import { esCoordinacionReportes } from './semester.access.js'
+import { puedeExportarReporteAgricola } from './semester.access.js'
+import { construirExcelCategoria, validarVistaExcel } from './semester.excel-views.js'
 import { validarFiltrosSemestrales } from './semester.rules.js'
 import { obtenerProduccionSemestral } from './semester.service.js'
 import { construirExcelSemestral } from './semester.excel.js'
@@ -43,30 +44,31 @@ semesterReportsRouter.get('/produccion-semestral', requirePermission('PANTALLA_R
   } catch (cause) { next(cause) }
 })
 
-// Coordinación genera el Excel; Dirección conserva acceso a la visualización de reportes.
-async function soloCoordinacion(req: Request, res: Response, next: NextFunction) {
+// Dirección y Coordinación pueden descargar el Excel institucional.
+async function permisoExportacion(req: Request, res: Response, next: NextFunction) {
   try {
     const actor = await getAuthenticatedUser(req.session.userId!)
     if (!actor) { res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Sesión no válida.' } }); return }
-    if (!esCoordinacionReportes(actor.roles)) {
-      res.status(403).json({ error: { code: 'FORBIDDEN', message: 'La exportación está reservada a Coordinación.' } }); return
+    if (!puedeExportarReporteAgricola(actor.roles)) {
+      res.status(403).json({ error: { code: 'FORBIDDEN', message: 'No tienes permiso para exportar el reporte.' } }); return
     }
     next()
   } catch (error) { next(error) }
 }
 
-semesterReportsRouter.get('/produccion-semestral.xlsx', requirePermission('PANTALLA_REPORTES_LISTA'), soloCoordinacion, async (req, res, next) => {
+semesterReportsRouter.get('/produccion-semestral.xlsx', requirePermission('PANTALLA_REPORTES_LISTA'), permisoExportacion, async (req, res, next) => {
   let filtros
-  try { filtros = validarFiltrosSemestrales(req.query) }
+  let vista
+  try { filtros = validarFiltrosSemestrales(req.query); vista = validarVistaExcel(req.query.vista) }
   catch (cause) {
     res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: cause instanceof Error ? cause.message : 'Filtros inválidos.' } })
     return
   }
   try {
     const informe = await obtenerProduccionSemestral(filtros)
-    const contenido = await construirExcelSemestral(informe)
+    const contenido = vista === 'agricola' ? await construirExcelSemestral(informe) : await construirExcelCategoria(informe, vista)
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivoProduccionExcel(informe)}"`)
+    res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivoProduccionExcel(informe).replace('.xlsx', vista === 'agricola' ? '.xlsx' : `_${vista}.xlsx`)}"`)
     res.setHeader('Cache-Control', 'private, no-store')
     res.setHeader('X-Content-Type-Options', 'nosniff')
     res.setHeader('Content-Length', String(contenido.length))

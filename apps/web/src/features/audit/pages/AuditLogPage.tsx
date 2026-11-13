@@ -16,7 +16,7 @@ type Entrada = {
 }
 type Pagina = { page: number; limit: number; total: number; pages: number }
 type Filtros = { usuarioId: string; entidad: string; accion: string; desde: string; hasta: string }
-const filtrosVacios: Filtros = { usuarioId: '', entidad: '', accion: '', desde: '', hasta: '' }
+const filtrosVacios: Filtros = { usuarioId: '', entidad: '', accion: '', desde: new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10), hasta: '' }
 const inputClass = 'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100'
 const entidades = [
   ['autenticacion', 'Autenticación'], ['usuario', 'Usuarios'], ['rol_permiso', 'Roles y permisos'],
@@ -39,13 +39,13 @@ async function getJson<T>(url: string): Promise<T> {
   if (!response.ok) throw new Error(json?.error?.message ?? `No se pudo consultar la auditoría (${response.status}).`)
   return json as T
 }
-function resultado(entrada: Entrada): { etiqueta: string; correcto: boolean; http: string } {
+function resultado(entrada: Entrada): { etiqueta: string; correcto: boolean } {
   try {
     const data = JSON.parse(entrada.datosNuevos ?? '') as { resultado?: string; estadoHttp?: number }
-    if (data.resultado === 'RECHAZADO') return { etiqueta: 'Rechazado', correcto: false, http: String(data.estadoHttp ?? '') }
-    if (data.resultado === 'EXITOSO') return { etiqueta: 'Exitoso', correcto: true, http: String(data.estadoHttp ?? '') }
+    if (data.resultado === 'RECHAZADO') return { etiqueta: 'No realizado', correcto: false }
+    if (data.resultado === 'EXITOSO') return { etiqueta: 'Realizado', correcto: true }
   } catch { /* Entradas anteriores a la instalación del parche */ }
-  return { etiqueta: 'Histórico', correcto: true, http: '' }
+  return { etiqueta: 'Registrado', correcto: true }
 }
 
 export default function AuditLogPage() {
@@ -96,7 +96,7 @@ export default function AuditLogPage() {
     <header className="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-semibold text-gray-900 dark:text-white"><ShieldCheck size={24} /> Bitácora de auditoría</h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Consulta las operaciones relevantes de los usuarios, con fecha y resultado de cada solicitud.</p>
+        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Movimientos y cambios registrados por el equipo.</p>
       </div>
       <button type="button" onClick={() => setReload((v) => v + 1)} className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700"><RefreshCw size={16} /> Actualizar</button>
     </header>
@@ -127,12 +127,13 @@ export default function AuditLogPage() {
       </div>
       <div className="mt-4 flex gap-2">
         <button type="submit" className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600">Aplicar filtros</button>
-        <button type="button" onClick={clear} className="rounded-lg border border-gray-300 px-4 py-2 text-sm dark:border-gray-700">Limpiar</button>
+        <button type="button" onClick={clear} className="rounded-lg border border-gray-300 px-4 py-2 text-sm dark:border-gray-700">Últimos 30 días</button>
+        <button type="button" onClick={() => { const all = { ...filtrosVacios, desde: '' }; setForm(all); setFilters(all); setPage(1) }} className="rounded-lg border border-gray-300 px-4 py-2 text-sm dark:border-gray-700">Todo el historial</button>
       </div>
     </form>
 
     <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900" aria-label="Eventos de auditoría">
-      <div className="border-b border-gray-200 px-4 py-3 text-sm text-gray-600 dark:border-gray-800 dark:text-gray-300">{pagination.total.toLocaleString('es-GT')} operaciones registradas</div>
+      <div className="border-b border-gray-200 px-4 py-3 text-sm text-gray-600 dark:border-gray-800 dark:text-gray-300">{pagination.total.toLocaleString('es-GT')} operaciones en el período</div>
       {error && <p role="alert" className="p-4 text-sm text-red-600">{error}</p>}
       {loading ? <p role="status" className="p-6 text-sm">Consultando registros...</p> : rows.length === 0 && !error ? <p className="p-6 text-sm text-gray-500">No se encontraron operaciones con estos filtros.</p> : (
         <div className="overflow-x-auto"><table className="w-full min-w-[800px] text-left text-sm">
@@ -142,11 +143,11 @@ export default function AuditLogPage() {
             const status = resultado(r)
             return <tr key={r.id}>
               <td className="whitespace-nowrap px-4 py-3">{new Date(r.fecha).toLocaleString('es-GT')}</td>
-              <td className="px-4 py-3">{r.usuario?.nombre} {r.usuario?.apellido ?? ''}<span className="block text-xs text-gray-500">ID {r.usuarioId}</span></td>
+              <td className="px-4 py-3">{r.usuario?.nombre} {r.usuario?.apellido ?? ''}</td>
               <td className="px-4 py-3">{entidades.find(([id]) => id === r.entidad)?.[1] ?? r.entidad}</td>
               <td className="px-4 py-3">{acciones.find(([id]) => id === r.accion)?.[1] ?? r.accion}</td>
               <td className="px-4 py-3">{r.registroId ?? '—'}</td>
-              <td className="px-4 py-3"><span className={status.correcto ? 'text-green-700 dark:text-green-400' : 'text-amber-700 dark:text-amber-400'}>{status.etiqueta}</span>{status.http && <span className="block text-xs text-gray-500">HTTP {status.http}</span>}</td>
+              <td className="px-4 py-3"><span className={status.correcto ? 'text-green-700 dark:text-green-400' : 'text-amber-700 dark:text-amber-400'}>{status.etiqueta}</span></td>
             </tr>
           })}</tbody>
         </table></div>
