@@ -22,6 +22,7 @@ test('Gemini obtiene y valida indicadores JSON sin guardar información personal
   })
   assert.match(endpoint, /generateContent$/)
   assert.equal(request.generationConfig.responseMimeType, 'application/json')
+  assert.equal(Object.hasOwn(request.generationConfig, 'temperature'), false)
   assert.equal(request.contents[0].parts[0].text.includes('visitas'), true)
   assert.deepEqual(result.analisis, valid)
   assert.deepEqual(result.tokens, { entrada: 120, salida: 40 })
@@ -40,3 +41,16 @@ test('Gemini distingue cuotas del proveedor', async () => {
     fetcher: async () => new Response('{}', { status: 429 }),
   }), { code: 'AI_LIMIT' })
 })
+
+for (const [http, estado, esperado] of [
+  [400, 'INVALID_ARGUMENT', 'AI_INVALID_REQUEST'],
+  [403, 'PERMISSION_DENIED', 'AI_PROVIDER_AUTH'],
+  [404, 'NOT_FOUND', 'AI_MODEL_UNAVAILABLE'],
+]) {
+  test(`Gemini diferencia un error del proveedor HTTP ${http}`, async () => {
+    await assert.rejects(() => consultarAnalisisGemini({}, {
+      apiKey: 'test', modelo: 'gemini-3.5-flash-lite',
+      fetcher: async () => new Response(JSON.stringify({ error: { status: estado } }), { status: http }),
+    }), { code: esperado })
+  })
+}
