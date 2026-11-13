@@ -192,6 +192,7 @@ export default function ProduccionSemestralReportPage() {
             return permitido ? <Link key={titulo} to={ruta} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-theme-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-theme-sm motion-reduce:transform-none dark:border-gray-800 dark:bg-white/[0.03]" aria-label={`${titulo}: ${valor}. Abrir módulo relacionado`}>{contenido}</Link> : <div key={titulo} className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03]">{contenido}</div>
           })}
         </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400" title="Los totales respetan la moneda original de cada venta; no se aplica ningún tipo de cambio.">Ventas en moneda original · Sin conversión entre GTQ y USD.</p>
       </section>
 
       <section className="grid grid-cols-1 gap-5 lg:grid-cols-2" aria-label="Gráficas de producción">

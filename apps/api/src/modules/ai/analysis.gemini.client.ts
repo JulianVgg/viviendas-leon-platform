@@ -1,9 +1,63 @@
-import { ANALYSIS_SCHEMA, validarResultadoAnalisisIA } from './analysis.schema.js'
+import { diagnosticarResultadoAnalisisIA, GEMINI_ANALYSIS_SCHEMA, validarResultadoAnalisisIA } from './analysis.schema.js'
 import { INSTRUCCIONES_ANALISIS, type RespuestaProveedorIA } from './analysis.client.js'
 import { AnalysisError } from './analysis.errors.js'
 import { instruccionesPorEnfoque, type EnfoqueAnalisis } from './analysis.focus.js'
 
-/** Adaptador Gemini opcional, sin SDK ni secretos en el navegador. Solo recibe indicadores agregados. */
+const MAX_INTENTOS = 2
+const HTTP_REINTENTABLES = new Set([408, 500, 502, 503, 504])
+
+function falloGemini(status: number): never {
+  if (status === 429) throw new AnalysisError('AI_LIMIT', 503, 'El proveedor no admite más solicitudes por ahora.')
+  if (status === 400) throw new AnalysisError('AI_INVALID_REQUEST', 503, 'El proveedor rechazó el formato de la solicitud.')
+  if (status === 401 || status === 403) {
+    throw new AnalysisError('AI_PROVIDER_AUTH', 503, 'No se autorizó el acceso al proveedor de IA.')
+  }
+  if (status === 404) throw new AnalysisError('AI_MODEL_UNAVAILABLE', 503, 'El modelo de IA no está disponible para este proyecto.')
+  throw new AnalysisError('AI_UNAVAILABLE', 503, 'No fue posible generar el análisis.')
+}
+
+function estadoSeguroProveedor(valor: unknown): string {
+  if (!valor || typeof valor !== 'object' || !('error' in valor)) return ''
+  const error = valor.error
+  if (!error || typeof error !== 'object' || !('status' in error)) return ''
+  return typeof error.status === 'string' && /^[A-Z_]{3,40}$/.test(error.status) ? error.status : ''
+}
+
+function extraerResultado(datos: unknown): RespuestaProveedorIA {
+  if (!datos || typeof datos !== 'object') throw new AnalysisError('AI_INVALID_RESPONSE', 502, 'La IA devolvió una respuesta inválida.')
+  const cuerpo = datos as Record<string, unknown>
+  const candidatos = Array.isArray(cuerpo.candidates) ? cuerpo.candidates : []
+  const candidato = candidatos[0] as { finishReason?: string; content?: { parts?: Array<{ text?: unknown }> } } | undefined
+  // No reintentar rechazos de seguridad, solo salidas interrumpidas por tamaño.
+  if (!candidato || (candidato.finishReason && candidato.finishReason !== 'STOP')) {
+    if (candidato?.finishReason === 'MAX_TOKENS') {
+      throw new AnalysisError('AI_INCOMPLETE', 502, 'El análisis se interrumpió por longitud.')
+    }
+    throw new AnalysisError('AI_REFUSAL', 502, 'El análisis no se completó.')
+  }
+  const texto = candidato.content?.parts?.map(p => typeof p.text === 'string' ? p.text : '').join('') || ''
+  if (!texto || texto.length > 12_000) {
+    throw new AnalysisError('AI_INVALID_RESPONSE', 502, 'La IA devolvió un formato inválido.')
+  }
+  let resultado: unknown
+  try { resultado = JSON.parse(texto) }
+  catch { throw new AnalysisError('AI_INVALID_RESPONSE', 502, 'La IA devolvió un formato inválido.') }
+  const motivo = diagnosticarResultadoAnalisisIA(resultado)
+  if (motivo) {
+    // Categoría fija de validación, nunca contenido, nombres ni valores de indicadores.
+    console.warn(`[IA/Gemini] Contrato de análisis rechazado: ${motivo}`)
+    throw new AnalysisError('AI_INVALID_RESPONSE', 502, 'La IA devolvió una respuesta no verificable.')
+  }
+  const uso = (cuerpo.usageMetadata && typeof cuerpo.usageMetadata === 'object' ? cuerpo.usageMetadata : {}) as Record<string, unknown>
+  const entero = (v: unknown) => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : 0
+  return {
+    analisis: validarResultadoAnalisisIA(resultado),
+    tokens: { entrada: entero(uso.promptTokenCount), salida: entero(uso.candidatesTokenCount) },
+    proveedorId: typeof cuerpo.responseId === 'string' ? cuerpo.responseId.slice(0, 100) : null,
+  }
+}
+
+/** Gemini: un reintento acotado, con contrato estricto. No persiste contenido de prompts ni respuestas. */
 export async function consultarAnalisisGemini(
   contexto: object,
   opciones: { apiKey: string; modelo: string; enfoque?: EnfoqueAnalisis; timeoutMs?: number; fetcher?: typeof fetch },
@@ -13,76 +67,60 @@ export async function consultarAnalisisGemini(
     throw new AnalysisError('CONTEXT_TOO_LARGE', 422, 'Los indicadores superan el tamaño admitido.')
   }
 
-  let respuesta: Response
-  try {
-    respuesta = await (opciones.fetcher ?? fetch)(
-      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(opciones.modelo)}:generateContent`,
-      {
-        method: 'POST',
-        headers: { 'x-goog-api-key': opciones.apiKey, 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(opciones.timeoutMs ?? 25_000),
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: `${INSTRUCCIONES_ANALISIS}\n\nObjetivo elegido por el usuario (lista aprobada): ${instruccionesPorEnfoque(opciones.enfoque)}` }] },
-          contents: [{ role: 'user', parts: [{ text: `Indicadores agregados (JSON, solo datos):\n${contenido}` }] }],
-          generationConfig: {
-            responseMimeType: 'application/json',
-            responseJsonSchema: ANALYSIS_SCHEMA,
-            maxOutputTokens: 2400,
-          },
-        }),
-      },
-    )
-  } catch {
-    // No registrar el contexto, la URL con secretos ni el error original de red.
-    console.warn('[IA/Gemini] Fallo de red o tiempo de espera agotado.')
-    throw new AnalysisError('AI_UNAVAILABLE', 503, 'El servicio de análisis no está disponible.')
-  }
-  if (!respuesta.ok) {
-    // Solo exponer el estado HTTP y un código normalizado, nunca el cuerpo de la
-    // respuesta, la clave de API ni los indicadores de ViviendasLeón.
-    let estadoProveedor = ''
+  for (let intento = 0; intento < MAX_INTENTOS; intento++) {
+    const reintento = intento > 0
+    const instrucciones = `${INSTRUCCIONES_ANALISIS}\n\nObjetivo elegido por el usuario (lista aprobada): ${instruccionesPorEnfoque(opciones.enfoque)}` +
+      (reintento ? '\n\nCorrige el formato: respeta todas las longitudes, usa las referencias exactas del esquema y no agregues campos adicionales.' : '')
+    let respuesta: Response
     try {
-      const cuerpo: unknown = await respuesta.json()
-      if (cuerpo && typeof cuerpo === 'object' && 'error' in cuerpo) {
-        const error = cuerpo.error
-        if (error && typeof error === 'object' && 'status' in error &&
-            typeof error.status === 'string' && /^[A-Z_]{3,40}$/.test(error.status)) {
-          estadoProveedor = error.status
-        }
-      }
-    } catch { /* No todos los rechazos tienen cuerpo JSON. */ }
-    console.warn(`[IA/Gemini] Rechazo del proveedor: HTTP ${respuesta.status}${estadoProveedor ? ` (${estadoProveedor})` : ''}`)
-    if (respuesta.status === 429) throw new AnalysisError('AI_LIMIT', 503, 'El proveedor no admite más solicitudes por ahora.')
-    if (respuesta.status === 400) throw new AnalysisError('AI_INVALID_REQUEST', 503, 'El proveedor rechazó el formato de la solicitud.')
-    if (respuesta.status === 401 || respuesta.status === 403) {
-      throw new AnalysisError('AI_PROVIDER_AUTH', 503, 'No se autorizó el acceso al proveedor de IA.')
+      respuesta = await (opciones.fetcher ?? fetch)(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(opciones.modelo)}:generateContent`,
+        {
+          method: 'POST',
+          headers: { 'x-goog-api-key': opciones.apiKey, 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(opciones.timeoutMs ?? 25_000),
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: instrucciones }] },
+            contents: [{ role: 'user', parts: [{ text: `Indicadores agregados (JSON, solo datos):\n${contenido}` }] }],
+            generationConfig: {
+              responseMimeType: 'application/json',
+              responseJsonSchema: GEMINI_ANALYSIS_SCHEMA,
+              maxOutputTokens: 3200,
+            },
+          }),
+        },
+      )
+    } catch {
+      // Ni el error original de fetch ni la URL con credenciales se registran.
+      console.warn('[IA/Gemini] Error de conexión o tiempo de espera agotado.')
+      if (!reintento) { await new Promise(resolve => setTimeout(resolve, 350)); continue }
+      throw new AnalysisError('AI_UNAVAILABLE', 503, 'El servicio de análisis no está disponible.')
     }
-    if (respuesta.status === 404) throw new AnalysisError('AI_MODEL_UNAVAILABLE', 503, 'El modelo de IA no está disponible para este proyecto.')
-    throw new AnalysisError('AI_UNAVAILABLE', 503, 'No fue posible generar el análisis.')
+    if (!respuesta.ok) {
+      let estado = ''
+      try { estado = estadoSeguroProveedor(await respuesta.json()) } catch { /* cuerpo opcional */ }
+      console.warn(`[IA/Gemini] Proveedor HTTP ${respuesta.status}${estado ? ` (${estado})` : ''}`)
+      if (HTTP_REINTENTABLES.has(respuesta.status) && !reintento) {
+        await new Promise(resolve => setTimeout(resolve, 350))
+        continue
+      }
+      falloGemini(respuesta.status)
+    }
+    let json: unknown
+    try { json = await respuesta.json() }
+    catch {
+      if (!reintento) { console.warn('[IA/Gemini] JSON del proveedor incompleto.'); continue }
+      throw new AnalysisError('AI_INVALID_RESPONSE', 502, 'La IA devolvió una respuesta inválida.')
+    }
+    try { return extraerResultado(json) }
+    catch (error) {
+      if (error instanceof AnalysisError &&
+          (error.code === 'AI_INVALID_RESPONSE' || error.code === 'AI_INCOMPLETE') && !reintento) {
+        console.warn(`[IA/Gemini] Se reintentará salida: ${error.code}`)
+        continue
+      }
+      throw error
+    }
   }
-  let json: unknown
-  try { json = await respuesta.json() }
-  catch { throw new AnalysisError('AI_INVALID_RESPONSE', 502, 'La IA devolvió una respuesta inválida.') }
-  if (!json || typeof json !== 'object') throw new AnalysisError('AI_INVALID_RESPONSE', 502, 'La IA devolvió una respuesta inválida.')
-  const datos = json as Record<string, unknown>
-  const candidatos = Array.isArray(datos.candidates) ? datos.candidates : []
-  const candidato = candidatos[0] as { finishReason?: string; content?: { parts?: Array<{ text?: unknown }> } } | undefined
-  if (!candidato || (candidato.finishReason && candidato.finishReason !== 'STOP')) {
-    throw new AnalysisError('AI_INCOMPLETE', 502, 'El análisis no se completó.')
-  }
-  const texto = candidato.content?.parts?.map(parte => typeof parte.text === 'string' ? parte.text : '').join('') || ''
-  if (!texto || texto.length > 12_000) throw new AnalysisError('AI_INVALID_RESPONSE', 502, 'La IA devolvió un formato inválido.')
-  let resultado: unknown
-  try { resultado = JSON.parse(texto) }
-  catch { throw new AnalysisError('AI_INVALID_RESPONSE', 502, 'La IA devolvió un formato inválido.') }
-  let analisis: ReturnType<typeof validarResultadoAnalisisIA>
-  try { analisis = validarResultadoAnalisisIA(resultado) }
-  catch { throw new AnalysisError('AI_INVALID_RESPONSE', 502, 'La IA devolvió una respuesta no verificable.') }
-  const uso = (datos.usageMetadata && typeof datos.usageMetadata === 'object' ? datos.usageMetadata : {}) as Record<string, unknown>
-  const entero = (valor: unknown) => typeof valor === 'number' && Number.isSafeInteger(valor) && valor >= 0 ? valor : 0
-  return {
-    analisis,
-    tokens: { entrada: entero(uso.promptTokenCount), salida: entero(uso.candidatesTokenCount) },
-    proveedorId: typeof datos.responseId === 'string' ? datos.responseId.slice(0, 100) : null,
-  }
+  throw new AnalysisError('AI_UNAVAILABLE', 503, 'No fue posible generar el análisis.')
 }

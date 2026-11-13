@@ -17,7 +17,11 @@ import { CyclesApiError, listCycles, type Cycle } from '@/features/agriculture/s
 import { CropsApiError, listAvailableCrops } from '@/features/agriculture/services/cropsService'
 import { listAvailableInsumos, type DisponibleInsumo } from '@/features/agriculture/services/insumosService'
 import { listarSanidadDisponible, type DatosSanidad } from '@/features/agriculture/services/sanidadService'
-import { addCivilDays, DIAS_CICLO_VISITA } from '@/features/visits/services/visitPlanning'
+import { addCivilDays, DIAS_CICLO_VISITA, getVisitPlanning, type FamilyVisitPlanning } from '@/features/visits/services/visitPlanning'
+import type { Garden } from '@/features/agriculture/services/gardens'
+import FamilyVisitCoveragePanel from '@/features/visits/components/FamilyVisitCoveragePanel'
+import { buildFamilyVisitCoverage } from '@/features/visits/services/familyVisitCoverage'
+import { getCoverageGardens } from '@/features/visits/services/visitCoverageData'
 import { registroIniciado, totalProduccion, validarProduccion, movimientoProduccion } from '@/features/visits/services/visitConfirmedProduction'
 import { validarMovimientoParaVisita } from '@/features/visits/services/visitEconomics'
 import { listProductionUnits, type ProductionUnit } from '@/features/agriculture/services/productionService'
@@ -131,6 +135,10 @@ export default function VisitRegisterPage() {
   const [observations, setObservations] = useState('')
   const [photos, setPhotos] = useState<VisitPhotoFile[]>([])
   const [familyOptions, setFamilyOptions] = useState<FamilyListItem[]>([])
+  const [coverageGardens, setCoverageGardens] = useState<Garden[]>([])
+  const [coveragePlanning, setCoveragePlanning] = useState<FamilyVisitPlanning[]>([])
+  const [coverageLoading, setCoverageLoading] = useState(true)
+  const [coverageLocal, setCoverageLocal] = useState(false)
   const [familiesLoading, setFamiliesLoading] = useState(true)
   const [familiesError, setFamiliesError] = useState('')
   const [refresh, setRefresh] = useState(0)
@@ -331,6 +339,21 @@ export default function VisitRegisterPage() {
     return () => controller.abort()
   }, [refresh, cacheKey])
 
+  // La misma cobertura que la agenda, con respaldo local por usuario.
+  useEffect(() => {
+    if (!usuario) { setCoverageLoading(false); return }
+    let active = true
+    setCoverageLoading(true)
+    Promise.allSettled([getCoverageGardens(usuario.id), getVisitPlanning(usuario.id)]).then(([gardens, planning]) => {
+      if (!active) return
+      if (gardens.status === 'fulfilled') setCoverageGardens(gardens.value.gardens)
+      if (planning.status === 'fulfilled') setCoveragePlanning(planning.value.rows)
+      setCoverageLocal(gardens.status !== 'fulfilled' || planning.status !== 'fulfilled' ||
+        (gardens.status === 'fulfilled' && gardens.value.local) || (planning.status === 'fulfilled' && planning.value.local))
+    }).finally(() => { if (active) setCoverageLoading(false) })
+    return () => { active = false }
+  }, [usuario?.id, refresh])
+
   // Muestra citas PROGRAMADAS reales y permite elegir cuál se convertirá en REALIZADA.
   // Una cita sin ID de servidor todavía debe sincronizarse antes de poder enlazarla.
   useEffect(() => {
@@ -453,6 +476,9 @@ export default function VisitRegisterPage() {
     String(item.familyId) === familyId && item.status !== 'CUMPLIDO' && item.date <= date
   ).sort((a,b) => (a.due ?? a.date).localeCompare(b.due ?? b.date)), [followUps, familyId, date])
   const selectedFamily = useMemo(() => familyOptions.find(f => String(f.id) === familyId), [familyId, familyOptions])
+  const familyCoverage = useMemo(() => buildFamilyVisitCoverage(
+    coverageGardens, coveragePlanning, [...previousVisits, ...scheduledVisits], today,
+  ), [coverageGardens, coveragePlanning, previousVisits, scheduledVisits, today])
   const addCycleEvaluation = (cycle: Cycle) => {
     setCrops(list => list.some(item => item.cicloCultivoId === cycle.id)
       ? list : [...list, { ...newCrop(), cicloCultivoId: cycle.id, name: cycle.cultivo.nombre }])
@@ -581,6 +607,9 @@ export default function VisitRegisterPage() {
     <div className="space-y-5">
       {step === 0 && <section className={card} aria-label="Información general">
         <h2 className="mb-1 text-lg font-semibold text-slate-900 dark:text-white">¿A quién visitamos?</h2>
+        <div className="my-4"><FamilyVisitCoveragePanel rows={familyCoverage} compact loading={coverageLoading}
+          local={coverageLocal} selectionDisabled={Boolean(recovery)} selectedFamilyId={familyId ? Number(familyId) : null}
+          onSelect={id => { if (!recovery) { setFamilyId(String(id)); setScheduledVisitId(null) } }}/></div>
         <div className="grid gap-4 md:grid-cols-2">
           <SearchableSelect id="visit-family" label="Familia" required disabled={familiesLoading || Boolean(recovery)} value={familyId} onChange={value => { setFamilyId(value); setScheduledVisitId(null) }}
             placeholder={familiesLoading ? 'Cargando familias...' : 'Buscar familia o comunidad...'}

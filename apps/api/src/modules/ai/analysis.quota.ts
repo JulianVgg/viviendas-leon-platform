@@ -21,8 +21,11 @@ export function diaGuatemala(fecha: Date) {
   return { desde: inicio, hasta: new Date(inicio.getTime() + 86_400_000), clave: Number(dia.replace(/-/g, '')) }
 }
 
-/** Límite persistente compartido por instancias, con bloqueo transaccional por día.
- * Las reservas, incluso fallidas, consumen cupo: prudente para limitar llamadas pagadas.
+/**
+ * Las fallidas no consumen la cuota diaria de análisis completados; las reservas
+ * activas sí se cuentan para impedir sobrepasar el cupo en concurrencia.
+ * Una segunda ventana de 15 minutos, que SÍ cuenta intentos fallidos, evita
+ * reintentos ilimitados y gastos de API por errores o abuso.
  */
 export async function reservarCupoAnalisis(
   usuarioId: number, modelo: string,
@@ -35,10 +38,20 @@ export async function reservarCupoAnalisis(
     await tx.$queryRaw`SELECT 1 AS adquirido FROM pg_advisory_xact_lock(${90412}, ${dia.clave})`
     const fecha = { gte: dia.desde, lt: dia.hasta }
     // Una transacción PostgreSQL utiliza un único cliente: consultas secuenciales.
-    const total = await tx.analisisIaSolicitud.count({ where: { creadoEn: fecha } })
-    const propios = await tx.analisisIaSolicitud.count({ where: { creadoEn: fecha, usuarioId } })
+    const computables = { in: ['RESERVADA', 'COMPLETADA'] }
+    const total = await tx.analisisIaSolicitud.count({ where: { creadoEn: fecha, estado: computables } })
+    const propios = await tx.analisisIaSolicitud.count({ where: { creadoEn: fecha, usuarioId, estado: computables } })
     if (propios >= limites.usuario || total >= limites.global) {
       throw new AnalysisError('AI_DAILY_LIMIT', 429, 'Se alcanzó el límite diario de análisis.')
+    }
+    const ventana = { gte: new Date(ahora.getTime() - 15 * 60_000) }
+    const intentosUsuario = await tx.analisisIaSolicitud.count({ where: { creadoEn: ventana, usuarioId } })
+    if (intentosUsuario >= Math.max(6, Math.min(limites.usuario * 2, 15))) {
+      throw new AnalysisError('AI_RATE_LIMIT', 429, 'Demasiadas solicitudes recientes. Inténtalo en unos minutos.')
+    }
+    const intentosGlobales = await tx.analisisIaSolicitud.count({ where: { creadoEn: ventana } })
+    if (intentosGlobales >= Math.max(20, Math.min(limites.global * 2, 100))) {
+      throw new AnalysisError('AI_RATE_LIMIT', 429, 'El asistente tiene demasiadas solicitudes. Inténtalo en unos minutos.')
     }
     return tx.analisisIaSolicitud.create({ data: { usuarioId, modelo, estado: 'RESERVADA' }, select: { id: true } })
   })

@@ -1,5 +1,10 @@
 const API = (import.meta.env.VITE_API_URL?.trim() || '/api').replace(/\/$/, '')
 
+export class GardenApiError extends Error {
+  readonly status: number
+  constructor(message: string, status: number) { super(message); this.status = status }
+}
+
 export type GardenClassification = {
   tipo: 'FAMILIAR' | 'COMUNITARIO' | null
   entornoCultivo: 'CAMPO_ABIERTO' | 'MACROTUNEL' | 'MIXTO' | 'OTRO' | null
@@ -34,7 +39,7 @@ async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers: { Accept: 'application/json', ...init.headers },
   })
   const result = await response.json().catch(() => null)
-  if (!response.ok) throw new Error(result?.error?.message ?? `Error del servidor (${response.status}).`)
+  if (!response.ok) throw new GardenApiError(result?.error?.message ?? `Error del servidor (${response.status}).`, response.status)
   if (!result || !('data' in result)) throw new Error('Respuesta incompleta del servidor.')
   return result.data as T
 }
