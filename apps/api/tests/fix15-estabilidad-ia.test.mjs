@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { consultarAnalisisGemini } from '../dist/modules/ai/analysis.gemini.client.js'
 import { consultarChatGemini } from '../dist/modules/ai/analysis.chat.client.js'
 import { GEMINI_ANALYSIS_SCHEMA, validarResultadoAnalisisIA, diagnosticarResultadoAnalisisIA } from '../dist/modules/ai/analysis.schema.js'
+import { GEMINI_CHAT_SCHEMA } from '../dist/modules/ai/analysis.chat.rules.js'
 import { reservarCupoAnalisis } from '../dist/modules/ai/analysis.quota.js'
 
 const correcto = {
@@ -13,17 +14,20 @@ const salidaGemini = (obj, estado='STOP') => new Response(JSON.stringify({
   usageMetadata: { promptTokenCount: 90, candidatesTokenCount: 60 }, responseId: 'test-15',
 }), { status: 200 })
 
-test('Gemini recibe límites explícitos y referencias autorizadas; nunca temperatura', async () => {
-  assert.equal(GEMINI_ANALYSIS_SCHEMA.properties.hallazgos.maxItems, 4)
-  assert.equal(GEMINI_ANALYSIS_SCHEMA.properties.recomendaciones.items.properties.indicadores.maxItems, 4)
-  assert.ok(GEMINI_ANALYSIS_SCHEMA.properties.hallazgos.items.properties.indicadores.items.enum.includes('visitas.realizadas'))
+test('Gemini recibe esquema liviano; referencias y limites siguen validandose en el backend', async () => {
+  assert.equal(JSON.stringify(GEMINI_ANALYSIS_SCHEMA).includes('maxItems'), false)
+  assert.equal(JSON.stringify(GEMINI_ANALYSIS_SCHEMA).includes('minItems'), false)
+  assert.equal(JSON.stringify(GEMINI_ANALYSIS_SCHEMA).includes('enum'), false)
+  assert.equal(JSON.stringify(GEMINI_CHAT_SCHEMA).includes('maxItems'), false)
+  assert.equal(JSON.stringify(GEMINI_CHAT_SCHEMA).includes('enum'), false)
   let cuerpo
   const respuesta = await consultarAnalisisGemini({ familias: { registradas: 25 } }, {
     apiKey: 'secreto-del-test', modelo: 'gemini-3.5-flash-lite',
     fetcher: async (_url, init) => { cuerpo=JSON.parse(init.body); return salidaGemini(correcto) },
   })
   assert.equal(Object.hasOwn(cuerpo.generationConfig, 'temperature'), false)
-  assert.equal(cuerpo.generationConfig.responseJsonSchema.properties.riesgos.maxItems, 4)
+  assert.equal(JSON.stringify(cuerpo.generationConfig.responseJsonSchema).includes('maxItems'), false)
+  assert.equal(JSON.stringify(cuerpo.generationConfig.responseJsonSchema).includes('enum'), false)
   assert.deepEqual(respuesta.analisis, correcto)
 })
 

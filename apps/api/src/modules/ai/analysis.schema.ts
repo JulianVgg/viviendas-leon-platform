@@ -30,42 +30,12 @@ export const INDICADORES_ADMITIDOS = [
 ] as const
 
 /**
- * Esquema específico de Gemini: explicita las restricciones que antes solo se
- * comprobaban al recibir la respuesta. No cambia el contrato de OpenAI.
- * Evitar maxLength: no pertenece al subconjunto de JSON Schema de Gemini.
+ * Gemini admite salidas JSON estructuradas, pero un esquema con muchos
+ * maxItems/minItems y enumeraciones anidadas puede devolver HTTP 400.
+ * Conservamos el formato simple que ya funcionaba y validamos TODOS los
+ * límites y las referencias en diagnosticarResultadoAnalisisIA.
  */
-export const GEMINI_ANALYSIS_SCHEMA = {
-  type: 'object', additionalProperties: false,
-  properties: {
-    resumen: { type: 'string', description: 'Síntesis en español, de 1 a 1500 caracteres.' },
-    hallazgos: { type: 'array', maxItems: 4, items: {
-      type: 'object', additionalProperties: false,
-      properties: {
-        titulo: { type: 'string', description: 'Título, máximo 110 caracteres.' },
-        descripcion: { type: 'string', description: 'Descripción basada en datos, máximo 600 caracteres.' },
-        indicadores: { type: 'array', minItems: 1, maxItems: 4, items: { type: 'string', enum: [...INDICADORES_ADMITIDOS] } },
-      }, required: ['titulo', 'descripcion', 'indicadores'],
-    } },
-    riesgos: { type: 'array', maxItems: 4, items: {
-      type: 'object', additionalProperties: false,
-      properties: {
-        titulo: { type: 'string', description: 'Título, máximo 110 caracteres.' },
-        descripcion: { type: 'string', description: 'Riesgo sustentado en datos, máximo 600 caracteres.' },
-        indicadores: { type: 'array', minItems: 1, maxItems: 4, items: { type: 'string', enum: [...INDICADORES_ADMITIDOS] } },
-      }, required: ['titulo', 'descripcion', 'indicadores'],
-    } },
-    recomendaciones: { type: 'array', maxItems: 4, items: {
-      type: 'object', additionalProperties: false,
-      properties: {
-        accion: { type: 'string', description: 'Acción sugerida, máximo 110 caracteres.' },
-        justificacion: { type: 'string', description: 'Motivo basado en datos, máximo 600 caracteres.' },
-        indicadores: { type: 'array', minItems: 1, maxItems: 4, items: { type: 'string', enum: [...INDICADORES_ADMITIDOS] } },
-      }, required: ['accion', 'justificacion', 'indicadores'],
-    } },
-    limitaciones: { type: 'array', maxItems: 5, items: { type: 'string', description: 'Máximo 300 caracteres cada una.' } },
-  },
-  required: ['resumen', 'hallazgos', 'riesgos', 'recomendaciones', 'limitaciones'],
-} as const
+export const GEMINI_ANALYSIS_SCHEMA = ANALYSIS_SCHEMA
 
 export type ReferenciaIndicador = typeof INDICADORES_ADMITIDOS[number]
 export type ResultadoAnalisisIA = {

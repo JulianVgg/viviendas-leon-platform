@@ -15,16 +15,8 @@ export const CHAT_SCHEMA = {
   required: ['respuesta', 'referencias', 'limitaciones'],
 } as const
 
-/** Las restricciones explícitas de Gemini reducen salidas no verificables. */
-export const GEMINI_CHAT_SCHEMA = {
-  type: 'object', additionalProperties: false,
-  properties: {
-    respuesta: { type: 'string', description: 'Respuesta en español, entre 3 y 1800 caracteres.' },
-    referencias: { type: 'array', maxItems: 5, items: { type: 'string', enum: [...INDICADORES_ADMITIDOS] } },
-    limitaciones: { type: 'array', maxItems: 3, items: { type: 'string', description: 'Frase breve, máximo 220 caracteres.' } },
-  },
-  required: ['respuesta', 'referencias', 'limitaciones'],
-} as const
+/** Esquema simple compatible con Gemini; referencias y límites se validan en el servidor. */
+export const GEMINI_CHAT_SCHEMA = CHAT_SCHEMA
 
 export const INSTRUCCIONES_CHAT = `Eres un asistente de consulta y recomendaciones para la dirección de una organización rural.
 Recibes exclusivamente indicadores agregados autorizados, nunca registros individuales. Responde en español, con claridad y brevedad.
