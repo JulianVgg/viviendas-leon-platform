@@ -9,7 +9,7 @@ import PageHeader from '@/components/common/PageHeader'
 import Button from '@/components/ui/Button'
 import Card, { CardBody, CardHeader } from '@/components/ui/Card'
 import { useAuth } from '@/features/auth/AuthProvider'
-import { canViewPath } from '@/features/auth/screenPermissions'
+import { canViewPath, isDireccionGeneral } from '@/features/auth/screenPermissions'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import { ProAreaChart, ProBarChart } from '@/features/dashboard/charts/TailAdminCharts'
 import CultivosDonut from '../components/CultivosDonut'
@@ -33,7 +33,7 @@ export default function ProduccionSemestralReportPage() {
   const { usuario } = useAuth()
   const online = useOnlineStatus()
   const autorizado = Boolean(usuario && canViewPath(usuario, '/reportes/reportes'))
-  const coordinacion = Boolean(usuario?.roles.some(rol => ['coordinadora del programa agroforestal', 'coordinador del programa agroforestal', 'coordinacion'].includes(
+  const puedeExportar = Boolean((usuario && isDireccionGeneral(usuario)) || usuario?.roles.some(rol => ['coordinadora del programa agroforestal', 'coordinador del programa agroforestal', 'coordinacion'].includes(
     rol.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase(),
   )))
   const [searchParams] = useSearchParams()
@@ -52,6 +52,7 @@ export default function ProduccionSemestralReportPage() {
   const [cargando, setCargando] = useState(true)
   const [cargandoOpciones, setCargandoOpciones] = useState(true)
   const [descargando, setDescargando] = useState(false)
+  const [vistaExcel, setVistaExcel] = useState<'agricola' | 'ventas-cultivo' | 'ventas-detalle'>('agricola')
   const [reintento, setReintento] = useState(0)
   const [informe, setInforme] = useState<InformeSemestral | null>(null)
   const [consultaAplicada, setConsultaAplicada] = useState('')
@@ -98,10 +99,10 @@ export default function ProduccionSemestralReportPage() {
   }, [autorizado, online, rangoValido, filtros, reintento])
 
   const exportar = async () => {
-    if (!informeVigente || !coordinacion || descargando || !online) return
+    if (!informeVigente || !puedeExportar || descargando || !online) return
     setDescargando(true)
     setErrorDescarga('')
-    try { await descargarReporteSemestral(filtros) }
+    try { await descargarReporteSemestral(filtros, vistaExcel) }
     catch (cause) { setErrorDescarga(cause instanceof Error ? cause.message : 'No se pudo descargar el Excel.') }
     finally { setDescargando(false) }
   }
@@ -164,7 +165,16 @@ export default function ProduccionSemestralReportPage() {
       {errorOpciones && <p role="alert" className="mt-3 text-sm text-error-600">{errorOpciones} <button className="underline" type="button" onClick={actualizar}>Reintentar</button></p>}
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4 dark:border-gray-800">
         <p className="text-sm text-gray-500 dark:text-gray-400">{informeVigente ? `${informeVigente.periodo.desde} al ${informeVigente.periodo.hasta}` : 'Selecciona un período para consultar.'}</p>
-        {coordinacion ? <Button onClick={() => void exportar()} disabled={!online || !informeVigente || cargando || descargando}><Download size={17}/>{descargando ? 'Generando Excel…' : 'Exportar Excel'}</Button> : <p className="text-xs text-gray-500 dark:text-gray-400">La exportación corresponde a Coordinación.</p>}
+        {puedeExportar && <div className="flex flex-wrap items-end gap-2">
+          <label className="space-y-1 text-xs text-gray-500 dark:text-gray-400">Categoría de Excel
+            <select className={`${selector} min-w-44`} value={vistaExcel} onChange={e => setVistaExcel(e.target.value as typeof vistaExcel)}>
+              <option value="agricola">Producción agrícola</option>
+              <option value="ventas-cultivo">Ventas por cultivo</option>
+              <option value="ventas-detalle">Detalle de ventas</option>
+            </select>
+          </label>
+          <Button onClick={() => void exportar()} disabled={!online || !informeVigente || cargando || descargando}><Download size={17}/>{descargando ? 'Generando…' : 'Exportar Excel'}</Button>
+        </div>}
       </div>
       {errorDescarga && <p role="alert" className="mt-3 text-sm text-error-600">{errorDescarga}</p>}
     </CardBody></Card>

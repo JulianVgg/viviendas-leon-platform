@@ -47,8 +47,8 @@ export const consultarOpcionesReporte = (signal?: AbortSignal) =>
 export const consultarReporteSemestral = (filtros: FiltrosReporte, signal?: AbortSignal) =>
   consultar<InformeSemestral>(`produccion-semestral?${querySemestral(filtros)}`, signal)
 
-export async function descargarReporteSemestral(filtros: FiltrosReporte): Promise<void> {
-  const response = await fetch(`${API}/v1/reportes/produccion-semestral.xlsx?${querySemestral(filtros)}`, {
+export async function descargarReporteSemestral(filtros: FiltrosReporte, vista: 'agricola' | 'ventas-cultivo' | 'ventas-detalle' = 'agricola'): Promise<void> {
+  const response = await fetch(`${API}/v1/reportes/produccion-semestral.xlsx?${querySemestral(filtros)}&vista=${vista}`, {
     credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
   })
   if (!response.ok) throw Error(await errorServidor(response))
@@ -58,7 +58,7 @@ export async function descargarReporteSemestral(filtros: FiltrosReporte): Promis
   try {
     const enlace = document.createElement('a')
     enlace.href = url
-    enlace.download = nombreArchivoReporte(filtros)
+    enlace.download = nombreArchivoReporte(filtros, vista)
     document.body.appendChild(enlace)
     enlace.click()
     enlace.remove()

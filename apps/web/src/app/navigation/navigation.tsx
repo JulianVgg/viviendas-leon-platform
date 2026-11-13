@@ -120,7 +120,8 @@ export const navigationGroups: { id: string; name: string; items: NavigationItem
         { id: 'roles', name: 'Roles y permisos', path: '/administracion/roles-permisos', icon: icons.permissions },
       ] },
       { id: 'audit', name: 'Auditoría', path: '/auditoria', icon: icons.audit, roles: ['audit'], children: [
-        { id: 'audit-log', name: 'Bitácora', path: '/auditoria/bitacora', icon: icons.history },
+        { id: 'audit-finance', name: 'Control financiero', path: '/auditoria/control-financiero', icon: icons.reports },
+        { id: 'audit-log', name: 'Bitácora de operaciones', path: '/auditoria/bitacora', icon: icons.history },
       ] },
     ],
   },
