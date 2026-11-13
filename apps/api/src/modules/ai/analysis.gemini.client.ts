@@ -27,16 +27,36 @@ export async function consultarAnalisisGemini(
             responseMimeType: 'application/json',
             responseJsonSchema: ANALYSIS_SCHEMA,
             maxOutputTokens: 2400,
-            temperature: 0.2,
           },
         }),
       },
     )
   } catch {
+    // No registrar el contexto, la URL con secretos ni el error original de red.
+    console.warn('[IA/Gemini] Fallo de red o tiempo de espera agotado.')
     throw new AnalysisError('AI_UNAVAILABLE', 503, 'El servicio de análisis no está disponible.')
   }
   if (!respuesta.ok) {
+    // Solo exponer el estado HTTP y un código normalizado, nunca el cuerpo de la
+    // respuesta, la clave de API ni los indicadores de ViviendasLeón.
+    let estadoProveedor = ''
+    try {
+      const cuerpo: unknown = await respuesta.json()
+      if (cuerpo && typeof cuerpo === 'object' && 'error' in cuerpo) {
+        const error = cuerpo.error
+        if (error && typeof error === 'object' && 'status' in error &&
+            typeof error.status === 'string' && /^[A-Z_]{3,40}$/.test(error.status)) {
+          estadoProveedor = error.status
+        }
+      }
+    } catch { /* No todos los rechazos tienen cuerpo JSON. */ }
+    console.warn(`[IA/Gemini] Rechazo del proveedor: HTTP ${respuesta.status}${estadoProveedor ? ` (${estadoProveedor})` : ''}`)
     if (respuesta.status === 429) throw new AnalysisError('AI_LIMIT', 503, 'El proveedor no admite más solicitudes por ahora.')
+    if (respuesta.status === 400) throw new AnalysisError('AI_INVALID_REQUEST', 503, 'El proveedor rechazó el formato de la solicitud.')
+    if (respuesta.status === 401 || respuesta.status === 403) {
+      throw new AnalysisError('AI_PROVIDER_AUTH', 503, 'No se autorizó el acceso al proveedor de IA.')
+    }
+    if (respuesta.status === 404) throw new AnalysisError('AI_MODEL_UNAVAILABLE', 503, 'El modelo de IA no está disponible para este proyecto.')
     throw new AnalysisError('AI_UNAVAILABLE', 503, 'No fue posible generar el análisis.')
   }
   let json: unknown
