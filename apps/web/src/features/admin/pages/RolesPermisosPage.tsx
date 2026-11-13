@@ -13,6 +13,8 @@ const GRUPOS: Grupo[] = [
   { titulo: 'Navegación', pantallas: [
     { codigo: 'PANTALLA_DASHBOARD', nombre: 'Dashboard', ruta: '/', fija: true },
     { codigo: 'PANTALLA_MI_PERFIL', nombre: 'Mi perfil', ruta: '/mi-perfil', fija: true },
+    { codigo: 'PANTALLA_NOTIFICACIONES', nombre: 'Notificaciones', ruta: '/notificaciones', fija: true },
+    { codigo: 'PANTALLA_CALENDARIO', nombre: 'Calendario institucional', ruta: '/calendario', especial: true },
   ] },
   { titulo: 'Familias y beneficiarios', pantallas: [
     { codigo: 'PANTALLA_FAMILIAS', nombre: 'Listado de familias', ruta: '/familias' },
@@ -53,6 +55,10 @@ const GRUPOS: Grupo[] = [
   ] },
   { titulo: 'Administración', pantallas: [
     { codigo: 'PANTALLA_ADMINISTRACION', nombre: 'Vista general de administración', ruta: '/administracion' },
+    { codigo: 'PANTALLA_COMUNIDADES', nombre: 'Comunidades', ruta: '/administracion/comunidades' },
+    { codigo: 'COMUNIDADES_WRITE', nombre: 'Modificar comunidades', ruta: 'Operaciones API', especial: true },
+    { codigo: 'PANTALLA_MUNICIPIOS', nombre: 'Municipios', ruta: '/administracion/municipios' },
+    { codigo: 'MUNICIPIOS_WRITE', nombre: 'Modificar municipios', ruta: 'Operaciones API', especial: true },
     { codigo: 'PANTALLA_PROGRAMAS', nombre: 'Programas', ruta: '/administracion/programas' },
     { codigo: 'PROGRAMAS_WRITE', nombre: 'Escritura de programas', ruta: 'Operaciones API', especial: true },
     { codigo: 'PANTALLA_USUARIOS', nombre: 'Usuarios', ruta: '/administracion/usuarios', especial: true },
@@ -439,7 +445,6 @@ export default function RolesPermisosPage() {
         </form>
       </details>
 
-      <p className="text-sm text-amber-700 dark:text-amber-300">Esta pantalla registra permisos reales en PostgreSQL. La visibilidad de una pantalla no sustituye las validaciones de autorización que protegen las operaciones del servidor.</p>
     </div>
   )
 }

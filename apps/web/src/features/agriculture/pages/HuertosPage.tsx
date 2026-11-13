@@ -122,7 +122,7 @@ export default function HuertosPage() {
       </button>}
     </section>
 
-    {selectedGroup && <section className="mt-6" aria-label={`Huertos de ${groupName}`}>
+    {selectedGroup && <section key={selectedGroup} className="garden-view-enter mt-6" aria-label={`Huertos de ${groupName}`}>
       <ComponentCard title={`${groupName} · Huertos`} description="" actions={<Button type="button" variant="secondary" size="sm" onClick={() => chooseGroup(null)}><ArrowLeft size={16}/> Volver a categorías</Button>}>
         <div className="mb-5 flex flex-wrap items-center gap-3">
           <label className="relative min-w-[220px] flex-1"><Search size={17} className="pointer-events-none absolute left-3 top-3.5 text-gray-400"/><input aria-label="Buscar huertos" value={query} maxLength={120} onChange={event => { setQuery(event.target.value); setPage(1) }} placeholder="Buscar huerto, familia o comunidad" className={`${formControlClassName} pl-10`}/></label>
@@ -132,11 +132,11 @@ export default function HuertosPage() {
         {loading && <LoadingState label="Consultando huertos..." />}
         {!loading && !error && !filtered.length && <div className="rounded-xl border border-dashed border-gray-300 p-10 text-center text-sm text-gray-500 dark:border-gray-700">No hay huertos con los filtros actuales.</div>}
         {!loading && !error && <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
-          {shown.map(garden => <article key={garden.id} className="min-w-0 rounded-2xl border border-gray-200 bg-white p-5 shadow-theme-xs transition-colors hover:border-brand-300 dark:border-gray-800 dark:bg-gray-900">
+          {shown.map(garden => <article key={garden.id} className="min-w-0 rounded-2xl border border-gray-200 bg-white p-5 shadow-theme-xs transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-theme-md motion-reduce:transform-none dark:border-gray-800 dark:bg-gray-900">
             <div className="flex items-start justify-between gap-3"><h3 className="break-words text-base font-semibold text-gray-900 dark:text-white">{garden.entornoCultivo ? entornoLabels[garden.entornoCultivo] : 'Sin clasificar'}</h3><Badge variant={garden.estado === 'ACTIVO' ? 'success' : 'neutral'}>{statusLabels[garden.estado] || garden.estado}</Badge></div>
             <div className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-300"><p className="inline-flex items-center gap-2 font-medium text-gray-900 dark:text-white"><FamilyStatusDot state={garden.familia.estado}/>{garden.familia.nombreReferencia}</p><p>{garden.familia.comunidad.nombre}</p><p>{garden.entornoCultivo ? entornoLabels[garden.entornoCultivo] : 'Sin clasificar'} · {formatAgriculturalDate(garden.fechaInicio)}</p></div>
             <div className="mt-5 flex flex-wrap gap-2"><BtnLink to={`/gestion-agricola/huertos/${garden.id}`} primary><Warehouse size={16}/> Abrir huerto <ArrowUpRight size={14}/></BtnLink>{canCreate && <Button type="button" variant="secondary" size="sm" disabled={!online} onClick={() => setEditingId(current => current === garden.id ? null : garden.id)}>{editingId === garden.id ? 'Cerrar edición' : 'Editar clasificación'}</Button>}</div>
-            {canCreate && editingId === garden.id && <div className="mt-4 border-t border-gray-200 pt-4 dark:border-gray-800"><EditGardenClassification key={garden.id} garden={garden} onCancel={() => setEditingId(null)} onSaved={updated => { setGardens(prev => prev.map(item => item.id === updated.id ? updated : item)); setEditingId(null); setNotice('Clasificación actualizada.') }} /></div>}
+            {canCreate && editingId === garden.id && <div className="garden-view-enter mt-4 border-t border-gray-200 pt-4 dark:border-gray-800"><EditGardenClassification key={garden.id} garden={garden} onCancel={() => setEditingId(null)} onSaved={updated => { setGardens(prev => prev.map(item => item.id === updated.id ? updated : item)); setEditingId(null); setNotice('Clasificación actualizada.') }} /></div>}
           </article>)}
         </div>}
         {!loading && totalPages > 1 && <div className="mt-6 flex items-center justify-end gap-3"><Button type="button" variant="secondary" size="sm" disabled={actualPage === 1} onClick={() => setPage(n => n - 1)}><ChevronLeft size={16}/> Anterior</Button><span className="text-xs text-gray-500">{actualPage} de {totalPages}</span><Button type="button" variant="secondary" size="sm" disabled={actualPage === totalPages} onClick={() => setPage(n => n + 1)}>Siguiente <ChevronRight size={16}/></Button></div>}
@@ -206,7 +206,7 @@ export function CreateGardenPage() {
     {!online && <Alert variant="warning" title="Conexión requerida" className="mb-5">El alta y la carga de imágenes se guardan en el servidor y requieren conexión.</Alert>}
     {!canCreate && <Alert variant="warning" title="Acceso de solo lectura" className="mb-5">Tu perfil no tiene permiso para registrar huertos.</Alert>}
     {error && <Alert variant="error" title="No se pudo completar el registro" className="mb-5">{error}</Alert>}
-    <form onSubmit={(event) => void submit(event)} className="space-y-6">
+    <form onSubmit={(event) => void submit(event)} className="garden-view-enter space-y-6">
       <ComponentCard title="Datos del huerto" description="">
         <FormGrid>
           <FormField label="Familia beneficiaria" required hint="El huerto quedará asociado a esta familia."><select className={formControlClassName} required disabled={loading || saving || !canCreate || Boolean(lockedFamilyId)} value={familyId} onChange={(event) => setFamilyId(event.target.value)}><option value="">Seleccionar familia...</option>{families.map((f) => <option key={f.id} value={f.id}>{familySelectLabel(f.nombreReferencia, f.estado)} · {f.comunidad.nombre}</option>)}</select></FormField>

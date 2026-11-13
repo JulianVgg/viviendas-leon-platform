@@ -14,7 +14,7 @@ export async function login(
   next: NextFunction,
 ) {
   try {
-    const { correo, password } = req.body ?? {}
+    const { correo, password, recordarme } = req.body ?? {}
 
     if (
       typeof correo !== 'string' ||
@@ -50,6 +50,10 @@ export async function login(
       }
 
       req.session.userId = usuario.id
+      // La sesión prolongada es opcional y sigue usando cookie HttpOnly; nunca se guarda la contraseña.
+      req.session.cookie.maxAge = recordarme === true
+        ? 1000 * 60 * 60 * 24 * 30
+        : 1000 * 60 * 60 * 8
 
       req.session.save((saveError) => {
         if (saveError) {

@@ -635,9 +635,6 @@ export default function MiPerfilPage() {
               </div>
             </div>
 
-            <p className="mt-5 text-sm text-gray-500 dark:text-gray-400">
-              {puedeEditarDatos ? 'El rol y el estado se administran desde Usuarios.' : 'Puedes cambiar tu fotografía y teléfono.'}
-            </p>
 
             {errorPerfil && (
               <p role="alert" className="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-700">

@@ -14,7 +14,7 @@ const panel = 'rounded-2xl border border-gray-200 bg-white p-5 shadow-theme-xs d
 export default function AgriculturaProduccionPanel({ datos, meses, filtros, alSalir }: { datos: IndicadoresAgricolas; meses: 3 | 6 | 12; filtros: FiltrosDashboard; alSalir: () => void }) {
   const { usuario } = useAuth()
   const mostrarComparacion = Boolean(usuario && canViewPath(usuario, '/reportes/reportes'))
-  const [modo, setModo] = useState<'kg' | 'unidades' | 'manojos'>('kg')
+  const [modo, setModo] = useState<'kg' | 'unidades'>('kg')
   const produccion = seriesProduccion(datos, modo)
   const comunidades = seriesComunidadesAgricolas(datos)
 
@@ -32,7 +32,7 @@ export default function AgriculturaProduccionPanel({ datos, meses, filtros, alSa
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2"><CalendarDays size={17} className="text-brand-600"/><h3 className="text-sm font-semibold text-gray-800 dark:text-white">Producción por mes</h3></div>
           <div className="inline-flex rounded-lg border border-gray-200 p-1 dark:border-gray-700" role="group" aria-label="Unidad del gráfico">
-            {(['kg', 'unidades', 'manojos'] as const).map(opcion => <button key={opcion} type="button" onClick={() => setModo(opcion)} aria-pressed={modo === opcion} className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${modo === opcion ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/20 dark:text-brand-300' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>{opcion === 'kg' ? 'Kilogramos' : opcion === 'manojos' ? 'Manojos' : 'Unidades'}</button>)}
+            {(['kg', 'unidades'] as const).map(opcion => <button key={opcion} type="button" onClick={() => setModo(opcion)} aria-pressed={modo === opcion} className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${modo === opcion ? 'bg-brand-50 text-brand-700 dark:bg-brand-500/20 dark:text-brand-300' : 'text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800'}`}>{opcion === 'kg' ? 'Kilogramos' : 'Unidades'}</button>)}
           </div>
         </div>
         {datos.produccionMensual.some(item => item[modo] > 0) ? <ProBarChart labels={produccion.labels.map(mes => new Intl.DateTimeFormat('es-GT', { month: 'short', timeZone: 'UTC' }).format(new Date(`${mes}-15T12:00:00Z`)))} series={produccion.series} ariaLabel={`Producción registrada por mes en ${modo}`} height={305} unit={modo} colors={['#3C6E8E']}/> : <p className="py-20 text-center text-sm text-gray-500">Sin producción registrada en {modo}.</p>}

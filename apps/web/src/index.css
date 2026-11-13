@@ -263,7 +263,7 @@
   from { opacity: 0; transform: translateY(6px) scale(0.985); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
-.dialog-enter[open] { animation: dialog-enter 180ms ease-out both; }
+.dialog-enter[open], .dialog-enter[role="dialog"], .dialog-enter[role="alertdialog"] { animation: dialog-enter 180ms ease-out both; }
 
 /* Detalle de indicadores: misma entrada suave del modal de visitas. */
 .indicator-detail-backdrop::before {
@@ -302,7 +302,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .layout-menu-accordion, .layout-dropdown-panel { transition: none; }
-  .page-route-enter, .wizard-card-entry, .dialog-enter[open] { animation: none; }
+  .page-route-enter, .wizard-card-entry, .dialog-enter[open], .dialog-enter[role="dialog"], .dialog-enter[role="alertdialog"] { animation: none; }
 }
 
 /* Transición de tema localizada al botón, como el acabado de una UI nativa.
@@ -455,3 +455,11 @@
 @media (prefers-reduced-motion: reduce) {
   .analysis-result-enter { animation: none; }
 }
+
+/* Despliegue ligero de huertos y formularios. Sin animaciones permanentes. */
+@keyframes garden-view-reveal {
+  from { opacity: 0; transform: translateY(9px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.garden-view-enter { animation: garden-view-reveal 210ms cubic-bezier(.2,.8,.25,1) both; }
+@media (prefers-reduced-motion: reduce) { .garden-view-enter { animation: none; } }
