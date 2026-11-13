@@ -13,7 +13,8 @@ export default function LoginPage() {
   const [offlineKey, setOfflineKey] = useState('')
   const [offlineBusy, setOfflineBusy] = useState(false)
   const [offlineError, setOfflineError] = useState('')
-  const [correo, setCorreo] = useState('')
+  const [correo, setCorreo] = useState(() => localStorage.getItem('login:correo-recordado') || '')
+  const [recordarme, setRecordarme] = useState(() => Boolean(localStorage.getItem('login:correo-recordado')))
   const [password, setPassword] = useState('')
   const [mostrarPassword, setMostrarPassword] = useState(false)
   const [cargando, setCargando] = useState(false)
@@ -57,6 +58,7 @@ export default function LoginPage() {
         body: JSON.stringify({
           correo: correo.trim(),
           password,
+          recordarme,
         }),
       })
 
@@ -81,7 +83,9 @@ export default function LoginPage() {
         return
       }
 
-      // Limpiar la contraseña del formulario.
+      // Recordar solo el correo; la sesión persistente permanece en una cookie HttpOnly.
+      if (recordarme) localStorage.setItem('login:correo-recordado', correo.trim())
+      else localStorage.removeItem('login:correo-recordado')
       setPassword('')
 
       // La transición de salida solo se ejecuta tras validar la sesión.
@@ -176,6 +180,12 @@ export default function LoginPage() {
               </div>
             </div>
 
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                <input type="checkbox" checked={recordarme} onChange={event => setRecordarme(event.target.checked)}
+                  className="size-4 rounded border-slate-300 accent-brand-600" />
+                Recuérdame en este dispositivo
+              </label>
             {/* Recuperación de contraseña */}
             <div className="text-right">
               <button
@@ -185,6 +195,7 @@ export default function LoginPage() {
               >
                 ¿Olvidaste tu contraseña?
               </button>
+            </div>
             </div>
 
             {mostrarAviso && (

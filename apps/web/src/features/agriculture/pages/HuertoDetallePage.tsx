@@ -152,7 +152,7 @@ export default function HuertoDetallePage() {
             {garden.estado === 'ACTIVO' && canRegisterCycle && <Button type="button" size="sm" disabled={!online} onClick={() => setRegisterOpen(true)}><Plus size={16} /> Registrar siembra</Button>}
           </div>} />
           <CardBody className="space-y-5">
-            {editing && <EditGardenClassification garden={garden} onCancel={() => setEditing(false)} onSaved={updated => { setGarden(updated); setEditing(false); setNotice('Clasificación guardada.') }} />}
+            {editing && <div className="garden-view-enter"><EditGardenClassification garden={garden} onCancel={() => setEditing(false)} onSaved={updated => { setGarden(updated); setEditing(false); setNotice('Clasificación guardada.') }} /></div>}
             <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-900/70">
               <div className="flex items-start gap-3"><Warehouse className="mt-0.5 text-brand-600 dark:text-brand-300" size={18} /><div><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Estructura</p><p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white">{garden.entornoCultivo ? entornoLabels[garden.entornoCultivo] : 'Sin clasificar'}</p></div></div>
               <div className="flex items-start gap-3"><Sprout className="mt-0.5 text-brand-600 dark:text-brand-300" size={18} /><div><p className="text-xs font-medium uppercase tracking-wide text-slate-500">Familia asignada</p><Link to={`/familias/${garden.familiaId}?tab=gardens`} className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-brand-600 hover:underline dark:text-brand-300"><FamilyStatusDot state={garden.familia.estado}/>{garden.familia.nombreReferencia}<ChevronRight size={14} /></Link></div></div>
@@ -196,7 +196,7 @@ export default function HuertoDetallePage() {
         </CardBody>
       </Card>
 
-      {canReadCycles && selectedCycle && <>
+      {canReadCycles && selectedCycle && <div key={selectedCycle.id} className="garden-view-enter space-y-5">
         {cycleError && <Alert variant="error">{cycleError}</Alert>}
         <Card>
           <CardHeader title={selectedCycle.cultivo.nombre} description={`Ciclo ${cycleNumbers.get(selectedCycle.id) ?? 1}`} actions={<div className="flex flex-wrap gap-2">
@@ -216,7 +216,7 @@ export default function HuertoDetallePage() {
           <CicloEvaluacionesSection key={`evaluaciones-${selectedCycle.id}`} cicloId={selectedCycle.id} />
           {canReadProduction && <CicloProduccionSection key={`produccion-${selectedCycle.id}-${harvestRefresh}`} cicloId={selectedCycle.id} onRegister={canRegisterHarvest ? () => setHarvestOpen(true) : undefined} />}
         </section>
-      </>}
+      </div>}
     </div>}
 
     {selectedCycle && harvestOpen && canRegisterHarvest && <RegistrarCosechaDialog key={selectedCycle.id} cycle={selectedCycle} cycleNumber={cycleNumbers.get(selectedCycle.id) ?? 1} onClose={() => setHarvestOpen(false)} onSaved={() => { setHarvestOpen(false); setHarvestRefresh(current => current + 1); setNotice('Cosecha registrada correctamente.') }} />}

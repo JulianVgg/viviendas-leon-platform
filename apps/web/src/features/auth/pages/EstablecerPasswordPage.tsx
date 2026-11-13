@@ -11,6 +11,7 @@ export default function EstablecerPasswordPage() {
   const [actual, setActual] = useState('')
   const [nueva, setNueva] = useState('')
   const [confirmacion, setConfirmacion] = useState('')
+  const [mostrar, setMostrar] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
 
@@ -101,8 +102,7 @@ export default function EstablecerPasswordPage() {
         </h1>
 
         <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
-          Por seguridad, debes crear tu contraseña personal antes
-          de utilizar Viviendas León.
+          Crea tu contraseña personal para acceder al sistema.
         </p>
 
         <form onSubmit={guardar} className="mt-8 space-y-5">
@@ -112,7 +112,7 @@ export default function EstablecerPasswordPage() {
             </label>
             <input
               id="passwordActual"
-              type="password"
+              type={mostrar ? 'text' : 'password'}
               autoComplete="current-password"
               required
               value={actual}
@@ -127,7 +127,7 @@ export default function EstablecerPasswordPage() {
             </label>
             <input
               id="passwordNueva"
-              type="password"
+              type={mostrar ? 'text' : 'password'}
               autoComplete="new-password"
               minLength={12}
               maxLength={128}
@@ -144,7 +144,7 @@ export default function EstablecerPasswordPage() {
             </label>
             <input
               id="confirmacion"
-              type="password"
+              type={mostrar ? 'text' : 'password'}
               autoComplete="new-password"
               required
               value={confirmacion}
@@ -152,6 +152,11 @@ export default function EstablecerPasswordPage() {
               className={inputClass}
             />
           </div>
+
+          <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+            <input type="checkbox" checked={mostrar} onChange={event => setMostrar(event.target.checked)} className="size-4 accent-brand-600" />
+            Mostrar contraseñas
+          </label>
 
           {error && (
             <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">

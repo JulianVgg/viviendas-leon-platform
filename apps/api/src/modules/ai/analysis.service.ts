@@ -4,6 +4,7 @@ import { validarParametrosContextoIA } from './indicator-context.rules.js'
 import { consolidarIndicadoresIA } from './indicator-context.service.js'
 import type { FiltrosMon05 } from '../dashboard/mon05-filters.js'
 import { consultarAnalisisOpenAI } from './analysis.client.js'
+import { consultarAnalisisGemini } from './analysis.gemini.client.js'
 import { AnalysisError } from './analysis.errors.js'
 import { finalizarSolicitudAnalisis, limiteEntero, reservarCupoAnalisis } from './analysis.quota.js'
 
@@ -34,9 +35,14 @@ export async function generarAnalisisIA(
   try { validarParametrosContextoIA(meses, filtros) }
   catch { throw new AnalysisError('INVALID_FILTERS', 400, 'El período o los filtros no son válidos.') }
   const env = opts.env ?? process.env
-  const apiKey = env.OPENAI_API_KEY?.trim()
+  const proveedor = env.AI_PROVIDER?.trim().toLowerCase() || 'openai'
+  if (proveedor !== 'openai' && proveedor !== 'gemini') {
+    throw new AnalysisError('AI_CONFIG', 503, 'Proveedor de análisis no válido.')
+  }
+  const apiKey = (proveedor === 'gemini' ? env.GEMINI_API_KEY : env.OPENAI_API_KEY)?.trim()
   if (!apiKey) throw new AnalysisError('AI_NOT_CONFIGURED', 503, 'El análisis asistido aún no está configurado.')
-  const modelo = env.OPENAI_ANALYSIS_MODEL?.trim() || 'gpt-5.6-luna'
+  const modelo = (proveedor === 'gemini' ? env.GEMINI_ANALYSIS_MODEL : env.OPENAI_ANALYSIS_MODEL)?.trim()
+    || (proveedor === 'gemini' ? 'gemini-2.5-flash-lite' : 'gpt-5.6-luna')
   if (!/^[a-zA-Z0-9_.-]{2,100}$/.test(modelo)) {
     throw new AnalysisError('AI_CONFIG', 503, 'Modelo de análisis no válido.')
   }
@@ -49,7 +55,9 @@ export async function generarAnalisisIA(
   const contexto = await deps.consolidar(usuario, meses, filtros, undefined, opts.ahora)
   const reserva = await deps.reservar(usuario.id, modelo, limites)
   try {
-    const resultado = await deps.consultar(contexto, { apiKey, modelo })
+    // Pruebas con proveedor inyectado; en producción se selecciona por configuración.
+    const consultar = opts.deps?.consultar ?? (proveedor === 'gemini' ? consultarAnalisisGemini : deps.consultar)
+    const resultado = await consultar(contexto, { apiKey, modelo })
     await deps.finalizar(reserva.id, 'COMPLETADA', {
       tokensEntrada: resultado.tokens.entrada, tokensSalida: resultado.tokens.salida,
       proveedorId: resultado.proveedorId,

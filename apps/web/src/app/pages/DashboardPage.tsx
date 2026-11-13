@@ -12,7 +12,7 @@ import { seriesActividad } from '@/features/dashboard/lib/chartSeries'
 import type { FiltrosDashboard } from '@/features/dashboard/lib/dashboardFilters'
 import { guardarRetornoDashboard, obtenerRetornoDashboard, consumirPosicionDashboard } from '@/features/dashboard/lib/dashboardReturn'
 import { canViewPath } from '@/features/auth/screenPermissions'
-import { formatoFechaHoraGuatemala } from '@/features/dashboard/lib/guatemalaDateTime'
+import { formatoFechaHoraGuatemala, saludoGuatemala } from '@/features/dashboard/lib/guatemalaDateTime'
 
 const tarjeta = 'rounded-2xl border border-gray-200 bg-white p-5 shadow-theme-xs transition-[box-shadow,transform] duration-300 hover:-translate-y-0.5 hover:shadow-lg dark:border-gray-800 dark:bg-gray-900'
 type Icono = typeof UsersRound
@@ -188,7 +188,7 @@ export default function DashboardPage() {
     <section aria-label="Bienvenida" className={`${anterior ? "" : "dashboard-welcome-enter"} dashboard-welcome-card relative isolate overflow-hidden rounded-2xl border border-gray-200 bg-white px-6 py-6 shadow-theme-xs dark:border-gray-800 dark:bg-gray-900 sm:px-8 sm:py-7`}>
       <div className="relative z-10">
         <h1 className="text-2xl font-semibold tracking-tight text-gray-900 dark:text-white sm:text-3xl">
-          Qué gusto verte de nuevo{nombreUsuario ? <>,{' '}<span className="text-brand-600 dark:text-brand-300">{nombreUsuario}</span></> : null}
+          {saludoGuatemala(ahora)}{nombreUsuario ? <>{', '}<span className="text-brand-600 dark:text-brand-300">{nombreUsuario}</span></> : null}
         </h1>
         <p className="mt-2 text-sm font-medium capitalize text-gray-500 dark:text-gray-400" aria-label="Fecha y hora actual de Guatemala">{formatoFechaHoraGuatemala(ahora)} · Hora de Guatemala</p>
       </div>

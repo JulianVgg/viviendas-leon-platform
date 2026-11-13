@@ -65,6 +65,7 @@ export default function UsuariosPage() {
   const [editandoId, setEditandoId] = useState<number | null>(null)
   const [formulario, setFormulario] = useState<Formulario>(nuevoFormulario)
   const [passwordTemporal, setPasswordTemporal] = useState('')
+  const [mostrarTemporal, setMostrarTemporal] = useState(false)
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
@@ -97,6 +98,7 @@ export default function UsuariosPage() {
     setError('')
     setMensaje('')
     setPasswordTemporal('')
+    setMostrarTemporal(false)
   }
 
   function abrirEdicion(usuario: UsuarioApi) {
@@ -110,6 +112,7 @@ export default function UsuariosPage() {
     })
     setModal(true)
     setPasswordTemporal('')
+    setMostrarTemporal(false)
     setError('')
     setMensaje('')
   }
@@ -136,6 +139,7 @@ export default function UsuariosPage() {
         setModal(false)
         setMensaje('Usuario creado correctamente.')
         setPasswordTemporal(datos?.passwordTemporal ?? datos?.data?.passwordTemporal ?? '')
+        setMostrarTemporal(false)
       }
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudieron guardar los datos.') }
     finally { setGuardando(false) }
@@ -190,8 +194,15 @@ export default function UsuariosPage() {
         <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
           <h2 className="font-semibold">Contraseña temporal — se muestra una sola vez</h2>
           <p className="mt-1">Entrégala personalmente y por un canal seguro. No la incluyas en capturas ni mensajes grupales.</p>
-          <p className="mt-2 break-all rounded bg-white p-3 font-mono">{passwordTemporal}</p>
-          <button type="button" className="mt-3 rounded border border-amber-500 px-3 py-2" onClick={() => setPasswordTemporal('')}>Ocultar contraseña</button>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <input aria-label="Contraseña temporal" readOnly type={mostrarTemporal ? 'text' : 'password'} value={passwordTemporal}
+              className="min-w-0 flex-1 rounded-lg border border-amber-300 bg-white px-3 py-2 font-mono text-sm text-gray-900" />
+            <button type="button" className="rounded-lg border border-amber-500 px-3 py-2" onClick={() => setMostrarTemporal(value => !value)}>
+              {mostrarTemporal ? 'Ocultar' : 'Mostrar'}
+            </button>
+            <button type="button" className="rounded-lg border border-amber-500 px-3 py-2" onClick={() => { void navigator.clipboard.writeText(passwordTemporal).catch(() => setError('No se pudo copiar. Selecciona la contraseña para copiarla.')) }}>Copiar</button>
+            <button type="button" className="rounded-lg border border-amber-500 px-3 py-2" onClick={() => { setPasswordTemporal(''); setMostrarTemporal(false) }}>Cerrar</button>
+          </div>
         </section>
       )}
 
@@ -228,7 +239,7 @@ export default function UsuariosPage() {
 
       {usuarioAEliminar && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4" role="presentation">
-          <section role="alertdialog" aria-modal="true" aria-labelledby="eliminar-titulo" aria-describedby="eliminar-descripcion" className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 text-gray-900 shadow-2xl dark:border-gray-800 dark:bg-gray-900 dark:text-white">
+          <section role="alertdialog" aria-modal="true" aria-labelledby="eliminar-titulo" aria-describedby="eliminar-descripcion" className="dialog-enter w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 text-gray-900 shadow-2xl dark:border-gray-800 dark:bg-gray-900 dark:text-white">
             <h2 id="eliminar-titulo" className="text-xl font-semibold">Confirmar eliminación de usuario</h2>
             <p id="eliminar-descripcion" className="mt-4 text-sm">¿Estás seguro que quieres borrar el usuario de: <strong>{usuarioAEliminar.nombre} {usuarioAEliminar.apellido ?? ''}</strong>?</p>
 
@@ -243,7 +254,7 @@ export default function UsuariosPage() {
 
       {modal && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4" role="presentation">
-          <section role="dialog" aria-modal="true" aria-labelledby="usuario-dialog-title" className="w-full max-w-lg max-h-[90dvh] overflow-y-auto rounded-2xl border border-gray-200 bg-white p-6 text-gray-900 shadow-2xl dark:border-gray-800 dark:bg-gray-900 dark:text-white">
+          <section role="dialog" aria-modal="true" aria-labelledby="usuario-dialog-title" className="dialog-enter w-full max-w-lg max-h-[90dvh] overflow-y-auto rounded-2xl border border-gray-200 bg-white p-6 text-gray-900 shadow-2xl dark:border-gray-800 dark:bg-gray-900 dark:text-white">
             <h2 id="usuario-dialog-title" className="text-xl font-semibold">{editandoId ? 'Editar usuario' : 'Nuevo usuario'}</h2>
             <form onSubmit={(e) => void guardar(e)} className="mt-5 space-y-3">
               <label htmlFor="usuario-nombre" className="block text-sm font-medium">Nombre</label>
