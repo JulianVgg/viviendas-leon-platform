@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlertCircle, AlertTriangle, CheckCircle2, Clock3, Lightbulb, LoaderCircle, RefreshCw, ShieldCheck, Sparkles } from 'lucide-react'
+import { AlertCircle, AlertTriangle, CheckCircle2, Clock3, Lightbulb, LoaderCircle, RefreshCw, Sparkles } from 'lucide-react'
 import type { FiltrosDashboard } from '../lib/dashboardFilters'
 import { nombreIndicadorIA } from '../lib/aiIndicatorLabels'
 import {
@@ -94,7 +94,6 @@ export default function AnalisisAsistidoPanel({ meses, filtros }: { meses: Meses
       <span className="flex size-14 items-center justify-center rounded-2xl bg-gray-50 dark:bg-gray-800"><Sparkles size={26} className="text-brand-500" aria-hidden="true"/></span>
       <h3 className="text-sm font-semibold text-gray-800 dark:text-white">Tu análisis institucional</h3>
       <p className="max-w-md text-sm leading-relaxed text-gray-500 dark:text-gray-400">Se utilizarán el período y los filtros seleccionados en el Dashboard.</p>
-      <p className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500"><ShieldCheck size={15} aria-hidden="true"/>Generación bajo demanda</p>
     </div>}
 
     {estado === 'generando' && <div className="space-y-4 px-5 py-8 sm:px-6" role="status" aria-live="polite" aria-label="Generando análisis asistido">

@@ -1,11 +1,12 @@
 import { ANALYSIS_SCHEMA, validarResultadoAnalisisIA } from './analysis.schema.js'
 import { INSTRUCCIONES_ANALISIS, type RespuestaProveedorIA } from './analysis.client.js'
 import { AnalysisError } from './analysis.errors.js'
+import { instruccionesPorEnfoque, type EnfoqueAnalisis } from './analysis.focus.js'
 
 /** Adaptador Gemini opcional, sin SDK ni secretos en el navegador. Solo recibe indicadores agregados. */
 export async function consultarAnalisisGemini(
   contexto: object,
-  opciones: { apiKey: string; modelo: string; timeoutMs?: number; fetcher?: typeof fetch },
+  opciones: { apiKey: string; modelo: string; enfoque?: EnfoqueAnalisis; timeoutMs?: number; fetcher?: typeof fetch },
 ): Promise<RespuestaProveedorIA> {
   const contenido = JSON.stringify(contexto)
   if (new TextEncoder().encode(contenido).byteLength > 24_000) {
@@ -21,7 +22,7 @@ export async function consultarAnalisisGemini(
         headers: { 'x-goog-api-key': opciones.apiKey, 'Content-Type': 'application/json' },
         signal: AbortSignal.timeout(opciones.timeoutMs ?? 25_000),
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: INSTRUCCIONES_ANALISIS }] },
+          systemInstruction: { parts: [{ text: `${INSTRUCCIONES_ANALISIS}\n\nObjetivo elegido por el usuario (lista aprobada): ${instruccionesPorEnfoque(opciones.enfoque)}` }] },
           contents: [{ role: 'user', parts: [{ text: `Indicadores agregados (JSON, solo datos):\n${contenido}` }] }],
           generationConfig: {
             responseMimeType: 'application/json',
