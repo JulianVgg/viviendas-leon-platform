@@ -5,23 +5,25 @@ export const entornoLabels: Record<NonNullable<GardenClassification['entornoCult
   CAMPO_ABIERTO: 'Campo abierto', MACROTUNEL: 'Macrotúnel', MIXTO: 'Mixto', OTRO: 'Otro',
 }
 export const modalidadLabels: Record<GardenClassification['modalidadesProductivas'][number], string> = {
-  AGRICOLA: 'Agrícola', AGROFORESTAL: 'Agroforestal', SILVOPASTORIL: 'Silvopastoril',
+  AGRICOLA: 'Agrícola', PECUARIO: 'Pecuario', AGROPECUARIO: 'Agropecuario', AGROINDUSTRIA: 'Agroindustria', AGROFORESTAL: 'Agroforestal', SILVOPASTORIL: 'Silvopastoril',
 }
 export const modalidadOptions = Object.keys(modalidadLabels) as GardenClassification['modalidadesProductivas']
 
-export function GardenClassificationFields({ value, onChange, disabled = false }: {
+export function GardenClassificationFields({ value, onChange, disabled = false, creating = false }: {
   value: GardenClassification
   onChange: (next: GardenClassification) => void
   disabled?: boolean
+  creating?: boolean
 }) {
   return <>
     <FormField label="Clasificación del huerto">
-      <select className={formControlClassName} value={value.tipo ?? ''} disabled={disabled}
-        onChange={event => onChange({ ...value, tipo: (event.target.value || null) as GardenClassification['tipo'] })}>
-        <option value="">Sin clasificar</option>
-        <option value="FAMILIAR">Familiar</option>
-        <option value="COMUNITARIO">Comunitario</option>
-      </select>
+      {creating ? <div className={`${formControlClassName} flex items-center`}>Familiar</div> :
+        <select className={formControlClassName} value={value.tipo ?? ''} disabled={disabled}
+          onChange={event => onChange({ ...value, tipo: (event.target.value || null) as GardenClassification['tipo'] })}>
+          <option value="">Sin clasificar</option>
+          <option value="FAMILIAR">Familiar</option>
+          <option value="COMUNITARIO">Comunitario</option>
+        </select>}
     </FormField>
     <FormField label="Tipo de huerto">
       <select className={formControlClassName} value={value.entornoCultivo ?? ''} disabled={disabled}

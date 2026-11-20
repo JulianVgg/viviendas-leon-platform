@@ -9,7 +9,7 @@ export type GardenClassification = {
   tipo: 'FAMILIAR' | 'COMUNITARIO' | null
   entornoCultivo: 'CAMPO_ABIERTO' | 'MACROTUNEL' | 'MIXTO' | 'OTRO' | null
   detalleEntorno: string | null
-  modalidadesProductivas: Array<'AGRICOLA' | 'AGROFORESTAL' | 'SILVOPASTORIL'>
+  modalidadesProductivas: Array<'AGRICOLA' | 'PECUARIO' | 'AGROPECUARIO' | 'AGROINDUSTRIA' | 'AGROFORESTAL' | 'SILVOPASTORIL'>
 }
 
 export type Garden = GardenClassification & {

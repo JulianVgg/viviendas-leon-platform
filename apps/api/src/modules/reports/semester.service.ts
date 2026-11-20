@@ -1,6 +1,7 @@
 import { getPrismaClient } from '../../config/prisma.js'
 import { Prisma } from '../../generated/prisma/client.js'
 import { harvestUnitKind } from '../agriculture/production.units.js'
+import { equivalenciaUsd } from './institutional-rate.rules.js'
 import {
   consolidarSemestre, definirPeriodo, paginarPorId, type FiltrosSemestrales, type CosechaFuente,
   type VentaFuente,
@@ -106,9 +107,18 @@ export async function obtenerProduccionSemestral(filtros: FiltrosSemestrales) {
       select: ventaSelect, orderBy: { id: 'asc' }, take: 400,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     }))
+    const informe = consolidarSemestre(periodo, cosechas.map(convertirCosecha), ventas.map(convertirVenta))
+    const tasas = await tx.$queryRaw<Array<{ quetzales_por_dolar: Prisma.Decimal; actualizado_en: Date }>>`
+      SELECT quetzales_por_dolar, actualizado_en FROM configuracion_tipo_cambio WHERE id = 1
+    `
+    if (!tasas[0]) throw new Error('La tasa institucional no está configurada.')
+    const tasa = tasas[0].quetzales_por_dolar.toString()
     return {
-      filtros,
-      ...consolidarSemestre(periodo, cosechas.map(convertirCosecha), ventas.map(convertirVenta)),
+      filtros, ...informe,
+      resumen: { ...informe.resumen, totalVentasEquivalenteUSD: equivalenciaUsd(
+        informe.resumen.totalVentasOriginalGTQ, informe.resumen.totalVentasOriginalUSD, tasa,
+      ) },
+      tipoCambioInstitucional: { quetzalesPorDolar: tasa, actualizadoEn: tasas[0].actualizado_en.toISOString() },
     }
   }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, timeout: 60_000 })
 }

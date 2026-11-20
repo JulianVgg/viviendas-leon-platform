@@ -28,7 +28,7 @@ function CycleOption({ cycle, number, selected, onSelect }: { cycle: Cycle; numb
   </button>
 }
 
-export default function FamilyGardensSection({ familyId }: { familyId: number }) {
+export default function FamilyGardensSection({ familyId, hasGardenProgram }: { familyId: number; hasGardenProgram: boolean }) {
   const [gardens, setGardens] = useState<Garden[]>([])
   const [cycles, setCycles] = useState<Cycle[]>([])
   const [loading, setLoading] = useState(true)
@@ -41,7 +41,7 @@ export default function FamilyGardensSection({ familyId }: { familyId: number })
   const [params] = useSearchParams()
   const { usuario } = useAuth()
   const online = useOnlineStatus()
-  const canCreate = Boolean(usuario && canWriteGardens(usuario))
+  const canCreate = Boolean(usuario && canWriteGardens(usuario) && hasGardenProgram)
   const canReadCycles = Boolean(usuario && canViewPath(usuario, '/gestion-agricola/ciclos'))
   const canReadProduction = Boolean(usuario && canViewPath(usuario, '/gestion-agricola/produccion'))
   const canRegister = Boolean(usuario && (isDireccionGeneral(usuario) || usuario.permisos.includes('CICLOS_WRITE')))
@@ -76,6 +76,7 @@ export default function FamilyGardensSection({ familyId }: { familyId: number })
     <Plus aria-hidden="true" size={17} /> Registrar huerto
   </Link> : undefined}>
     <div className="space-y-6">
+      {!hasGardenProgram && <Alert variant="warning">Asocia esta familia al programa Huertos antes de registrar un huerto.</Alert>}
       {!online && <Alert variant="warning" title="Sin conexión">La consulta del expediente requiere conexión.</Alert>}
       {params.get('creado') === '1' && <Alert variant="success">Huerto guardado. Si está activo, ya puedes registrar la primera siembra.</Alert>}
       {params.has('imagenError') && <Alert variant="warning">El huerto se registró, pero su imagen no pudo guardarse.</Alert>}

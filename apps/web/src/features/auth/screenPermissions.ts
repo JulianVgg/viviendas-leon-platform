@@ -45,6 +45,7 @@ export const SCREEN_PERMISSIONS: Record<string, string> = {
   '/administracion/comunidades': 'PANTALLA_COMUNIDADES',
   '/administracion/municipios': 'PANTALLA_MUNICIPIOS',
   '/administracion/programas': 'PANTALLA_PROGRAMAS',
+  '/administracion/tipo-cambio': 'PANTALLA_TIPO_CAMBIO',
   '/administracion/cultivos': 'PANTALLA_CULTIVOS',
   '/administracion/usuarios': 'PANTALLA_USUARIOS',
   '/administracion/roles-permisos': 'PANTALLA_ROLES_PERMISOS',

@@ -46,6 +46,7 @@ gardensRouter.use(requireAuth)
 gardensRouter.get('/familias-opciones', async (_req, res, next) => {
   try {
     const families = await getPrismaClient().familia.findMany({
+      where: { programas: { some: { estado: 'ACTIVO', fechaSalida: null, programa: { nombre: 'Huertos', estado: 'ACTIVO' } } } },
       orderBy: [{ nombreReferencia: 'asc' }, { id: 'asc' }], take: 500,
       select: { id: true, nombreReferencia: true, estado: true, comunidad: { select: { nombre: true } } },
     })
@@ -89,6 +90,11 @@ gardensRouter.post('/', requirePermission('HUERTOS_WRITE'), async (req, res, nex
       // Lock the family while creating the link to prevent a concurrent deletion.
       const family = await tx.$queryRaw<Array<{ id: number }>>`SELECT id FROM familia WHERE id = ${input.familiaId} FOR SHARE`
       if (!family.length) return null
+      const membership = await tx.familiaPrograma.findFirst({
+        where: { familiaId: input.familiaId, estado: 'ACTIVO', fechaSalida: null,
+          programa: { nombre: 'Huertos', estado: 'ACTIVO' } }, select: { id: true },
+      })
+      if (!membership) return 'PROGRAM_REQUIRED' as const
       const garden = await tx.huerto.create({
         data: {
           familiaId: input.familiaId,
@@ -110,6 +116,7 @@ gardensRouter.post('/', requirePermission('HUERTOS_WRITE'), async (req, res, nex
       return garden
     })
     if (!created) { res.status(404).json(errorResponse('FAMILY_NOT_FOUND', 'La familia seleccionada no existe.')); return }
+    if (created === 'PROGRAM_REQUIRED') { res.status(409).json(errorResponse('PROGRAM_REQUIRED', 'Asocia primero la familia al programa Huertos.')); return }
     res.status(201).location(`/api/v1/huertos?familiaId=${created.familiaId}`).json({ data: serializeGarden(created) })
   } catch (error) { next(error) }
 })

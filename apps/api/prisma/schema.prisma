@@ -243,6 +243,18 @@ model TipoCambio {
   @@map("tipo_cambio")
 }
 
+// Tasa administrativa de referencia para equivalencias (no reemplaza tasas históricas).
+model ConfiguracionTipoCambio {
+  id                Int      @id @default(1)
+  quetzalesPorDolar Decimal  @map("quetzales_por_dolar") @db.Decimal(18, 6)
+  actualizadoEn     DateTime @default(now()) @map("actualizado_en") @db.Timestamptz(6)
+  usuarioId         Int?     @map("usuario_id")
+
+  usuario Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  @@map("configuracion_tipo_cambio")
+}
+
 // ============================================================
 // PRODUCCIÓN Y VENTAS
 // ============================================================
@@ -906,6 +918,7 @@ model Usuario {
   capacitacionesAsignadas Capacitacion[] @relation("CapacitacionesAsignadas")
   solicitudesAnalisisIa AnalisisIaSolicitud[]
   tiposCambioRegistrados TipoCambio[]
+  tasasInstitucionales ConfiguracionTipoCambio[]
   informesRevisados ReporteSemestralRevision[] @relation("RevisionReportesUsuario")
   informesValidados ReporteSemestralRevision[] @relation("ValidacionReportesUsuario")
   eventosRevision ReporteSemestralEvento[]

@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs'
+import { agregarEquivalenciaMonetaria } from './semester.exchange-sheet.js'
 import {
   prepararFilasProduccionExcel, textoSeguroExcel, type InformeSemestralExcel,
 } from './semester.excel-data.js'
@@ -156,6 +157,7 @@ export async function construirExcelSemestral(informe: InformeSemestralExcel): P
   // Las advertencias se conservan en la API, sin notas técnicas visibles en Excel.
   hoja.pageSetup.printArea = `A1:L${filaTotal.number}`
   agregarHojaTrazabilidad(libro, informe)
+  agregarEquivalenciaMonetaria(libro, informe)
   const buffer = await libro.xlsx.writeBuffer()
   return Buffer.from(buffer)
 }

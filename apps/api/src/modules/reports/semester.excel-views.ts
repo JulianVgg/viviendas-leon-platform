@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs'
+import { agregarEquivalenciaMonetaria } from './semester.exchange-sheet.js'
 import type { InformeSemestralExcel } from './semester.excel-data.js'
 import { textoSeguroExcel } from './semester.excel-data.js'
 
@@ -62,6 +63,7 @@ export async function construirExcelCategoria(informe: InformeSemestralExcel, vi
       if (r.moneda === 'GTQ' || r.moneda === 'USD') row.getCell(8).numFmt = currency(r.moneda)
     }
   }
+  agregarEquivalenciaMonetaria(libro, informe)
   return Buffer.from(await libro.xlsx.writeBuffer())
 }
 
@@ -90,5 +92,6 @@ export async function construirExcelControlFinanciero(informe: InformeSemestralE
     const row = detalle.addRow([r.id, r.fecha, textoSeguroExcel(String(r.cultivo ?? '')), amount(r.cantidad), textoSeguroExcel(String(r.unidad ?? '')), r.moneda, amount(r.importe), r.visitaOrigenId ?? null])
     if (r.moneda === 'GTQ' || r.moneda === 'USD') row.getCell(7).numFmt = currency(r.moneda)
   }
+  agregarEquivalenciaMonetaria(libro, informe)
   return Buffer.from(await libro.xlsx.writeBuffer())
 }
