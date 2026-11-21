@@ -1,6 +1,6 @@
 import { getOfflineData, saveOfflineData } from '@/db/offlineDb'
 
-export const DIAS_CICLO_VISITA = 8
+export const DIAS_CICLO_VISITA = 7
 export type FamilyVisitPlanning = {
   familyId: number
   lastCompleted: string | null

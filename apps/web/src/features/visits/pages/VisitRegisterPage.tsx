@@ -1,6 +1,6 @@
 import '../visits.css'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, Navigate, useSearchParams } from 'react-router'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router'
 import PageHeader from '@/components/common/PageHeader'
 import PageMeta from '@/components/common/PageMeta'
 import Button from '@/components/ui/Button'
@@ -98,6 +98,7 @@ function Options({ items, placeholder = 'Seleccionar' }: { items: string[]; plac
 
 export default function VisitRegisterPage() {
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const initialDate = searchParams.get('fecha')
   const initialFamily = searchParams.get('familia')
   const initialScheduled = searchParams.get('programada')
@@ -609,7 +610,8 @@ export default function VisitRegisterPage() {
         <h2 className="mb-1 text-lg font-semibold text-slate-900 dark:text-white">¿A quién visitamos?</h2>
         <div className="my-4"><FamilyVisitCoveragePanel rows={familyCoverage} compact loading={coverageLoading}
           local={coverageLocal} selectionDisabled={Boolean(recovery)} selectedFamilyId={familyId ? Number(familyId) : null}
-          onSelect={id => { if (!recovery) { setFamilyId(String(id)); setScheduledVisitId(null) } }}/></div>
+          onSelect={id => { if (!recovery) { setFamilyId(String(id)); setScheduledVisitId(null) } }}
+          onReschedule={row => { if (!recovery && row.overdueVisitId) navigate(`/visitas/agenda?visitId=${row.overdueVisitId}&reprogramar=1`) }}/></div>
         <div className="grid gap-4 md:grid-cols-2">
           <SearchableSelect id="visit-family" label="Familia" required disabled={familiesLoading || Boolean(recovery)} value={familyId} onChange={value => { setFamilyId(value); setScheduledVisitId(null) }}
             placeholder={familiesLoading ? 'Cargando familias...' : 'Buscar familia o comunidad...'}
