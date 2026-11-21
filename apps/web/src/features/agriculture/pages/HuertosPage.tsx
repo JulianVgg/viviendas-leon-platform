@@ -184,7 +184,7 @@ export function CreateGardenPage() {
     event.preventDefault()
     setError('')
     if (!canCreate || !online || saving) return
-    if (!families.some((item) => item.id === Number(familyId))) { setError('Selecciona una familia registrada.'); return }
+    if (!families.some((item) => item.id === Number(familyId))) { setError('Selecciona una familia vinculada al programa Huertos.'); return }
     if (file && (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || !file.size || file.size > 5 * 1024 * 1024)) {
       setError('Selecciona una imagen JPG, PNG o WebP de hasta 5 MB.'); return
     }
@@ -209,8 +209,8 @@ export function CreateGardenPage() {
     <form onSubmit={(event) => void submit(event)} className="garden-view-enter space-y-6">
       <ComponentCard title="Datos del huerto" description="">
         <FormGrid>
-          <FormField label="Familia beneficiaria" required hint="El huerto quedará asociado a esta familia."><select className={formControlClassName} required disabled={loading || saving || !canCreate || Boolean(lockedFamilyId)} value={familyId} onChange={(event) => setFamilyId(event.target.value)}><option value="">Seleccionar familia...</option>{families.map((f) => <option key={f.id} value={f.id}>{familySelectLabel(f.nombreReferencia, f.estado)} · {f.comunidad.nombre}</option>)}</select></FormField>
-          <GardenClassificationFields value={classification} onChange={setClassification} disabled={saving || !canCreate} />
+          <FormField label="Familia beneficiaria" required hint="Se muestran familias con participación activa en Huertos."><select className={formControlClassName} required disabled={loading || saving || !canCreate || Boolean(lockedFamilyId)} value={familyId} onChange={(event) => setFamilyId(event.target.value)}><option value="">Seleccionar familia...</option>{families.map((f) => <option key={f.id} value={f.id}>{familySelectLabel(f.nombreReferencia, f.estado)} · {f.comunidad.nombre}</option>)}</select></FormField>
+          <GardenClassificationFields value={classification} onChange={setClassification} creating disabled={saving || !canCreate} />
           <FormField label="Fecha de inicio"><input className={formControlClassName} type="date" value={fechaInicio} onChange={(e) => setFechaInicio(e.target.value)} /></FormField>
           <FormField label="Estado" required><select className={formControlClassName} required value={estado} onChange={(e) => setEstado(e.target.value)}><option value="PLANIFICADO">Planificado</option><option value="ACTIVO">Activo</option><option value="INACTIVO">Inactivo</option></select></FormField>
           <div className="sm:col-span-2"><FormField label="Observaciones"><textarea className={`${formControlClassName} min-h-28 h-auto`} rows={4} maxLength={2000} value={observaciones} onChange={(e) => setObservaciones(e.target.value)} placeholder="Detalles del terreno, estructura y condiciones iniciales" /></FormField></div>

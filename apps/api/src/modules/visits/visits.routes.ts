@@ -424,11 +424,11 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
               where: { familiaId: payload.familyId, estado: 'PROGRAMADA', OR: [
                 // Una visita vencida debe resolverse antes de crear una nueva.
                 { fecha: { lt: new Date(`${fechaHoyGuatemala()}T12:00:00Z`) } },
-                // Solo una cita por ventana de 8 días. Las citas futuras de ciclos
+                // Solo una cita en cada ventana semanal (separación mínima de 7 días). Las citas futuras de ciclos
                 // posteriores sí pueden programarse con anticipación.
                 { fecha: {
-                  gte: new Date(`${sumarDiasCiviles(payload.date, -7)}T12:00:00Z`),
-                  lte: new Date(`${sumarDiasCiviles(payload.date, 7)}T12:00:00Z`),
+                  gte: new Date(`${sumarDiasCiviles(payload.date, -6)}T12:00:00Z`),
+                  lte: new Date(`${sumarDiasCiviles(payload.date, 6)}T12:00:00Z`),
                 } },
               ] }, select: { id: true },
             })
@@ -546,6 +546,27 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
           await crearNotificacionesDeActividad([
             avisoVisita(visitaId, 'CREACION', userId, 'VISITA_PROGRAMADA', familia.nombreReferencia, payload.date),
           ], tx)
+          // Solo una siguiente cita por cada programación explícita. Misma transacción
+          // e idempotencia del operationId: los reintentos offline no crean duplicados.
+          const proximaFecha = sumarDiasCiviles(payload.date, 7)
+          const conflicto = await tx.visita.findFirst({
+            where: { familiaId: payload.familyId, estado: 'PROGRAMADA', id: { not: visitaId },
+              fecha: { gte: new Date(`${sumarDiasCiviles(proximaFecha, -6)}T12:00:00Z`),
+                lte: new Date(`${sumarDiasCiviles(proximaFecha, 6)}T12:00:00Z`) } },
+            select: { id: true },
+          })
+          if (!conflicto) {
+            const siguiente = await tx.visita.create({ data: {
+              familiaId: payload.familyId, usuarioResponsableId: userId,
+              fecha: new Date(`${proximaFecha}T12:00:00Z`),
+              tipo: 'TECNICA', estado: 'PROGRAMADA',
+              recordatoriosConfig: configParaPrisma(payload.recordatorios ?? null),
+            } })
+            await actualizarRecordatorios(tx, 'VISITA', siguiente.id, proximaFecha, [userId], payload.recordatorios ?? null)
+            await crearNotificacionesDeActividad([
+              avisoVisita(siguiente.id, 'CREACION', userId, 'VISITA_PROGRAMADA', familia.nombreReferencia, proximaFecha),
+            ], tx)
+          }
         }
         return visitaId
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable })
@@ -614,13 +635,60 @@ visitsRouter.patch('/agenda/:visitId', async (req: Request, res: Response) => {
       if (!visita) return false
       if (visita.fecha.toISOString().slice(0, 10) === date) return true
       await tx.$queryRaw`SELECT "id" FROM "familia" WHERE "id" = ${visita.familiaId} FOR UPDATE`
-      const collision = await tx.visita.findFirst({
+      // Una cita creada manualmente puede tener una siguiente cita automatica.
+      // Reprogramar la primera desplaza su siguiente sin tocar citas manuales.
+      const fechaOriginal = visita.fecha.toISOString().slice(0, 10)
+      const tieneCaptura = await tx.visitaCaptura.findUnique({
+        where: { visitaId: visita.id }, select: { visitaId: true },
+      })
+      const posibleSiguiente = tieneCaptura ? await tx.visita.findFirst({
         where: { familiaId: visita.familiaId, estado: 'PROGRAMADA', id: { not: visita.id },
-          fecha: { gte: new Date(`${sumarDiasCiviles(date, -7)}T12:00:00Z`),
-            lte: new Date(`${sumarDiasCiviles(date, 7)}T12:00:00Z`) } },
+          usuarioResponsableId: visita.usuarioResponsableId,
+          fecha: new Date(`${sumarDiasCiviles(fechaOriginal, 7)}T12:00:00Z`) },
+        select: { id: true, fecha: true, recordatoriosConfig: true },
+      }) : null
+      const capturaSiguiente = posibleSiguiente ? await tx.visitaCaptura.findUnique({
+        where: { visitaId: posibleSiguiente.id }, select: { visitaId: true },
+      }) : null
+      const siguienteAutomatica = posibleSiguiente && !capturaSiguiente ? posibleSiguiente : null
+      const omitidos = siguienteAutomatica ? [visita.id, siguienteAutomatica.id] : [visita.id]
+      const choquePrincipal = await tx.visita.findFirst({
+        where: { familiaId: visita.familiaId, estado: 'PROGRAMADA', id: { notIn: omitidos },
+          fecha: { gte: new Date(`${sumarDiasCiviles(date, -6)}T12:00:00Z`),
+            lte: new Date(`${sumarDiasCiviles(date, 6)}T12:00:00Z`) } },
         select: { id: true },
       })
-      if (collision) throw new Error('SCHEDULE_CYCLE_CONFLICT')
+      if (choquePrincipal) throw new Error('SCHEDULE_CYCLE_CONFLICT')
+      if (siguienteAutomatica) {
+        const nuevaSiguiente = sumarDiasCiviles(date, 7)
+        const choqueSiguiente = await tx.visita.findFirst({
+          where: { familiaId: visita.familiaId, estado: 'PROGRAMADA', id: { notIn: omitidos },
+            fecha: { gte: new Date(`${sumarDiasCiviles(nuevaSiguiente, -6)}T12:00:00Z`),
+              lte: new Date(`${sumarDiasCiviles(nuevaSiguiente, 6)}T12:00:00Z`) } },
+          select: { id: true },
+        })
+        if (choqueSiguiente) throw new Error('SCHEDULE_CYCLE_CONFLICT')
+        await tx.visitaReprogramacion.create({ data: {
+          visitaId: siguienteAutomatica.id, fechaAnterior: siguienteAutomatica.fecha,
+          fechaNueva: new Date(`${nuevaSiguiente}T12:00:00Z`), usuarioId: req.session.userId!,
+          motivo: 'Ajuste automatico de la siguiente visita',
+        } })
+        const configSiguiente = reglasTrasCambioFecha(
+          configGuardada(siguienteAutomatica.recordatoriosConfig, sumarDiasCiviles(fechaOriginal, 7)),
+          nuevaSiguiente,
+        )
+        const cambiadoSiguiente = await tx.visita.update({ where: { id: siguienteAutomatica.id },
+          data: { fecha: new Date(`${nuevaSiguiente}T12:00:00Z`), versionNotificacion: { increment: 1 },
+            recordatoriosConfig: configParaPrisma(configSiguiente) },
+          select: { versionNotificacion: true },
+        })
+        await resolverAvisosVisitaVencida(tx, siguienteAutomatica.id)
+        await actualizarRecordatorios(tx, 'VISITA', siguienteAutomatica.id, nuevaSiguiente,
+          [visita.usuarioResponsableId], configSiguiente)
+        await crearNotificacionesDeActividad([avisoVisita(siguienteAutomatica.id,
+          `V${cambiadoSiguiente.versionNotificacion}`, visita.usuarioResponsableId,
+          'VISITA_REPROGRAMADA', visita.familia.nombreReferencia, nuevaSiguiente)], tx)
+      }
       await tx.visitaReprogramacion.create({ data: { visitaId: visita.id, fechaAnterior: visita.fecha, fechaNueva: new Date(`${date}T12:00:00Z`), usuarioId: req.session.userId!, motivo: reason || null } })
       const config = reglasTrasCambioFecha(configGuardada(visita.recordatoriosConfig, visita.fecha.toISOString().slice(0, 10)), date)
       const cambiado = await tx.visita.update({ where: { id: visita.id },
@@ -638,7 +706,7 @@ visitsRouter.patch('/agenda/:visitId', async (req: Request, res: Response) => {
     if (!actualizado) { res.status(404).json({ error: 'Visita programada no encontrada o ya realizada.' }); return }
     res.json({ accepted: true })
   } catch (error) {
-    if (error instanceof Error && error.message === 'SCHEDULE_CYCLE_CONFLICT') { res.status(409).json({ error: 'Ya existe una visita para este período de 8 días.' }); return }
+    if (error instanceof Error && error.message === 'SCHEDULE_CYCLE_CONFLICT') { res.status(409).json({ error: 'Ya existe una visita para este período semanal.' }); return }
     console.error('Error reprogramando visita:', error); res.status(503).json({ error: 'No se pudo reprogramar la visita.' })
   }
 })

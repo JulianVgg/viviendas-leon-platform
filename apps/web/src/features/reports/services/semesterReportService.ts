@@ -5,13 +5,14 @@ import type { FiltrosReporte, OpcionesReporte } from './semesterReportFilters'
 const API = (import.meta.env.VITE_API_URL?.trim() || '/api').replace(/\/$/, '')
 
 export type InformeSemestral = {
+  tipoCambioInstitucional: { quetzalesPorDolar: string; actualizadoEn: string }
   periodo: { anio: number; semestre: 1 | 2; desde: string; hasta: string }
   detalleCosechas: Array<{ id: number; fechaInicio: string; unidad: string; cantidad: string; cultivo: string }>
   detalleVentas: Array<{ id: number; fecha: string; moneda: string | null; importe: string | null; cultivo: string }>
   resumen: {
     cosechas: number; ventas: number; ventasConImporte: number
     cantidades: { kg: string; unidades: string; manojos: string }
-    totalVentasOriginalGTQ: string; totalVentasOriginalUSD: string
+    totalVentasOriginalGTQ: string; totalVentasOriginalUSD: string; totalVentasEquivalenteUSD: string
     excluidasPrueba: number; excluidasCrucePeriodo: number; datosIncompletos: number; posiblesDuplicados: number
   }
   porCultivo: Array<{

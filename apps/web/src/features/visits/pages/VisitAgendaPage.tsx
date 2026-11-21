@@ -17,7 +17,7 @@ import { obtenerMisInvitaciones, type DetalleInvitacion } from '@/features/notif
 import { addCivilDays, getVisitPlanning, type FamilyVisitPlanning } from '@/features/visits/services/visitPlanning'
 import type { Garden } from '@/features/agriculture/services/gardens'
 import FamilyVisitCoveragePanel from '@/features/visits/components/FamilyVisitCoveragePanel'
-import { buildFamilyVisitCoverage } from '@/features/visits/services/familyVisitCoverage'
+import { buildFamilyVisitCoverage, type FamilyCoverageRow } from '@/features/visits/services/familyVisitCoverage'
 import { getCoverageGardens } from '@/features/visits/services/visitCoverageData'
 import { filtrarAgenda, filtrosIniciales, type FiltrosAgenda } from '@/features/visits/services/personalCalendarFilters'
 import ScheduleTrainingDialog from '@/features/training/components/ScheduleTrainingDialog'
@@ -65,6 +65,7 @@ export default function VisitAgendaPage() {
   const [slide, setSlide] = useState(0)
   const [reminderView, setReminderView] = useState<'upcoming' | 'overdue' | 'undated' | 'all'>('upcoming')
   const [reminderDays, setReminderDays] = useState(30)
+  const [reminderLimit, setReminderLimit] = useState(8)
   const [schedulingDate, setSchedulingDate] = useState<string | null>(null)
   const [scheduleFamilyId, setScheduleFamilyId] = useState<number | null>(null)
   const [expandedDay, setExpandedDay] = useState<string | null>(null)
@@ -115,17 +116,21 @@ export default function VisitAgendaPage() {
     const target = items.find(item => item.id !== null && String(item.id) === targetVisitId)
     if (target) {
       setMonth(new Date(`${target.date}T12:00:00`))
-      setSelected(target)
+      if (searchParams.get('reprogramar') === '1') {
+        if (canManageVisit(target) && target.status === 'PROGRAMADA') setRescheduling(target)
+        else setError('No tienes permiso para reprogramar esta visita.')
+      } else setSelected(target)
     } else {
       setError('La visita no está disponible en tu agenda o no tienes permiso para consultarla.')
     }
     setSearchParams(previous => {
       const next = new URLSearchParams(previous)
       next.delete('visitId')
+      next.delete('reprogramar')
       next.delete('fecha')
       return next
     }, {replace: true})
-  }, [targetVisitId, loading, items, setSearchParams])
+  }, [targetVisitId, loading, items, setSearchParams, institutionManager, usuario?.id])
   // NTF-07: abrir directamente el compromiso mencionado en el aviso.
   useEffect(() => {
     if (!targetSeguimientoId || loading) return
@@ -241,7 +246,8 @@ export default function VisitAgendaPage() {
         key: item.key, label: item.family, kind: item.type === 'institutional' ? 'institutional' : item.type,
         visit: item.visit, followup: item.followup, invitation: item.invitation, training: item.training,
       }], filtros, today).length) return false
-      if (reminderView === 'all') return true
+      // Una vista general acotada: los registros antiguos siguen en Historial.
+      if (reminderView === 'all') return !item.date || (item.date >= addCivilDays(today, -30) && item.date <= addCivilDays(today, 90))
       if (reminderView === 'undated') return !item.date
       if (!item.date) return false
       if (reminderView === 'overdue') return item.date < today
@@ -250,9 +256,9 @@ export default function VisitAgendaPage() {
       return item.date >= today && item.date <= limit
     }).sort((a,b) => a.sortDate.localeCompare(b.sortDate))
   }, [items,followups,invitaciones,capacitaciones,today,filtros,reminderView,reminderDays])
-  const visibleReminders = reminders.slice(0, 12)
+  const visibleReminders = reminders.slice(0, reminderLimit)
   const pendingCount = followups.filter(f => f.status !== 'CUMPLIDO').length
-  useEffect(() => { setSlide(0) }, [filtros, reminderView, reminderDays])
+  useEffect(() => { setSlide(0); setReminderLimit(8) }, [filtros, reminderView, reminderDays])
   const detailsFollowUps = selected ? followups.filter(f => f.familyId === selected.familyId && (f.status !== 'CUMPLIDO' || f.sourceVisitId === selected.id)) : []
   const move = (n: number) => setMonth(prev => new Date(prev.getFullYear(), prev.getMonth()+n,1))
   const scrollToReminder = (index: number) => {
@@ -262,6 +268,14 @@ export default function VisitAgendaPage() {
   }
   const openFollowUp = (f: VisitFollowUp) => { setSelected(null); setEditing(f) }
   const openReschedule = (v: VisitListItem) => { setSelected(null); setRescheduling(v) }
+  const rescheduleFromCoverage = (row: FamilyCoverageRow) => {
+    const target = items.find(item => item.id === row.overdueVisitId && item.status === 'PROGRAMADA')
+    if (!target || !canManageVisit(target)) {
+      setError('La cita pertenece a otro responsable o todavía no está sincronizada. Solicita la reprogramación desde la agenda correspondiente.')
+      return
+    }
+    openReschedule(target)
+  }
   const requestDelete = (v: VisitListItem) => {
     if (!canManageVisit(v) || v.status !== 'PROGRAMADA' || !v.id || (v.syncStatus && v.syncStatus !== 'synced')) return
     setSelected(null)
@@ -363,12 +377,12 @@ export default function VisitAgendaPage() {
         <header className="flex items-center justify-between border-b border-gray-200 px-5 py-4 dark:border-gray-800"><h2 className="font-semibold text-gray-900 dark:text-white">Mis actividades</h2><Button type="button" variant="ghost" size="sm" onClick={()=>void refresh()} aria-label="Actualizar agenda" disabled={loading}><RefreshCw size={16}/></Button></header>
         <div className="grid gap-2 border-b border-gray-100 px-4 py-3 dark:border-gray-800">
           <select aria-label="Mostrar actividades" className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white" value={reminderView} onChange={e=>setReminderView(e.target.value as typeof reminderView)}>
-            <option value="upcoming">Próximas</option><option value="overdue">Vencidas</option><option value="undated">Sin fecha</option><option value="all">Todas</option>
+            <option value="upcoming">Próximas</option><option value="overdue">Vencidas</option><option value="undated">Sin fecha</option><option value="all">Todas (120 días)</option>
           </select>
           {reminderView === 'upcoming' && <select aria-label="Período de próximas actividades" className="h-10 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm dark:border-gray-700 dark:bg-gray-900 dark:text-white" value={reminderDays} onChange={e=>setReminderDays(Number(e.target.value))}>
             <option value={7}>Próximos 7 días</option><option value={30}>Próximos 30 días</option><option value={90}>Próximos 90 días</option>
           </select>}
-          <p className="text-xs text-gray-500 dark:text-gray-400">{reminders.length} actividad(es){reminders.length > visibleReminders.length ? ' · mostrando las primeras 12' : ''}</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">{reminders.length} actividad(es){reminders.length > visibleReminders.length ? ` · mostrando ${visibleReminders.length}` : ''}</p>
         </div>
         <div className="relative flex min-h-0 flex-1 gap-2 p-4">
           <div ref={carousel} onScroll={event => {
@@ -393,6 +407,10 @@ export default function VisitAgendaPage() {
                 {item.visit ? (!institutionManager && canManageVisit(item.visit) && item.visit.date === today && <Link to={`/visitas/nueva?familia=${item.visit.familyId}&fecha=${today}${item.visit.id && item.visit.status === 'PROGRAMADA' ? `&programada=${item.visit.id}` : ''}`} className="hover:underline">Registrar visita ↗</Link>) : (!institutionManager && item.followup && canManageFollowUp(item.followup) && <Link to={`/visitas/nueva?familia=${item.followup.familyId}&fecha=${today}`} className="hover:underline">Registrar visita ↗</Link>)}
               </div>
             </article>)}
+            {reminders.length > visibleReminders.length && <button type="button" onClick={() => setReminderLimit(n => n + 8)}
+              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-brand-600 hover:bg-brand-50 dark:border-gray-700 dark:text-brand-300">
+              Mostrar {Math.min(8, reminders.length - visibleReminders.length)} más
+            </button>}
           </div>
           {visibleReminders.length > 1 && <div className="flex shrink-0 flex-col items-center justify-start gap-1.5 pt-2" aria-label="Ir a recordatorio">
             {visibleReminders.map((item,index)=><button key={item.key} type="button" aria-label={`Ir al recordatorio ${index+1}`} aria-current={slide===index?'true':undefined}
@@ -403,7 +421,8 @@ export default function VisitAgendaPage() {
         <footer className="flex shrink-0 flex-wrap gap-3 border-t border-gray-200 px-5 py-3 text-xs dark:border-gray-800"><ClipboardList size={16} className="text-amber-500"/><span className="text-gray-600 dark:text-gray-400">{pendingCount} compromiso(s) por revisar</span><Link to="/visitas/historial" className="ml-auto font-medium text-brand-600 hover:underline dark:text-brand-400">Ver historial →</Link></footer>
       </section>
       <FamilyVisitCoveragePanel rows={coverage} loading={loading} local={coverageError}
-        onSchedule={familyId => { setScheduleFamilyId(familyId); setSchedulingDate(today) }}/>
+        onSchedule={familyId => { setScheduleFamilyId(familyId); setSchedulingDate(today) }}
+        onReschedule={rescheduleFromCoverage}/>
       </aside>
     </div>
     <Dialog open={Boolean(expandedDay)} onClose={() => setExpandedDay(null)} title="Registros del día"

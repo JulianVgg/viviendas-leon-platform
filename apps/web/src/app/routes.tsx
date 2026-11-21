@@ -49,6 +49,7 @@ import AuditLandingPage from '@/features/audit/pages/AuditLandingPage'
 // AUTH-04: Administración de usuarios, roles y permisos
 import UsuariosPage from '@/features/admin/pages/UsuariosPage'
 import RolesPermisosPage from '@/features/admin/pages/RolesPermisosPage'
+import TipoCambioPage from '@/features/admin/pages/TipoCambioPage'
 import CommunitiesPage from '@/features/catalogs/pages/CommunitiesPage'
 import MunicipalitiesPage from '@/features/catalogs/pages/MunicipalitiesPage'
 import ProgramsPage from '@/features/catalogs/pages/ProgramsPage'
@@ -288,6 +289,7 @@ export default function AppRoutes() {
           <Route path="administracion/comunidades" element={<CommunitiesPage />} />
           <Route path="administracion/municipios" element={<MunicipalitiesPage />} />
           <Route path="administracion/programas" element={<ProgramsPage />} />
+          <Route path="administracion/tipo-cambio" element={<TipoCambioPage />} />
           <Route path="administracion/cultivos" element={<CultivosPage />} />
 
           {/* AUTH-04: Acceso exclusivo de Directora */}

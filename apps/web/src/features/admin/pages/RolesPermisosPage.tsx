@@ -60,6 +60,8 @@ const GRUPOS: Grupo[] = [
     { codigo: 'PANTALLA_MUNICIPIOS', nombre: 'Municipios', ruta: '/administracion/municipios' },
     { codigo: 'MUNICIPIOS_WRITE', nombre: 'Modificar municipios', ruta: 'Operaciones API', especial: true },
     { codigo: 'PANTALLA_PROGRAMAS', nombre: 'Programas', ruta: '/administracion/programas' },
+    { codigo: 'PANTALLA_TIPO_CAMBIO', nombre: 'Cambios', ruta: '/administracion/tipo-cambio' },
+    { codigo: 'TIPO_CAMBIO_WRITE', nombre: 'Modificar tipo de cambio', ruta: 'Operaciones API', especial: true },
     { codigo: 'PROGRAMAS_WRITE', nombre: 'Escritura de programas', ruta: 'Operaciones API', especial: true },
     { codigo: 'PANTALLA_USUARIOS', nombre: 'Usuarios', ruta: '/administracion/usuarios', especial: true },
     { codigo: 'PANTALLA_ROLES_PERMISOS', nombre: 'Roles y permisos', ruta: '/administracion/roles-permisos', especial: true },

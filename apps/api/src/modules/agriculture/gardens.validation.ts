@@ -1,5 +1,5 @@
 export const GARDEN_ENTORNOS = ['CAMPO_ABIERTO', 'MACROTUNEL', 'MIXTO', 'OTRO'] as const
-export const GARDEN_MODALIDADES = ['AGRICOLA', 'AGROFORESTAL', 'SILVOPASTORIL'] as const
+export const GARDEN_MODALIDADES = ['AGRICOLA', 'PECUARIO', 'AGROPECUARIO', 'AGROINDUSTRIA', 'AGROFORESTAL', 'SILVOPASTORIL'] as const
 
 type EntornoCultivo = typeof GARDEN_ENTORNOS[number]
 type ModalidadProductiva = typeof GARDEN_MODALIDADES[number]
@@ -103,6 +103,7 @@ export function validateGardenInput(body: unknown): { data: GardenInput | null; 
   const nombre = optionalString(source.nombre, 'nombre', 120, details)
   const observaciones = optionalString(source.observaciones, 'observaciones', 2000, details)
   const classification = parseClassification(source, details)
+  if (classification.tipo !== 'FAMILIAR') details.push({ field: 'tipo', message: 'Los nuevos huertos deben ser familiares.' })
   const estado = source.estado
   if (estado !== 'PLANIFICADO' && estado !== 'ACTIVO' && estado !== 'INACTIVO') {
     details.push({ field: 'estado', message: 'Selecciona un estado válido.' })

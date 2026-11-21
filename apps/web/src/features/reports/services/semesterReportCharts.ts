@@ -3,7 +3,7 @@ import type { InformeSemestral } from './semesterReportService'
 const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 const mesClave = (fecha: string) => fecha.slice(0, 7)
 
-export function prepararGraficasReporte(informe: Pick<InformeSemestral, 'periodo' | 'detalleCosechas' | 'detalleVentas' | 'porCultivo'>) {
+export function prepararGraficasReporte(informe: Pick<InformeSemestral, 'periodo' | 'detalleCosechas' | 'detalleVentas' | 'porCultivo' | 'tipoCambioInstitucional'>) {
   const { desde, hasta } = informe.periodo
   const fechas: string[] = []
   let year = Number(desde.slice(0, 4))
@@ -37,7 +37,10 @@ export function prepararGraficasReporte(informe: Pick<InformeSemestral, 'periodo
     etiquetas: fechas.map(f => `${MONTHS[Number(f.slice(5, 7)) - 1]} ${f.slice(0, 4)}`),
     kilos: fechas.map(f => kilos.get(f) ?? 0),
     gtq: fechas.map(f => gtq.get(f) ?? 0),
-    usd: fechas.map(f => usd.get(f) ?? 0),
+    usd: fechas.map(f => {
+      const tasa = Number(informe.tipoCambioInstitucional.quetzalesPorDolar)
+      return (usd.get(f) ?? 0) + (tasa > 0 ? (gtq.get(f) ?? 0) / tasa : 0)
+    }),
     cultivos: [...top.map(f => ({ nombre: f.cultivo, kg: Number(f.kg) })), ...(resto > 0 ? [{ nombre: 'Otros', kg: resto }] : [])],
   }
 }

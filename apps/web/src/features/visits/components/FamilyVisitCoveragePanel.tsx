@@ -12,6 +12,7 @@ type Props = {
   selectedFamilyId?: number | null
   onSelect?: (familyId: number) => void
   onSchedule?: (familyId: number) => void
+  onReschedule?: (row: FamilyCoverageRow) => void
 }
 const LIMIT = 8
 const selectClass = 'h-9 min-w-0 rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-700 focus:border-brand-400 focus:outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200'
@@ -22,7 +23,7 @@ const stateStyle = {
   pendiente: 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900',
 } as const
 
-export default function FamilyVisitCoveragePanel({ rows, loading = false, local = false, compact = false, selectionDisabled = false, selectedFamilyId, onSelect, onSchedule }: Props) {
+export default function FamilyVisitCoveragePanel({ rows, loading = false, local = false, compact = false, selectionDisabled = false, selectedFamilyId, onSelect, onSchedule, onReschedule }: Props) {
   const [filter, setFilter] = useState<CoverageFilter>('faltan')
   const [search, setSearch] = useState('')
   const [limit, setLimit] = useState(LIMIT)
@@ -49,7 +50,7 @@ export default function FamilyVisitCoveragePanel({ rows, loading = false, local 
       {!loading && filtered.length === 0 ? <p className="py-5 text-center text-xs text-gray-500">{rows.length ? 'Sin familias para estos filtros.' : 'Sin familias con huerto disponibles.'}</p> : null}
       {available.map(row => {
         const completed = row.status === 'realizada' || row.status === 'agendada'
-        const subtitle = row.status === 'realizada' ? 'Visitada · últimos 8 días'
+        const subtitle = row.status === 'realizada' ? 'Visitada · últimos 7 días'
           : row.status === 'agendada' ? `Agendada · ${row.scheduledDate}`
             : row.status === 'vencida' ? 'Visita vencida · reprogramar' : 'Por agendar'
         return <div key={row.familyId} className={`flex min-w-0 items-center gap-2 rounded-xl border p-2.5 text-xs ${stateStyle[row.status]} ${selectedFamilyId === row.familyId ? 'ring-2 ring-brand-400' : ''}`}>
@@ -60,12 +61,15 @@ export default function FamilyVisitCoveragePanel({ rows, loading = false, local 
             <p className={`flex items-center gap-1.5 font-semibold text-gray-800 dark:text-gray-100 ${completed ? 'line-through decoration-gray-400' : ''}`}><FamilyStatusDot state={row.familyState}/><span className="min-w-0 truncate" title={row.name}>{row.name}</span></p>
             <p className="mt-0.5 truncate text-gray-500" title={`${row.community} · ${subtitle}`}>{subtitle}</p>
           </div>
-          {onSelect ? <button type="button" disabled={selectionDisabled} aria-label={`Seleccionar ${row.name}`} onClick={() => onSelect(row.familyId)} className="shrink-0 rounded-lg border border-brand-200 px-2.5 py-2 font-medium text-brand-700 transition hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-brand-700 dark:text-brand-300" >{selectedFamilyId === row.familyId ? 'Elegida' : 'Elegir'}</button>
+          {row.status === 'vencida' && onReschedule
+            ? <button type="button" onClick={() => onReschedule(row)} disabled={selectionDisabled || !row.overdueVisitId} title={!row.overdueVisitId ? 'Sin cita sincronizada para reprogramar' : undefined}
+                className="shrink-0 rounded-lg bg-rose-600 px-2.5 py-2 font-semibold text-white transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50">Reprogramar</button>
+            : onSelect ? <button type="button" disabled={selectionDisabled || row.status === 'vencida'} aria-label={`Seleccionar ${row.name}`} onClick={() => onSelect(row.familyId)} className="shrink-0 rounded-lg border border-brand-200 px-2.5 py-2 font-medium text-brand-700 transition hover:bg-brand-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-brand-700 dark:text-brand-300" >{selectedFamilyId === row.familyId ? 'Elegida' : 'Elegir'}</button>
             : row.status === 'pendiente' && onSchedule ? <button type="button" onClick={() => onSchedule(row.familyId)} className="shrink-0 rounded-lg bg-brand-500 px-2.5 py-2 font-semibold text-white transition hover:bg-brand-600">Agendar</button> : null}
         </div>
       })}
       {filtered.length > available.length && <button type="button" onClick={() => setLimit(prev => prev + LIMIT)} className="w-full rounded-lg border border-gray-200 py-2 text-xs font-medium text-brand-600 transition hover:bg-brand-50 dark:border-gray-700 dark:text-brand-300">Mostrar {Math.min(LIMIT, filtered.length - available.length)} más</button>}
     </div>
-    <footer className="border-t border-gray-100 px-4 py-2 text-[11px] text-gray-500 dark:border-gray-800">{filtered.length} de {rows.length} familias · Ciclo de 8 días</footer>
+    <footer className="border-t border-gray-100 px-4 py-2 text-[11px] text-gray-500 dark:border-gray-800">{filtered.length} de {rows.length} familias · Ciclo de 7 días</footer>
   </section>
 }

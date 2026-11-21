@@ -24,8 +24,8 @@ export function capturaValida(fechaRegistro: string, creadoEn: string | undefine
   return fechaRegistro === fechaHoyGuatemala(instante)
 }
 
-// Periodicidad institucional orientativa: una visita por familia cada 8 días.
-export const CICLO_VISITA_DIAS = 8
+// Frecuencia semanal: 7 días entre fechas de visitas (20 -> 27).
+export const CICLO_VISITA_DIAS = 7
 export function sumarDiasCiviles(fecha: string, dias: number): string {
   const instant = new Date(`${fecha}T12:00:00Z`)
   if (Number.isNaN(instant.getTime()) || !Number.isInteger(dias)) throw new Error('Fecha no válida.')

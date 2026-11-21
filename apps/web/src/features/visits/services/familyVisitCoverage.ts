@@ -13,6 +13,8 @@ export type FamilyCoverageRow = {
   scheduledDate: string | null
   overdueDate: string | null
   lastCompleted: string | null
+  overdueVisitId: number | null
+  overdueResponsibleUserId: number | null
 }
 
 const sortOrder: Record<CoverageStatus, number> = { pendiente: 0, vencida: 1, agendada: 2, realizada: 3 }
@@ -22,7 +24,7 @@ function shiftCivilDate(date: string, days: number): string {
   return parsed.toISOString().slice(0, 10)
 }
 
-/** Un registro por familia, incluso si tiene varios huertos. El ciclo comprende los últimos ocho días. */
+/** Un registro por familia, incluso si tiene varios huertos. Cobertura de los últimos siete días. */
 export function buildFamilyVisitCoverage(
   gardens: Garden[], planning: FamilyVisitPlanning[], visits: VisitListItem[], today: string,
 ): FamilyCoverageRow[] {
@@ -36,7 +38,7 @@ export function buildFamilyVisitCoverage(
   for (const visit of visits) {
     byFamily.set(visit.familyId, [...(byFamily.get(visit.familyId) ?? []), visit])
   }
-  const start = shiftCivilDate(today, -7)
+  const start = shiftCivilDate(today, -6)
   return [...unique.values()].map(garden => {
     const familyVisits = byFamily.get(garden.familiaId) ?? []
     const record = info.get(garden.familiaId)
@@ -45,16 +47,26 @@ export function buildFamilyVisitCoverage(
     const future = [...(record?.scheduled ?? []).map(v => v.date),
       ...familyVisits.filter(v => v.status === 'PROGRAMADA').map(v => v.date)]
       .filter(date => date >= today).sort()[0] ?? null
-    const overdue = [...(record?.scheduled ?? []).map(v => v.date),
-      ...familyVisits.filter(v => v.status === 'PROGRAMADA').map(v => v.date)]
-      .filter(date => date < today).sort().at(-1) ?? null
-    const status: CoverageStatus = completedDates.length ? 'realizada' : future ? 'agendada' : overdue ? 'vencida' : 'pendiente'
+    // Usar el ID real de la cita vencida: no crear una nueva al reprogramar.
+    const programmed = new Map<number, { id: number; date: string; responsibleUserId: number }>()
+    for (const visit of record?.scheduled ?? []) programmed.set(visit.id, visit)
+    for (const visit of familyVisits) {
+      if (visit.status === 'PROGRAMADA' && visit.id !== null) {
+        programmed.set(visit.id, { id: visit.id, date: visit.date, responsibleUserId: visit.responsibleUserId ?? 0 })
+      }
+    }
+    const lastOverdue = [...programmed.values()].filter(visit => visit.date < today)
+      .sort((a, b) => b.date.localeCompare(a.date))[0] ?? null
+    const overdue = lastOverdue?.date ?? null
+    const status: CoverageStatus = overdue ? 'vencida' : completedDates.length ? 'realizada' : future ? 'agendada' : 'pendiente'
     return {
       familyId: garden.familiaId,
       name: garden.familia.nombreReferencia,
       community: garden.familia.comunidad.nombre,
       familyState: garden.familia.estado,
       status, scheduledDate: future, overdueDate: overdue,
+      overdueVisitId: lastOverdue?.id ?? null,
+      overdueResponsibleUserId: lastOverdue?.responsibleUserId ?? null,
       lastCompleted: completedDates.at(-1) ?? record?.lastCompleted ?? null,
     }
   }).sort((a, b) => sortOrder[a.status] - sortOrder[b.status] || a.name.localeCompare(b.name, 'es'))

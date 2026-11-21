@@ -112,7 +112,7 @@ export default function ProduccionSemestralReportPage() {
     { titulo: 'Cosechas', valor: numero(informeVigente.resumen.cosechas), icono: PackageCheck, ruta: '/gestion-agricola/huertos' },
     { titulo: 'Producción (kg)', valor: numero(informeVigente.resumen.cantidades.kg), icono: Sprout, ruta: '/gestion-agricola/huertos' },
     { titulo: 'Ventas (GTQ)', valor: importe(informeVigente.resumen.totalVentasOriginalGTQ, 'GTQ'), icono: Coins, ruta: '/gestion-agricola/huertos' },
-    { titulo: 'Ventas (USD)', valor: importe(informeVigente.resumen.totalVentasOriginalUSD, 'USD'), icono: Coins, ruta: '/gestion-agricola/huertos' },
+    { titulo: 'Ventas (USD equiv.)', valor: importe(informeVigente.resumen.totalVentasEquivalenteUSD, 'USD'), icono: Coins, ruta: '/gestion-agricola/huertos' },
   ] : []
 
   if (!autorizado) return <main className="p-6 text-sm text-error-600" role="alert">No tienes permiso para consultar reportes.</main>
@@ -192,15 +192,15 @@ export default function ProduccionSemestralReportPage() {
             return permitido ? <Link key={titulo} to={ruta} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-theme-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-theme-sm motion-reduce:transform-none dark:border-gray-800 dark:bg-white/[0.03]" aria-label={`${titulo}: ${valor}. Abrir módulo relacionado`}>{contenido}</Link> : <div key={titulo} className="rounded-2xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-white/[0.03]">{contenido}</div>
           })}
         </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400" title="Los totales respetan la moneda original de cada venta; no se aplica ningún tipo de cambio.">Ventas en moneda original · Sin conversión entre GTQ y USD.</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400" title="El valor en USD es referencial y no representa ingresos adicionales.">Equivalencia referencial · 1 USD = Q {numero(informeVigente.tipoCambioInstitucional.quetzalesPorDolar)} · Tasa institucional actual (se aplica al período consultado).</p>
       </section>
 
       <section className="grid grid-cols-1 gap-5 lg:grid-cols-2" aria-label="Gráficas de producción">
         <Card className="dashboard-content-enter"><CardHeader title="Evolución de cosechas" description="Kilogramos registrados por mes."/><CardBody>
           {graficas && graficas.kilos.some(v => v > 0) ? <ProAreaChart labels={graficas.etiquetas} series={[{ name: 'Producción', data: graficas.kilos }]} unit="kg" ariaLabel="Evolución de kilogramos cosechados por mes" height={290}/> : vacio}
         </CardBody></Card>
-        <Card className="dashboard-content-enter"><CardHeader title="Ventas por mes" actions={<select className={`${selector} w-28`} aria-label="Moneda de la gráfica de ventas" value={monedaGrafica} onChange={e => setMonedaGrafica(e.target.value as 'GTQ' | 'USD')}><option value="GTQ">GTQ</option><option value="USD">USD</option></select>}/><CardBody>
-          {graficas && (monedaGrafica === 'GTQ' ? graficas.gtq : graficas.usd).some(v => v > 0) ? <ProBarChart labels={graficas.etiquetas} series={[{ name: monedaGrafica, data: monedaGrafica === 'GTQ' ? graficas.gtq : graficas.usd }]} unit={monedaGrafica} ariaLabel={`Ventas mensuales en ${monedaGrafica}`} height={290}/> : vacio}
+        <Card className="dashboard-content-enter"><CardHeader title="Ventas por mes" actions={<select className={`${selector} w-28`} aria-label="Moneda de la gráfica de ventas" value={monedaGrafica} onChange={e => setMonedaGrafica(e.target.value as 'GTQ' | 'USD')}><option value="GTQ">GTQ</option><option value="USD">USD equiv.</option></select>}/><CardBody>
+          {graficas && (monedaGrafica === 'GTQ' ? graficas.gtq : graficas.usd).some(v => v > 0) ? <ProBarChart labels={graficas.etiquetas} series={[{ name: monedaGrafica === 'USD' ? 'USD equiv.' : 'GTQ', data: monedaGrafica === 'GTQ' ? graficas.gtq : graficas.usd }]} unit={monedaGrafica} ariaLabel={`Ventas mensuales en ${monedaGrafica}`} height={290}/> : vacio}
         </CardBody></Card>
         <Card className="dashboard-content-enter"><CardHeader title="Cultivos con mayor producción" description="Comparación por kilogramos."/><CardBody>
           {graficas && graficas.cultivos.length > 0 ? <ProBarChart labels={graficas.cultivos.map(c => c.nombre)} series={[{ name: 'Kilogramos', data: graficas.cultivos.map(c => c.kg) }]} horizontal unit="kg" ariaLabel="Cultivos con mayor producción en kilogramos" height={300}/> : vacio}
