@@ -11,6 +11,9 @@ import {
   GraduationCap,
   History,
   HeartHandshake,
+  Landmark,
+  WalletCards,
+  HeartPulse,
   ArrowLeftRight,
   MapPinned,
   House,
@@ -26,7 +29,7 @@ import {
   Wheat,
 } from 'lucide-react'
 import type { UserRole } from '@/types/roles'
-import { canViewPath, type PermissionUser } from '@/features/auth/screenPermissions'
+import { canViewPath, isDireccionGeneral, type PermissionUser } from '@/features/auth/screenPermissions'
 import { esTecnicoCampo } from '@/features/auth/calendarAccess'
 
 export type NavigationItem = {
@@ -71,6 +74,9 @@ const icons = {
   programs: <HeartHandshake size={size} strokeWidth={strokeWidth} />,
   users: <UsersRound size={size} strokeWidth={strokeWidth} />,
   permissions: <SlidersHorizontal size={size} strokeWidth={strokeWidth} />,
+  finance: <WalletCards size={size} strokeWidth={strokeWidth} />,
+  bank: <Landmark size={size} strokeWidth={strokeWidth} />,
+  medical: <HeartPulse size={size} strokeWidth={strokeWidth} />,
   audit: <ShieldCheck size={size} strokeWidth={strokeWidth} />,
 }
 
@@ -122,8 +128,13 @@ export const navigationGroups: { id: string; name: string; items: NavigationItem
         { id: 'users', name: 'Usuarios', path: '/administracion/usuarios', icon: icons.users },
         { id: 'roles', name: 'Roles y permisos', path: '/administracion/roles-permisos', icon: icons.permissions },
       ] },
+      { id: 'finance', name: 'Control financiero', path: '/finanzas', icon: icons.finance, children: [
+        { id: 'finance-banks', name: 'Bancos', path: '/finanzas/bancos', icon: icons.bank },
+        { id: 'finance-cash', name: 'Caja chica', path: '/finanzas/caja-chica', icon: icons.finance },
+        { id: 'finance-medical', name: 'Fondos médicos', path: '/finanzas/fondos-medicos', icon: icons.medical },
+        { id: 'finance-report', name: 'Informe mensual', path: '/finanzas/informe-mensual', icon: icons.documents },
+      ] },
       { id: 'audit', name: 'Auditoría', path: '/auditoria', icon: icons.audit, roles: ['audit'], children: [
-        { id: 'audit-finance', name: 'Control financiero', path: '/auditoria/control-financiero', icon: icons.reports },
         { id: 'audit-log', name: 'Bitácora de operaciones', path: '/auditoria/bitacora', icon: icons.history },
       ] },
     ],
@@ -141,6 +152,7 @@ export function navigationForAccount(usuario: PermissionUser) {
     .map((grupo) => ({
       ...grupo,
       items: grupo.items.flatMap((item) => {
+        if (item.id === 'audit' && !isDireccionGeneral(usuario)) return []
         if (item.id === 'my-calendar') {
           const calendario = esTecnicoCampo(usuario) ? 'calendar-personal' : 'calendar-institutional'
           const children = item.children!.filter(child =>

@@ -917,6 +917,10 @@ model Usuario {
   reprogramacionesReemplazo SolicitudReprogramacionInvitacion[] @relation("ReprogramacionReemplazo")
   capacitacionesAsignadas Capacitacion[] @relation("CapacitacionesAsignadas")
   solicitudesAnalisisIa AnalisisIaSolicitud[]
+  finCuentasCreadas FinCuenta[] @relation("FinCuentaCreador")
+  finMovimientosCreados FinMovimiento[] @relation("FinMovimientoCreador")
+  finMovimientosAnulados FinMovimiento[] @relation("FinMovimientoAnulador")
+  finComprobantesCreados FinComprobante[] @relation("FinComprobanteCreador")
   tiposCambioRegistrados TipoCambio[]
   tasasInstitucionales ConfiguracionTipoCambio[]
   informesRevisados ReporteSemestralRevision[] @relation("RevisionReportesUsuario")
@@ -1236,4 +1240,86 @@ model AnalisisIaSolicitud {
   @@index([usuarioId, creadoEn])
   @@index([creadoEn])
   @@map("analisis_ia_solicitud")
+}
+
+// FIN-01: registro de finanzas institucionales. No almacena registros de ejemplo.
+model FinCuenta {
+  id Int @id @default(autoincrement())
+  tipo String @db.VarChar(20)
+  nombre String @db.VarChar(100)
+  referencia String? @db.VarChar(40)
+  saldoInicial Decimal @default(0) @map("saldo_inicial") @db.Decimal(14, 2)
+  fechaApertura DateTime @map("fecha_apertura") @db.Date
+  activo Boolean @default(true)
+  creadoEn DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+  creadoPorId Int @map("creado_por_id")
+  creadoPor Usuario @relation("FinCuentaCreador", fields: [creadoPorId], references: [id])
+  subcuentas FinSubcuenta[]
+  movimientos FinMovimiento[]
+  @@index([tipo, activo])
+  @@map("fin_cuenta")
+}
+
+model FinSubcuenta {
+  id Int @id @default(autoincrement())
+  cuentaId Int @map("cuenta_id")
+  nombre String @db.VarChar(100)
+  saldoInicial Decimal @default(0) @map("saldo_inicial") @db.Decimal(14, 2)
+  activa Boolean @default(true)
+  cuenta FinCuenta @relation(fields: [cuentaId], references: [id], onDelete: Restrict)
+  movimientos FinMovimiento[]
+  @@index([cuentaId, activa])
+  @@unique([cuentaId, nombre])
+  @@map("fin_subcuenta")
+}
+
+model FinCategoria {
+  id Int @id @default(autoincrement())
+  nombre String @unique @db.VarChar(100)
+  grupo String @db.VarChar(40)
+  activa Boolean @default(true)
+  movimientos FinMovimiento[]
+  @@map("fin_categoria")
+}
+
+model FinMovimiento {
+  id Int @id @default(autoincrement())
+  cuentaId Int @map("cuenta_id")
+  subcuentaId Int? @map("subcuenta_id")
+  categoriaId Int? @map("categoria_id")
+  fecha DateTime @db.Date
+  tipo String @db.VarChar(12)
+  importe Decimal @db.Decimal(14,2)
+  descripcion String @db.VarChar(500)
+  referencia String? @db.VarChar(80)
+  beneficiario String? @db.VarChar(120)
+  trasladoId String? @map("traslado_id") @db.Uuid
+  creadoPorId Int @map("creado_por_id")
+  creadoEn DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+  anuladoEn DateTime? @map("anulado_en") @db.Timestamptz(6)
+  anuladoPorId Int? @map("anulado_por_id")
+  motivoAnulacion String? @map("motivo_anulacion") @db.VarChar(300)
+  cuenta FinCuenta @relation(fields: [cuentaId], references: [id], onDelete: Restrict)
+  subcuenta FinSubcuenta? @relation(fields: [subcuentaId], references: [id], onDelete: Restrict)
+  categoria FinCategoria? @relation(fields: [categoriaId], references: [id], onDelete: Restrict)
+  creadoPor Usuario @relation("FinMovimientoCreador", fields: [creadoPorId], references: [id])
+  anuladoPor Usuario? @relation("FinMovimientoAnulador", fields: [anuladoPorId], references: [id])
+  comprobante FinComprobante?
+  @@index([cuentaId, fecha, id])
+  @@index([subcuentaId, fecha])
+  @@index([trasladoId])
+  @@map("fin_movimiento")
+}
+
+model FinComprobante {
+  id Int @id @default(autoincrement())
+  movimientoId Int @unique @map("movimiento_id")
+  nombre String @db.VarChar(120)
+  mime String @db.VarChar(40)
+  contenido Bytes
+  creadoEn DateTime @default(now()) @map("creado_en") @db.Timestamptz(6)
+  creadoPorId Int @map("creado_por_id")
+  movimiento FinMovimiento @relation(fields: [movimientoId], references: [id], onDelete: Restrict)
+  creadoPor Usuario @relation("FinComprobanteCreador", fields: [creadoPorId], references: [id])
+  @@map("fin_comprobante")
 }

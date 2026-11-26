@@ -67,9 +67,17 @@ const GRUPOS: Grupo[] = [
     { codigo: 'PANTALLA_ROLES_PERMISOS', nombre: 'Roles y permisos', ruta: '/administracion/roles-permisos', especial: true },
     { codigo: 'PANTALLA_CONFIGURACION', nombre: 'Configuración', ruta: '/administracion/configuracion' },
   ] },
-  { titulo: 'Auditoría', pantallas: [
+  { titulo: 'Control financiero', pantallas: [
+    { codigo: 'PANTALLA_CONTROL_FINANCIERO', nombre: 'Ventas agrícolas (consulta)', ruta: '/auditoria/control-financiero' },
+    { codigo: 'PANTALLA_FINANZAS_BANCOS', nombre: 'Bancos', ruta: '/finanzas/bancos' },
+    { codigo: 'PANTALLA_FINANZAS_CAJA', nombre: 'Caja chica', ruta: '/finanzas/caja-chica' },
+    { codigo: 'PANTALLA_FINANZAS_MEDICOS', nombre: 'Fondos médicos', ruta: '/finanzas/fondos-medicos' },
+    { codigo: 'PANTALLA_FINANZAS_INFORME', nombre: 'Informe mensual', ruta: '/finanzas/informe-mensual' },
+    { codigo: 'FINANZAS_WRITE', nombre: 'Registrar movimientos financieros', ruta: 'Operaciones API', especial: true },
+    { codigo: 'FINANZAS_ANULAR', nombre: 'Anular movimientos financieros', ruta: 'Operaciones API', especial: true },
+  ] },
+  { titulo: 'Auditoría técnica', pantallas: [
     { codigo: 'PANTALLA_AUDITORIA', nombre: 'Auditoría', ruta: '/auditoria' },
-    { codigo: 'PANTALLA_CONTROL_FINANCIERO', nombre: 'Control financiero de ventas agrícolas', ruta: '/auditoria/control-financiero' },
     { codigo: 'PANTALLA_BITACORA', nombre: 'Bitácora técnica (solo Dirección)', ruta: '/auditoria/bitacora', especial: true },
   ] },
   { titulo: 'Herramientas de prueba (solo desarrollo)', pantallas: [

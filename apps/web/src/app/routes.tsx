@@ -44,6 +44,8 @@ import EstablecerPasswordPage from '@/features/auth/pages/EstablecerPasswordPage
 import MiPerfilPage from '@/features/profile/pages/MiPerfilPage'
 import AuditLogPage from '@/features/audit/pages/AuditLogPage'
 import ControlFinancieroPage from '@/features/audit/pages/ControlFinancieroPage'
+import FinanceLedgerPage from '@/features/finance/pages/FinanceLedgerPage'
+import FinanceMonthlyPage from '@/features/finance/pages/FinanceMonthlyPage'
 import AuditLandingPage from '@/features/audit/pages/AuditLandingPage'
 
 // AUTH-04: Administración de usuarios, roles y permisos
@@ -318,6 +320,13 @@ export default function AppRoutes() {
               ['Sección', 'Estado'],
             )}
           />
+
+          {/* Control financiero: permisos aplicados en cada ruta del servidor. */}
+          <Route path="finanzas" element={<Navigate to="/finanzas/bancos" replace/>}/>
+          <Route path="finanzas/bancos" element={<FinanceLedgerPage tipo="bancos"/>}/>
+          <Route path="finanzas/caja-chica" element={<FinanceLedgerPage tipo="caja-chica"/>}/>
+          <Route path="finanzas/fondos-medicos" element={<FinanceLedgerPage tipo="fondos-medicos"/>}/>
+          <Route path="finanzas/informe-mensual" element={<FinanceMonthlyPage/>}/>
 
           {/* Auditoría: el API valida los permisos en cada consulta. */}
           <Route path="auditoria" element={<AuditLandingPage />} />
