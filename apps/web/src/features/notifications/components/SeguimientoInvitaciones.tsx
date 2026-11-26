@@ -3,7 +3,7 @@ import { BarChart3, RefreshCw } from 'lucide-react'
 import { NOTIFICACIONES_ACTUALIZADAS } from '../services/notificationsService'
 import { obtenerResumenInvitaciones, type ResumenInvitacion } from '../services/invitationsService'
 
-const nombres: Record<string, string> = { ACEPTADA: 'Aceptó', PENDIENTE: 'Pendiente', RECHAZADA: 'Rechazó (histórico)', REPROGRAMACION: 'Propuso nueva fecha', ASIGNADO: 'Asignado' }
+const nombres: Record<string, string> = { ACEPTADA: 'Asignado', PENDIENTE: 'Asignado', RECHAZADA: 'Rechazó (histórico)', REPROGRAMACION: 'Propuso nueva fecha', ASIGNADO: 'Asignado' }
 const clases: Record<string, string> = {
   ACEPTADA: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300',
   PENDIENTE: 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300',
@@ -42,23 +42,22 @@ export default function SeguimientoInvitaciones() {
   const evento = eventos.find(e => e.eventoId === elegido)
   return <aside aria-label="Seguimiento de invitaciones" className="self-start rounded-2xl border border-gray-200 bg-white p-4 shadow-theme-xs dark:border-gray-800 dark:bg-gray-900 sm:p-5">
     <div className="mb-2 flex items-center justify-between gap-2">
-      <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white"><BarChart3 size={18} className="text-brand-500" /> Seguimiento de respuestas</h2>
+      <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-white"><BarChart3 size={18} className="text-brand-500" /> Participantes asignados</h2>
       <button type="button" aria-label="Actualizar seguimiento" disabled={cargando} onClick={() => setRevision(valor => valor + 1)} className="layout-focus rounded-lg border border-gray-200 p-2 text-gray-600 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300"><RefreshCw size={15} /></button>
     </div>
-    <p className="mb-4 text-xs leading-5 text-gray-500 dark:text-gray-400">Consulta los estados de cada invitación institucional.</p>
+    <p className="mb-4 text-xs leading-5 text-gray-500 dark:text-gray-400">Consulta las asignaciones y las solicitudes de reprogramación.</p>
     {error && <p role="alert" className="mb-3 text-sm text-red-600">{error}</p>}
-    <label htmlFor="invitation-selector" className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300">Seleccionar invitación</label>
+    <label htmlFor="invitation-selector" className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300">Seleccionar actividad</label>
     <select id="invitation-selector" value={elegido ?? ''} disabled={!eventos.length} onChange={e => setElegido(Number(e.target.value))}
       className="layout-focus mb-4 min-h-11 w-full rounded-lg border border-gray-300 bg-white px-3 text-sm text-gray-800 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
-      {eventos.length === 0 && <option value="">Sin invitaciones</option>}
+      {eventos.length === 0 && <option value="">Sin actividades</option>}
       {eventos.map(item => <option key={item.eventoId} value={item.eventoId}>{item.titulo} · {item.fechaInicio}</option>)}
     </select>
-    {cargando && !eventos.length && <p role="status" className="text-sm text-gray-500">Cargando invitaciones...</p>}
+    {cargando && !eventos.length && <p role="status" className="text-sm text-gray-500">Cargando actividades...</p>}
     {evento && <>
-      <div className="grid grid-cols-3 gap-2">
-        <div className="rounded-lg bg-emerald-50 p-2.5 text-center dark:bg-emerald-500/10"><p className="text-xl font-semibold text-emerald-700 dark:text-emerald-300">{evento.aceptaron}</p><p className="text-xs text-emerald-800 dark:text-emerald-200">Aceptaron</p></div>
-        <div className="rounded-lg bg-amber-50 p-2.5 text-center dark:bg-amber-500/10"><p className="text-xl font-semibold text-amber-700 dark:text-amber-200">{evento.pendientes}</p><p className="text-xs text-amber-800 dark:text-amber-200">Pendientes</p></div>
-        <div className="rounded-lg bg-blue-50 p-2.5 text-center dark:bg-blue-500/10"><p className="text-xl font-semibold text-blue-700 dark:text-blue-300">{evento.participantes.filter(p => p.estado === 'REPROGRAMACION').length}</p><p className="text-xs text-blue-800 dark:text-blue-200">Reprogramar</p></div>
+      <div className="grid grid-cols-2 gap-2">
+        <div className="rounded-lg bg-emerald-50 p-2.5 text-center dark:bg-emerald-500/10"><p className="text-xl font-semibold text-emerald-700 dark:text-emerald-300">{evento.aceptaron}</p><p className="text-xs text-emerald-800 dark:text-emerald-200">Asignados</p></div>
+        <div className="rounded-lg bg-blue-50 p-2.5 text-center dark:bg-blue-500/10"><p className="text-xl font-semibold text-blue-700 dark:text-blue-300">{evento.pendientes}</p><p className="text-xs text-blue-800 dark:text-blue-200">Reprogramaciones</p></div>
       </div>
       {evento.rechazaron > 0 && <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">{evento.rechazaron} rechazo(s) histórico(s)</p>}
       <p className="mt-5 mb-2 text-sm font-semibold text-gray-800 dark:text-gray-200">Participantes ({evento.invitados})</p>
@@ -71,6 +70,6 @@ export default function SeguimientoInvitaciones() {
         </li>)}
       </ul>
     </>}
-    {!cargando && !evento && !error && <p className="text-sm text-gray-500">Todavía no se han enviado invitaciones.</p>}
+    {!cargando && !evento && !error && <p className="text-sm text-gray-500">Todavía no hay actividades asignadas.</p>}
   </aside>
 }

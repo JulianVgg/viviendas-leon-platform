@@ -33,10 +33,10 @@ function AgendaFila({ item, hoy }: { item: AgendaItem; hoy: string }) {
   </li>
 }
 
-function SeccionAgenda({ titulo, descripcion, items, hoy, vacio, icono }: {
-  titulo: string; descripcion: string; items: AgendaItem[]; hoy: string; vacio: string; icono: React.ReactNode
+function SeccionAgenda({ id, titulo, descripcion, items, hoy, vacio, icono }: {
+  id: string; titulo: string; descripcion: string; items: AgendaItem[]; hoy: string; vacio: string; icono: React.ReactNode
 }) {
-  return <section className={estiloTarjeta}>
+  return <section id={id} className={`${estiloTarjeta} scroll-mt-24`}>
     <div className="mb-3 flex items-start gap-3 border-b border-gray-100 pb-4 dark:border-gray-800">
       <span className="mt-0.5 text-brand-500">{icono}</span>
       <div className="min-w-0"><h2 className="text-base font-semibold text-gray-800 dark:text-white/90">{titulo}</h2>
@@ -77,16 +77,15 @@ export default function MiAgendaDashboard() {
   }, [refrescar])
 
   const estadisticas = agenda ? [
-    { titulo: 'Actividades de hoy', valor: agenda.indicadores.actividadesHoy, icono: <CalendarDays size={19} /> },
-    { titulo: 'Próximas actividades', valor: agenda.indicadores.proximasActividades, icono: <Clock3 size={19} /> },
-    { titulo: 'Visitas programadas', valor: agenda.indicadores.visitasProgramadas, icono: <CalendarCheck2 size={19} /> },
-    { titulo: 'Compromisos pendientes', valor: agenda.indicadores.compromisosPendientes, icono: <CheckSquare2 size={19} /> },
+    { titulo: 'Actividades de hoy', valor: agenda.indicadores.actividadesHoy, icono: <CalendarDays size={19} />, destino: '#agenda-hoy' },
+    { titulo: 'Próximas actividades', valor: agenda.indicadores.proximasActividades, icono: <Clock3 size={19} />, destino: '#agenda-proximas' },
+    { titulo: 'Visitas programadas', valor: agenda.indicadores.visitasProgramadas, icono: <CalendarCheck2 size={19} />, destino: usuario && canViewPath(usuario, '/visitas/agenda') ? '/visitas/agenda' : '#agenda-proximas' },
+    { titulo: 'Compromisos pendientes', valor: agenda.indicadores.compromisosPendientes, icono: <CheckSquare2 size={19} />, destino: '#agenda-pendientes' },
   ] : []
 
   return <div className="space-y-5">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h2 className="text-lg font-semibold text-gray-800 dark:text-white/90">Mi agenda</h2>
-      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">Tus actividades, visitas y compromisos asignados.</p></div>
+      <p className="text-sm text-gray-500 dark:text-gray-400">Tus actividades, visitas y compromisos asignados.</p>
       <button type="button" onClick={refrescar} disabled={cargando} className="layout-focus inline-flex min-h-10 items-center gap-2 rounded-lg border border-gray-300 px-3 text-sm text-gray-600 transition-colors hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800" aria-label="Actualizar mi agenda">
         <RefreshCw size={16} className={cargando ? 'animate-spin' : ''} />Actualizar
       </button>
@@ -94,14 +93,16 @@ export default function MiAgendaDashboard() {
     {cargando && <div role="status" className={`${estiloTarjeta} flex min-h-52 items-center justify-center gap-3 text-sm text-gray-500 dark:text-gray-400`}><RefreshCw size={18} className="animate-spin" />Cargando actividades...</div>}
     {!cargando && error && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-xl border border-error-200 bg-error-50 p-4 text-sm text-error-600 dark:border-error-500/20 dark:bg-error-500/10 dark:text-error-400"><AlertCircle size={18}/>{error}<button type="button" onClick={refrescar} className="layout-focus underline">Reintentar</button></div>}
     {!cargando && agenda && <>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{estadisticas.map(indicador => <div key={indicador.titulo} className={estiloTarjeta}>
-        <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400">{indicador.icono}<span className="text-xs sm:text-sm">{indicador.titulo}</span></div>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{estadisticas.map(indicador => <Link key={indicador.titulo} to={indicador.destino}
+        aria-label={`Ver ${indicador.titulo.toLowerCase()}`}
+        className={`${estiloTarjeta} group layout-focus block transition hover:-translate-y-0.5 hover:border-brand-200 hover:shadow-md dark:hover:border-brand-500/30`}>
+        <div className="flex items-center justify-between gap-2 text-gray-500 dark:text-gray-400"><span className="flex items-center gap-2">{indicador.icono}<span className="text-xs sm:text-sm">{indicador.titulo}</span></span><ChevronRight size={16} className="group-hover:text-brand-500"/></div>
         <p className="mt-4 text-2xl font-semibold tabular-nums text-gray-800 dark:text-white/90">{indicador.valor}</p>
-      </div>)}</div>
+      </Link>)}</div>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <SeccionAgenda titulo="Mis actividades de hoy" descripcion="Eventos y visitas para el día de hoy" items={agenda.hoy} hoy={agenda.fechaHoy} vacio="No tienes actividades programadas hoy." icono={<CalendarDays size={20}/>}/>
-        <SeccionAgenda titulo="Próximas actividades" descripcion="Planificación de los siguientes 30 días" items={agenda.proximas} hoy={agenda.fechaHoy} vacio="No tienes próximas actividades." icono={<Clock3 size={20}/>}/>
-        <SeccionAgenda titulo="Mis pendientes" descripcion="Compromisos y visitas vencidas" items={agenda.pendientes} hoy={agenda.fechaHoy} vacio="No tienes compromisos o visitas vencidas." icono={<ClipboardList size={20}/>}/>
+        <SeccionAgenda id="agenda-hoy" titulo="Mis actividades de hoy" descripcion="Eventos y visitas para el día de hoy" items={agenda.hoy} hoy={agenda.fechaHoy} vacio="No tienes actividades programadas hoy." icono={<CalendarDays size={20}/>}/>
+        <SeccionAgenda id="agenda-proximas" titulo="Próximas actividades" descripcion="Planificación de los siguientes 30 días" items={agenda.proximas} hoy={agenda.fechaHoy} vacio="No tienes próximas actividades." icono={<Clock3 size={20}/>}/>
+        <SeccionAgenda id="agenda-pendientes" titulo="Mis pendientes" descripcion="Compromisos y visitas vencidas" items={agenda.pendientes} hoy={agenda.fechaHoy} vacio="No tienes compromisos o visitas vencidas." icono={<ClipboardList size={20}/>}/>
       </div>
       {agenda.supervision && usuario && canViewPath(usuario, '/visitas/agenda') &&
         <section className={estiloTarjeta} aria-label="Supervisión de visitas vencidas">

@@ -917,6 +917,7 @@ model Usuario {
   reprogramacionesReemplazo SolicitudReprogramacionInvitacion[] @relation("ReprogramacionReemplazo")
   capacitacionesAsignadas Capacitacion[] @relation("CapacitacionesAsignadas")
   solicitudesAnalisisIa AnalisisIaSolicitud[]
+  conversacionesIa ConversacionIa[]
   finCuentasCreadas FinCuenta[] @relation("FinCuentaCreador")
   finMovimientosCreados FinMovimiento[] @relation("FinMovimientoCreador")
   finMovimientosAnulados FinMovimiento[] @relation("FinMovimientoAnulador")
@@ -1322,4 +1323,16 @@ model FinComprobante {
   movimiento FinMovimiento @relation(fields: [movimientoId], references: [id], onDelete: Restrict)
   creadoPor Usuario @relation("FinComprobanteCreador", fields: [creadoPorId], references: [id])
   @@map("fin_comprobante")
+}
+
+model ConversacionIa {
+  id String @id @db.Uuid
+  usuarioId Int @map("usuario_id")
+  titulo String @db.VarChar(100)
+  intercambios Json @default("[]")
+  version Int @default(0)
+  actualizadoEn DateTime @default(now()) @map("actualizado_en") @db.Timestamptz(6)
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  @@index([usuarioId, actualizadoEn])
+  @@map("ia_conversacion")
 }

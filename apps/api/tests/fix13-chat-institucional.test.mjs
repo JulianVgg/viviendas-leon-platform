@@ -13,14 +13,14 @@ const historia = [
 
 test('Valida preguntas e historial con límites estrictos', () => {
   assert.equal(validarPreguntaChat('  ¿Qué hacer?  '), '¿Qué hacer?')
-  for (const pregunta of ['', 'x', 'y'.repeat(601), null, {}, 'hola\u0001']) {
+  for (const pregunta of ['', 'x', 'y'.repeat(4001), null, {}, 'hola\u0001']) {
     assert.throws(() => validarPreguntaChat(pregunta), { code: 'INVALID_BODY' })
   }
   assert.deepEqual(validarHistorialChat(historia), historia)
-  for (const valor of [Array(9).fill(historia[0]), [historia[0]],
+  for (const valor of [Array(42).fill(historia[0]), [historia[0]],
     [{ rol: 'asistente', texto: 'inicio' }, historia[1]],
     [{ rol: 'usuario', texto: 'x', permiso: 'dirección' }, historia[1]],
-    [{ rol: 'usuario', texto: 'x'.repeat(1801) }, historia[1]]]) {
+    [{ rol: 'usuario', texto: 'x'.repeat(4001) }, historia[1]]]) {
     assert.throws(() => validarHistorialChat(valor), { code: 'INVALID_BODY' })
   }
 })
@@ -32,7 +32,7 @@ test('Rechaza referencias inventadas y contenido con claves extra', () => {
   assert.throws(() => validarRespuestaChat({ ...respuesta, referencias: ['visitas.realizadas','visitas.realizadas'] }))
 })
 
-test('Gemini recibe solo contexto agregado y conversación limitada', async () => {
+test('Gemini recibe contexto autorizado y conversación limitada', async () => {
   let solicitud, cabecera
   const salida = await consultarChatGemini({ visitas: { realizadas: 23 } }, '¿Y ahora qué recomendamos?', historia, {
     modelo: 'gemini-3.5-flash-lite', apiKey: 'clave-ficticia',
@@ -81,7 +81,7 @@ test('OpenAI conserva store=false y valida salida estructurada', async () => {
   assert.deepEqual(salida.chat, respuesta)
 })
 
-test('Servicio respeta autorización, cupos y evita guardar historial', async () => {
+test('Servicio de proveedor respeta autorización y cupos; la persistencia corresponde a la ruta', async () => {
   let vecesConsolidar = 0, vecesReservar = 0, finalEstado
   const usuario = { id: 42, roles: ['Dirección general'] }
   const deps = {

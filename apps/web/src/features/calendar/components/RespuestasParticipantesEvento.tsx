@@ -3,11 +3,11 @@ import { RefreshCw, UsersRound } from 'lucide-react'
 import { obtenerParticipantesInvitacion, type ParticipanteRespuesta } from '@/features/notifications/services/invitationsService'
 
 const etiquetas: Record<string, string> = {
-  PENDIENTE: 'Pendiente',
-  ACEPTADA: 'Confirmada',
+  PENDIENTE: 'Asignado',
+  ACEPTADA: 'Asignado',
   RECHAZADA: 'Rechazada (histórica)',
   REPROGRAMACION: 'Solicitó reprogramación',
-  ASIGNADO: 'Asignación anterior',
+  ASIGNADO: 'Asignado',
 }
 const estilos: Record<string, string> = {
   PENDIENTE: 'bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300',
@@ -38,15 +38,14 @@ export default function RespuestasParticipantesEvento({ eventoId }: { eventoId: 
     return () => controller.abort()
   }, [eventoId, revision])
 
-  const aceptaron = personas.filter(p => p.estado === 'ACEPTADA').length
-  const pendientes = personas.filter(p => p.estado === 'PENDIENTE').length
+  const asignados = personas.filter(p => p.estado !== 'RECHAZADA').length
   const reprogramaciones = personas.filter(p => p.estado === 'REPROGRAMACION').length
   const rechazaron = personas.filter(p => p.estado === 'RECHAZADA').length
 
-  return <section aria-label="Confirmaciones del evento" className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+  return <section aria-label="Participantes del evento" className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-200">
-        <UsersRound size={17} className="text-brand-500" /> Confirmaciones de asistencia
+        <UsersRound size={17} className="text-brand-500" /> Participantes asignados
       </h3>
       <button type="button" onClick={() => setRevision(n => n + 1)} disabled={cargando}
         className="layout-focus inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs text-gray-600 disabled:opacity-50 dark:border-gray-700 dark:text-gray-300">
@@ -54,7 +53,7 @@ export default function RespuestasParticipantesEvento({ eventoId }: { eventoId: 
       </button>
     </div>
     <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-      {aceptaron} confirmadas · {pendientes} pendientes · {reprogramaciones} solicitando reprogramación · {rechazaron} rechazos históricos
+      {asignados} asignados · {reprogramaciones} solicitando reprogramación · {rechazaron} rechazos históricos
     </p>
     {cargando && <p role="status" className="mt-3 text-xs text-gray-500">Cargando respuestas...</p>}
     {error && <p role="alert" className="mt-3 text-xs text-red-600 dark:text-red-400">{error}</p>}

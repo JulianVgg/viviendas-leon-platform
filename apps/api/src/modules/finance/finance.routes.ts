@@ -81,6 +81,58 @@ async function readMonthReport(month: string, start: string, end: string) {
   return { mes: month, preliminar: true, ...externalTotals(categorias), cuentas, categorias, movimientos }
 }
 
+/** Panel contable: solo libros financieros; no cruza datos ni privilegios de otros módulos. */
+financeRouter.get('/dashboard', requirePermission('PANTALLA_CONTROL_FINANCIERO'), async (req, res, next) => {
+  const meses = Number(req.query.meses ?? 6)
+  if (![3, 6, 12].includes(meses)) { error(res, 'Período no válido.'); return }
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Guatemala',
+    year: 'numeric', month: '2-digit' }).formatToParts(new Date())
+  const year = Number(parts.find(p => p.type === 'year')?.value)
+  const month = Number(parts.find(p => p.type === 'month')?.value)
+  const start = new Date(Date.UTC(year, month - meses, 1)).toISOString().slice(0, 10)
+  const end = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10)
+  try {
+    const [cuentas, actividad, categorias, pendientes] = await Promise.all([
+      db().$queryRaw<Array<{ tipo: string; cuentas: number; saldo: string }>>`
+        SELECT c.tipo, COUNT(*)::int AS cuentas,
+          (COALESCE(SUM(c.saldo_inicial),0)
+          + COALESCE((SELECT SUM(s.saldo_inicial) FROM fin_subcuenta s JOIN fin_cuenta cc ON cc.id=s.cuenta_id WHERE cc.tipo=c.tipo),0)
+          + COALESCE((SELECT SUM(CASE WHEN m.tipo='INGRESO' THEN m.importe ELSE -m.importe END)
+            FROM fin_movimiento m JOIN fin_cuenta cc ON cc.id=m.cuenta_id
+            WHERE cc.tipo=c.tipo AND m.anulado_en IS NULL AND m.fecha < ${end}::date),0))::text AS saldo
+        FROM fin_cuenta c GROUP BY c.tipo ORDER BY c.tipo`,
+      db().$queryRaw<Array<{ mes: string; ingresos: string; egresos: string; movimientos: number }>>`
+        SELECT to_char(m.fecha, 'YYYY-MM') AS mes,
+          COALESCE(SUM(m.importe) FILTER (WHERE m.tipo='INGRESO'),0)::text AS ingresos,
+          COALESCE(SUM(m.importe) FILTER (WHERE m.tipo='EGRESO'),0)::text AS egresos,
+          COUNT(*)::int AS movimientos
+        FROM fin_movimiento m WHERE m.anulado_en IS NULL AND m.traslado_id IS NULL
+          AND m.fecha >= ${start}::date AND m.fecha < ${end}::date
+        GROUP BY to_char(m.fecha, 'YYYY-MM') ORDER BY mes`,
+      db().$queryRaw<Array<{ categoria: string; egresos: string; movimientos: number }>>`
+        SELECT COALESCE(cat.nombre,'Sin categoría') AS categoria,
+          SUM(m.importe)::text AS egresos, COUNT(*)::int AS movimientos
+        FROM fin_movimiento m LEFT JOIN fin_categoria cat ON cat.id=m.categoria_id
+        WHERE m.anulado_en IS NULL AND m.traslado_id IS NULL AND m.tipo='EGRESO'
+          AND m.fecha >= ${start}::date AND m.fecha < ${end}::date
+        GROUP BY cat.nombre ORDER BY SUM(m.importe) DESC LIMIT 5`,
+      db().$queryRaw<Array<{ cantidad: number }>>`
+        SELECT COUNT(*)::int AS cantidad FROM fin_movimiento m
+        WHERE m.anulado_en IS NULL AND m.traslado_id IS NULL
+          AND NOT EXISTS (SELECT 1 FROM fin_comprobante f WHERE f.movimiento_id=m.id)`,
+    ])
+    const inicio = new Date(`${start}T12:00:00Z`)
+    const mesesSerie = Array.from({ length: meses }, (_, i) => {
+      const fechaMes = new Date(Date.UTC(inicio.getUTCFullYear(), inicio.getUTCMonth() + i, 1))
+      const mes = fechaMes.toISOString().slice(0, 7)
+      return actividad.find(row => row.mes === mes) ?? { mes, ingresos: '0', egresos: '0', movimientos: 0 }
+    })
+    res.setHeader('Cache-Control', 'private, no-store')
+    res.json({ data: { periodo: { desde: start, hastaExclusivo: end, meses },
+      cuentas, meses: mesesSerie, categorias, comprobantesPendientes: pendientes[0]?.cantidad ?? 0 } })
+  } catch (e) { next(e) }
+})
+
 financeRouter.get('/informe-mensual', requirePermission('PANTALLA_FINANZAS_INFORME'), async (req, res, next) => {
   const period = parsePeriod(req.query.mes)
   if (!period) { error(res, 'Mes no válido.'); return }

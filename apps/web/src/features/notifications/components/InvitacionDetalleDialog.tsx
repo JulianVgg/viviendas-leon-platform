@@ -8,7 +8,7 @@ import { canViewPath } from '@/features/auth/screenPermissions'
 import { puedeConsultarAgendaVisitas } from '../utils/pushAccess'
 import { eventoHaPasado } from '@/features/calendar/services/eventHistory'
 import {
-  obtenerDetalleInvitacion, obtenerMiReprogramacion, responderInvitacion,
+  obtenerDetalleInvitacion, obtenerMiReprogramacion,
   solicitarReprogramacion, type DetalleInvitacion, type SolicitudPropia,
 } from '../services/invitationsService'
 
@@ -29,8 +29,8 @@ function Campo({ icono: Icono, nombre, valor }: { icono: typeof CalendarDays; no
 }
 
 const etiquetas: Record<string, string> = {
-  PENDIENTE: 'Pendiente de respuesta', ACEPTADA: 'Aceptada', RECHAZADA: 'Rechazada (histórica)',
-  REPROGRAMACION: 'Reprogramación solicitada', ASIGNADO: 'Asignación anterior',
+  PENDIENTE: 'Asignada', ACEPTADA: 'Asignada', RECHAZADA: 'Rechazada (histórica)',
+  REPROGRAMACION: 'Solicitud en revisión', ASIGNADO: 'Asignada',
 }
 
 const hoyEnGuatemala = () => new Intl.DateTimeFormat('sv-SE', {
@@ -72,21 +72,6 @@ export default function InvitacionDetalleDialog({ eventoId, onClose, onResponded
     return () => controller.abort()
   }, [eventoId])
 
-  async function responder() {
-    if (!detalle || !['PENDIENTE', 'RECHAZADA'].includes(detalle.estado ?? '') ||
-        eventoHaPasado(detalle.fechaFin) || guardando) return
-    setGuardando(true)
-    setError('')
-    try {
-      const result = await responderInvitacion(detalle.eventoId, 'ACEPTADA')
-      setDetalle(actual => actual ? { ...actual, estado: result.estado, respondidaEn: result.respondidaEn } : actual)
-      setMostrarFormulario(false)
-      onResponded()
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'No fue posible registrar tu respuesta.')
-    } finally { setGuardando(false) }
-  }
-
   async function enviarPropuesta() {
     if (!detalle || guardando || eventoHaPasado(detalle.fechaFin)) return
     const explicacion = motivo.trim()
@@ -114,10 +99,10 @@ export default function InvitacionDetalleDialog({ eventoId, onClose, onResponded
   const puedeVerAgenda = Boolean(usuario && canViewPath(usuario, '/visitas/agenda') &&
     puedeConsultarAgendaVisitas(usuario))
   const finalizada = Boolean(detalle && eventoHaPasado(detalle.fechaFin))
-  const puedeResponder = Boolean(detalle && !finalizada &&
-    ['PENDIENTE', 'ACEPTADA', 'RECHAZADA'].includes(detalle.estado ?? ''))
+  const puedeResponder = Boolean(detalle && detalle.puedeSolicitar && !finalizada &&
+    ['PENDIENTE', 'ASIGNADO', 'ACEPTADA'].includes(detalle.estado ?? ''))
   return <Dialog open={eventoId !== null} onClose={onClose} title="Resumen de invitación"
-    description="Consulta la actividad institucional y registra tu respuesta." className="max-w-xl">
+    description="Consulta la actividad asignada o solicita una nueva fecha." className="max-w-xl">
     {cargando && <p role="status" className="py-8 text-center text-sm text-gray-500">Cargando invitación...</p>}
     {detalle && <div className="space-y-5">
       {finalizada && <p role="status" className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300">Esta actividad ya finalizó. La invitación permanece disponible como historial y su respuesta no puede modificarse.</p>}
@@ -141,20 +126,13 @@ export default function InvitacionDetalleDialog({ eventoId, onClose, onResponded
         <UsersRound size={17} className="shrink-0" />
         <span>Estado: <strong>{etiquetas[detalle.estado ?? ''] ?? 'Solo consulta'}</strong></span>
       </div>
-      {detalle.estado === 'PENDIENTE' && !finalizada && <p className="text-xs leading-5 text-gray-500 dark:text-gray-400">
-        Si aceptas, esta actividad aparecerá en tu calendario personal.
-        Dirección y Coordinación podrán consultar tu respuesta.
-      </p>}
-      {detalle.estado === 'ACEPTADA' && <p className="text-sm text-emerald-700 dark:text-emerald-300">
-        {puedeVerCalendario || puedeVerAgenda
-          ? 'Confirmaste tu participación. La actividad aparecerá en tu agenda personal.'
-          : 'Confirmaste tu participación. Puedes consultar los detalles de la actividad en esta invitación.'}
-      </p>}
+      {['PENDIENTE', 'ASIGNADO', 'ACEPTADA'].includes(detalle.estado ?? '') && !finalizada &&
+        <p className="text-sm text-gray-600 dark:text-gray-300">Actividad asignada por la organización. Tu participación no requiere aceptación.</p>}
       {detalle.estado === 'RECHAZADA' && <p className="text-sm text-gray-600 dark:text-gray-300">
         Has rechazado la invitación. La actividad no aparecerá en tu agenda personal.
       </p>}
-      {puedeResponder && detalle.estado !== 'PENDIENTE' && <p className="text-xs text-gray-500 dark:text-gray-400">
-        Puedes solicitar una nueva fecha mientras la actividad no haya finalizado.
+      {puedeResponder && <p className="text-xs text-gray-500 dark:text-gray-400">
+        Si no puedes asistir en la fecha indicada, solicita reprogramación y explica el motivo.
       </p>}
       {detalle.estado === 'REPROGRAMACION' && <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
         La reprogramación está pendiente de la decisión del organizador.
@@ -180,7 +158,7 @@ export default function InvitacionDetalleDialog({ eventoId, onClose, onResponded
       <div className="flex flex-wrap justify-end gap-2">
         <Button variant="secondary" type="button" disabled={guardando} onClick={() => setMostrarFormulario(false)}>Cancelar</Button>
         <Button type="button" disabled={guardando || !fechaPropuesta || fechaPropuesta < hoyEnGuatemala() || fechaPropuesta === detalle?.fechaInicio || motivo.trim().length < 5 || motivo.trim().length > 500} onClick={() => void enviarPropuesta()}>
-          {guardando ? 'Enviando...' : 'Enviar propuesta'}
+          {guardando ? 'Enviando...' : 'Enviar solicitud'}
         </Button>
       </div>
     </div>}
@@ -188,11 +166,8 @@ export default function InvitacionDetalleDialog({ eventoId, onClose, onResponded
     <div className="mt-6 flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
       <Button variant="secondary" type="button" onClick={onClose}>Cerrar</Button>
       {puedeResponder && <>
-        {detalle?.estado !== 'ACEPTADA' && <Button type="button" disabled={guardando} onClick={() => void responder()}>
-          Aceptar
-        </Button>}
         <Button variant="secondary" type="button" disabled={guardando} onClick={() => { setError(''); setMostrarFormulario(actual => !actual) }}>
-          {mostrarFormulario ? 'Ocultar formulario' : 'Reprogramar'}
+          {mostrarFormulario ? 'Ocultar formulario' : 'Solicitar reprogramación'}
         </Button>
       </>}
       {detalle?.estado === 'ACEPTADA' && (puedeVerCalendario || puedeVerAgenda) && <Button type="button" onClick={() => { onClose(); navigate(puedeVerCalendario ? '/calendario' : '/visitas/agenda') }}>{puedeVerCalendario ? 'Ver calendario' : 'Ver agenda de visitas'}</Button>}

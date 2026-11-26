@@ -11,7 +11,8 @@ import { ProAreaChart } from '@/features/dashboard/charts/TailAdminCharts'
 import { seriesActividad } from '@/features/dashboard/lib/chartSeries'
 import type { FiltrosDashboard } from '@/features/dashboard/lib/dashboardFilters'
 import { guardarRetornoDashboard, obtenerRetornoDashboard, consumirPosicionDashboard } from '@/features/dashboard/lib/dashboardReturn'
-import { canViewPath } from '@/features/auth/screenPermissions'
+import { canViewPath, esContador } from '@/features/auth/screenPermissions'
+import FinanceDashboardPage from '@/features/finance/pages/FinanceDashboardPage'
 import { formatoFechaHoraGuatemala, saludoGuatemala } from '@/features/dashboard/lib/guatemalaDateTime'
 
 const tarjeta = 'rounded-2xl border border-gray-200 bg-white p-5 shadow-theme-xs transition-[box-shadow,transform] duration-300 hover:-translate-y-0.5 hover:shadow-lg dark:border-gray-800 dark:bg-gray-900'
@@ -41,7 +42,7 @@ function GraficaActividad({ datos }: { datos: ResumenDashboard['actividadMensual
   </section>
 }
 
-export default function DashboardPage() {
+function DashboardOperativo() {
   const { usuario } = useAuth()
   const navigate = useNavigate()
   const nombreUsuario = usuario?.nombre.trim()
@@ -220,4 +221,10 @@ export default function DashboardPage() {
     {institucional && errorOpciones && <p role="status" className="-mt-2 text-xs text-amber-600">No se pudieron cargar las opciones de filtros.</p>}
     <div className={`${anterior ? "" : "dashboard-content-enter"} space-y-6`}>{contenido}</div>
   </main>
+}
+
+/** Contador consulta exclusivamente el módulo financiero: sin métricas de visitas o cultivos. */
+export default function DashboardPage() {
+  const { usuario } = useAuth()
+  return usuario && esContador(usuario) ? <FinanceDashboardPage /> : <DashboardOperativo />
 }

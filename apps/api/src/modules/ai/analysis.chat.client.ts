@@ -7,7 +7,7 @@ export type ResultadoChatProveedor = { chat: RespuestaChatIA; tokens: TokensIA; 
 export type OpcionesChatProveedor = { apiKey: string; modelo: string; timeoutMs?: number; fetcher?: typeof fetch }
 
 function analizarSalida(texto: string): RespuestaChatIA {
-  if (!texto || texto.length > 6_000) throw new AnalysisError('AI_INVALID_RESPONSE', 502, 'La IA devolvió una respuesta inválida.')
+  if (!texto || texto.length > 20_000) throw new AnalysisError('AI_INVALID_RESPONSE', 502, 'La IA devolvió una respuesta inválida.')
   try { return validarRespuestaChat(JSON.parse(texto)) }
   catch { throw new AnalysisError('AI_INVALID_RESPONSE', 502, 'La IA devolvió una respuesta inválida.') }
 }
@@ -15,6 +15,7 @@ function token(valor: unknown): number {
   return typeof valor === 'number' && Number.isSafeInteger(valor) && valor >= 0 ? valor : 0
 }
 function falloProveedor(estado: number): never {
+  if (estado === 400) throw new AnalysisError('AI_INVALID_REQUEST', 503, 'El proveedor rechazó el formato de la solicitud.')
   if (estado === 429) throw new AnalysisError('AI_LIMIT', 503, 'El proveedor alcanzó su límite. Prueba más tarde.')
   if (estado === 401 || estado === 403) throw new AnalysisError('AI_PROVIDER_AUTH', 503, 'El proveedor de IA no autorizó la solicitud.')
   if (estado === 404) throw new AnalysisError('AI_MODEL_UNAVAILABLE', 503, 'El modelo no está disponible.')
@@ -34,7 +35,7 @@ export async function consultarChatGemini(
         {
           method: 'POST',
           headers: { 'x-goog-api-key': opts.apiKey, 'Content-Type': 'application/json' },
-          signal: AbortSignal.timeout(opts.timeoutMs ?? 30_000),
+          signal: AbortSignal.timeout(opts.timeoutMs ?? 45_000),
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: INSTRUCCIONES_CHAT +
               (reintento ? '\nRespeta el formato JSON, las longitudes y las referencias exactas.' : '') }] },
@@ -42,7 +43,7 @@ export async function consultarChatGemini(
               ...historial.map(m => ({ role: m.rol === 'usuario' ? 'user' : 'model', parts: [{ text: m.texto }] })),
               { role: 'user', parts: [{ text: ultimo }] },
             ],
-            generationConfig: { responseMimeType: 'application/json', responseJsonSchema: GEMINI_CHAT_SCHEMA, maxOutputTokens: 3200 },
+            generationConfig: { responseMimeType: 'application/json', responseJsonSchema: GEMINI_CHAT_SCHEMA, maxOutputTokens: 8192 },
           }),
         },
       )
@@ -66,12 +67,12 @@ export async function consultarChatGemini(
     }
     const obj = datos && typeof datos === 'object' ? datos as Record<string, unknown> : {}
     const candidatos = Array.isArray(obj.candidates) ? obj.candidates : []
-    const candidato = candidatos[0] as { finishReason?: string; content?: { parts?: Array<{ text?: unknown }> } } | undefined
+    const candidato = candidatos[0] as { finishReason?: string; content?: { parts?: Array<{ text?: unknown; thought?: boolean }> } } | undefined
     if (!candidato || (candidato.finishReason && candidato.finishReason !== 'STOP')) {
       if (candidato?.finishReason === 'MAX_TOKENS' && !reintento) continue
       throw new AnalysisError('AI_INCOMPLETE', 502, 'La respuesta quedó incompleta.')
     }
-    const texto = candidato.content?.parts?.map(p => typeof p.text === 'string' ? p.text : '').join('') ?? ''
+    const texto = candidato.content?.parts?.map(p => !p.thought && typeof p.text === 'string' ? p.text : '').join('') ?? ''
     let chat: RespuestaChatIA
     try { chat = analizarSalida(texto) }
     catch (error) {
@@ -96,9 +97,9 @@ export async function consultarChatOpenAI(
   try {
     respuesta = await (opts.fetcher ?? fetch)('https://api.openai.com/v1/responses', {
       method: 'POST', headers: { Authorization: `Bearer ${opts.apiKey}`, 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(opts.timeoutMs ?? 30_000),
+      signal: AbortSignal.timeout(opts.timeoutMs ?? 45_000),
       body: JSON.stringify({
-        model: opts.modelo, store: false, max_output_tokens: 2400, instructions: INSTRUCCIONES_CHAT,
+        model: opts.modelo, store: false, max_output_tokens: 8192, instructions: INSTRUCCIONES_CHAT,
         input: [...historial.map(m => ({ role: m.rol === 'usuario' ? 'user' : 'assistant', content: m.texto })),
           { role: 'user', content: ultimo }],
         text: { format: { type: 'json_schema', name: 'respuesta_institucional', strict: true, schema: CHAT_SCHEMA } },

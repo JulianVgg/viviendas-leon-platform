@@ -13,6 +13,7 @@ export type DetalleInvitacion = {
   horaInicio: string | null
   horaFin: string | null
   organizador: string
+  puedeSolicitar?: boolean
   estado: EstadoInvitacion | null
   respondidaEn: string | null
 }
@@ -64,7 +65,6 @@ export type SolicitudReprogramacionPendiente = {
 export type ResolverReprogramacion =
   | { decision: 'ACEPTAR_FECHA' }
   | { decision: 'MANTENER_FECHA'; resolucion: 'SOLO_ORGANIZADOR' }
-  | { decision: 'MANTENER_FECHA'; resolucion: 'OTRA_PERSONA'; reemplazoUsuarioId: number }
 
 // El servidor genera claves del tipo CAL:ID:CREACION:USUARIO o CAL:ID:Vn:USUARIO.
 // No se usa el mensaje (texto libre) para obtener identificadores.

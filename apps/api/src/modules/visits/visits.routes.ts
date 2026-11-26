@@ -301,14 +301,30 @@ visitsRouter.get('/planificacion', async (_req: Request, res: Response) => {
   }
 })
 
-visitsRouter.post('/sync', async (req: Request, res: Response) => {
+visitsRouter.post(['/sync', '/agenda/asignar'], async (req: Request, res: Response) => {
   if (req.get('X-Requested-With') !== 'XMLHttpRequest') { res.status(403).json({ error: 'Solicitud no autorizada.' }); return }
-  const userId = req.session.userId
-  if (!userId) { res.status(401).json({ error: 'Sesión requerida.' }); return }
+  const actorId = req.session.userId
+  if (!actorId) { res.status(401).json({ error: 'Sesión requerida.' }); return }
+  const asignacion = req.path === '/agenda/asignar'
+  let userId = actorId
+  if (asignacion) {
+    const actor = await getAuthenticatedUser(actorId)
+    const responsableId = req.body?.responsableId
+    if (!actor || !isSupervisor(actor.roles)) { res.status(403).json({ error: 'Solo Dirección o Coordinación pueden asignar visitas.' }); return }
+    if (!Number.isSafeInteger(responsableId) || responsableId < 1) { res.status(400).json({ error: 'Responsable inválido.' }); return }
+    const responsable = await getAuthenticatedUser(responsableId)
+    if (!responsable || isSupervisor(responsable.roles) || !['VISITAS_WRITE','SYN-VISITAS-WRITE'].some(p => responsable.permisos.includes(p))) {
+      res.status(422).json({ error: 'El responsable debe ser un técnico activo autorizado.' }); return
+    }
+    userId = responsable.id
+  }
   const operationId: unknown = req.body?.operationId
   const payload = validate(req.body?.payload, operationId)
   if (typeof operationId !== 'string' || !uuid.test(operationId) || req.body?.kind !== 'visits.create.v1' || !payload) {
     res.status(400).json({ error: 'Datos de visita no válidos.' }); return
+  }
+  if (asignacion && (payload.status !== 'PROGRAMADA' || !payload.timeSlot || payload.scheduledVisitId || payload.crops.length || payload.commitments.length || payload.reviews.length || payload.weather || payload.checkIn || payload.recommendation || payload.observations || payload.treatment)) {
+    res.status(400).json({ error: 'La asignación solo permite programar visitas sin capturas.' }); return
   }
   if (payload.crops.some(crop => crop.movimientoReal)) {
     const user = await getAuthenticatedUser(userId)
@@ -363,9 +379,9 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
         throw new Error('SCHEDULE_PAST_DATE')
       }
       const familia = await prisma.familia.findUnique({
-        where: { id: payload.familyId }, select: { id: true, nombreReferencia: true },
+        where: { id: payload.familyId }, select: { id: true, nombreReferencia: true, estado: true },
       })
-      if (!familia) return null
+      if (!familia || (asignacion && !['ACTIVO','ACTIVA'].includes(familia.estado.toUpperCase()))) return null
       const climate = payload.weather ? await prisma.condicionClimatica.findFirst({ where: { nombre: { equals: payload.weather, mode: 'insensitive' }, activo: true }, select: { id:true } }) : null
       const created = await prisma.$transaction(async tx => {
         let visitaId: number
@@ -580,7 +596,7 @@ visitsRouter.post('/sync', async (req: Request, res: Response) => {
     }
     if (result === null) { res.status(422).json({ error: 'La familia no existe.' }); return }
     if (!result || result.conflict) { res.status(409).json({ error: 'Identificador utilizado por otra operación.' }); return }
-    res.status(result.duplicate ? 200 : 201).json({ operationId: normalizedId, accepted: true, duplicate: result.duplicate, visitId: result.visitId })
+    res.status(result.duplicate ? 200 : 201).json({ operationId: normalizedId, accepted: true, duplicate: result.duplicate, visitId: result.visitId, ...(asignacion ? {id:result.visitId} : {}) })
   } catch (error) {
     if (error instanceof Error && error.message.startsWith('INVALID_VISIT_ECONOMICS:')) {
       res.status(409).json({ error: error.message.slice('INVALID_VISIT_ECONOMICS:'.length) }); return
@@ -778,6 +794,24 @@ visitsRouter.get('/seguimientos', async (req: Request, res: Response) => {
       reprogramaciones: r.reprogramaciones.map(h => ({ id: h.id, oldDate: h.fechaAnterior?.toISOString().slice(0, 10) ?? null, newDate: h.fechaNueva.toISOString().slice(0, 10), actorId: h.usuarioId, reason: h.motivo, at: h.creadoEn.toISOString() })),
     })) })
   } catch (error) { console.error('Error consultando seguimientos:', error); res.status(503).json({ error: 'No se pudieron consultar los compromisos.' }) }
+})
+
+// Cambiar únicamente el estado, sin reescribir el texto ni la fecha de otro flujo.
+visitsRouter.patch('/seguimientos/:id/estado', async (req,res) => {
+  if (req.get('X-Requested-With') !== 'XMLHttpRequest') { res.status(403).json({error:'Solicitud no autorizada.'}); return }
+  const actor=await getAuthenticatedUser(req.session.userId!)
+  const id=String(req.params.id ?? '').toLowerCase(), estado=req.body?.estado
+  if (!actor || (!esDireccionGeneral(actor.roles) && !['VISITAS_WRITE','SYN-VISITAS-WRITE'].some(p=>actor.permisos.includes(p)))) {res.status(403).json({error:'No autorizado.'});return}
+  if (!uuid.test(id) || !['CUMPLIDO','NO_CUMPLIDO'].includes(estado)) {res.status(400).json({error:'Compromiso o estado inválido.'});return}
+  try {
+    const ok=await getPrismaClient().$transaction(async tx=>{
+      const cambio=await tx.seguimientoVisita.updateMany({where:{id,estado:'PENDIENTE',visitaOrigen:{usuarioResponsableId:actor.id}},data:{estado}})
+      if(cambio.count!==1)return false
+      await sincronizarAvisosSeguimiento(tx,[id]);return true
+    })
+    if(!ok){res.status(409).json({error:'El compromiso ya cambió o no te corresponde.'});return}
+    res.json({accepted:true,id})
+  } catch {res.status(503).json({error:'No se pudo actualizar el compromiso.'})}
 })
 
 // Actualizaciones manuales desde agenda: requieren red, se limitan a visitas propias.

@@ -5,6 +5,7 @@ import { getAuthenticatedUser } from '../auth/auth.service.js'
 import { requireAuth } from '../auth/auth.middleware.js'
 import { esDireccionGeneral } from '../auth/require-permission.middleware.js'
 import { eventoYaFinalizo } from './event-history.js'
+import { nivelInstitucional } from './invitation-hierarchy.js'
 
 /**
  * NTF-09: el evento institucional sigue siendo la única fuente de datos.
@@ -15,7 +16,7 @@ export const invitationsRouter = Router()
 invitationsRouter.use(requireAuth)
 
 type EstadoRespuesta = 'ACEPTADA'
-const pendientes = ['PENDIENTE', 'ACEPTADA', 'RECHAZADA', 'REPROGRAMACION']
+const pendientes = ['PENDIENTE', 'ACEPTADA', 'RECHAZADA', 'REPROGRAMACION', 'ASIGNADO']
 const nombre = (persona: { nombre: string; apellido: string | null }) =>
   [persona.nombre, persona.apellido].filter(Boolean).join(' ')
 const fecha = (valor: Date) => valor.toISOString().slice(0, 10)
@@ -82,9 +83,9 @@ invitationsRouter.get('/resumen', async (req: Request, res: Response) => {
     res.json({ data: eventos.map(evento => ({
       eventoId: evento.id, titulo: evento.titulo, fechaInicio: fecha(evento.fechaInicio),
       invitados: evento.participantes.length,
-      aceptaron: evento.participantes.filter(p => p.estadoInvitacion === 'ACEPTADA').length,
+      aceptaron: evento.participantes.filter(p => ['ACEPTADA', 'ASIGNADO', 'PENDIENTE', 'REPROGRAMACION'].includes(p.estadoInvitacion)).length,
       rechazaron: evento.participantes.filter(p => p.estadoInvitacion === 'RECHAZADA').length,
-      pendientes: evento.participantes.filter(p => p.estadoInvitacion === 'PENDIENTE').length,
+      pendientes: evento.participantes.filter(p => p.estadoInvitacion === 'REPROGRAMACION').length,
       participantes: evento.participantes.map(p => ({
         usuarioId: p.usuario.id, nombre: nombre(p.usuario),
         estado: p.estadoInvitacion, respondidaEn: p.respondidaEn,
@@ -137,6 +138,9 @@ invitationsRouter.get('/:id', async (req: Request, res: Response) => {
       res.status(404).json({ error: 'Invitación no encontrada.' }); return
     }
     const propia = evento.participantes.find(p => p.usuarioId === req.session.userId)
+    const [solicitante, organizador] = await Promise.all([
+      getAuthenticatedUser(req.session.userId!), getAuthenticatedUser(evento.creadoPor.id),
+    ])
     res.setHeader('Cache-Control', 'private, no-store')
     res.json({
       eventoId: evento.id, titulo: evento.titulo, categoria: evento.categoria,
@@ -144,6 +148,7 @@ invitationsRouter.get('/:id', async (req: Request, res: Response) => {
       fechaInicio: fecha(evento.fechaInicio), fechaFin: fecha(evento.fechaFin),
       horaInicio: evento.horaInicio, horaFin: evento.horaFin,
       organizador: nombre(evento.creadoPor),
+      puedeSolicitar: Boolean(propia && solicitante && organizador && nivelInstitucional(solicitante.roles) < nivelInstitucional(organizador.roles)),
       estado: propia?.estadoInvitacion ?? null,
       respondidaEn: propia?.respondidaEn ?? null,
     })

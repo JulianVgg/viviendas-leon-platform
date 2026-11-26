@@ -97,7 +97,7 @@ function avisoCalendario(eventoId: number, version: string, usuarioId: number,
     usuarioId,
     tipo: nuevaInvitacion ? 'INVITACION_EVENTO' : tipo,
     ...(nuevaInvitacion
-      ? { titulo: 'Nueva invitación institucional', mensaje: `Te invitaron a ${evento.titulo} (${evento.fecha}).` }
+      ? { titulo: 'Nueva actividad asignada', mensaje: `Se te asignó la actividad ${evento.titulo} (${evento.fecha}). Si necesitas otra fecha, puedes solicitar su reprogramación.` }
       : descripcionAvisoCalendario(tipo, evento)),
     referencia: nuevaInvitacion ? '/notificaciones' : '/calendario',
     permisoDestino: 'PANTALLA_CALENDARIO',
@@ -296,7 +296,7 @@ calendarRouter.post('/', async (req: Request, res: Response) => {
         fechaInicio: new Date(`${data.date}T12:00:00Z`), fechaFin: new Date(`${data.date}T12:00:00Z`),
         horaInicio: data.horaInicio, horaFin: data.horaFin, responsableId: autorId,
         creadoPorId: autorId, operacionCreacionId: operationId, recordatoriosConfig: configParaPrisma(data.recordatorios),
-        participantes: { create: data.participantesIds.map(usuarioId => ({ usuarioId, estadoInvitacion: 'PENDIENTE' })) },
+        participantes: { create: data.participantesIds.map(usuarioId => ({ usuarioId, estadoInvitacion: 'ASIGNADO' })) },
       } })
       const resumen: EventoResumen = { titulo: data.titulo, categoria: data.categoria,
         descripcion: data.descripcion || null, fecha: data.date, horaInicio: data.horaInicio, horaFin: data.horaFin, participantesIds: data.participantesIds }
@@ -379,7 +379,7 @@ calendarRouter.put('/:id', async (req: Request, res: Response) => {
           deleteMany: data.participantesIds.length ? { usuarioId: { notIn: data.participantesIds } } : {},
           create: data.participantesIds
             .filter(usuarioId => !antes.participantesIds.includes(usuarioId))
-            .map(usuarioId => ({ usuarioId, estadoInvitacion: 'PENDIENTE' })),
+            .map(usuarioId => ({ usuarioId, estadoInvitacion: 'ASIGNADO' })),
         },
       } })
       // Cualquier edición manual deja sin efecto propuestas basadas en la versión anterior.
@@ -394,7 +394,7 @@ calendarRouter.put('/:id', async (req: Request, res: Response) => {
         })
         await tx.eventoInstitucionalParticipante.updateMany({
           where: { eventoId: id, estadoInvitacion: 'REPROGRAMACION' },
-          data: { estadoInvitacion: 'PENDIENTE', respondidaEn: null },
+          data: { estadoInvitacion: 'ASIGNADO', respondidaEn: null },
         })
         await tx.notificacion.createMany({ data: solicitudesAnuladas.map(solicitud => ({
           usuarioId: solicitud.solicitanteId, tipo: 'INVITACION_REPROGRAMACION_RESUELTA',

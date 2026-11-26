@@ -27,7 +27,7 @@ export async function responderChatInstitucional(
   pregunta: unknown,
   historial: unknown,
   filtros: FiltrosMon05 = {},
-  opts: { deps?: DependenciasChatIA; env?: NodeJS.ProcessEnv; ahora?: Date } = {},
+  opts: { deps?: DependenciasChatIA; env?: NodeJS.ProcessEnv; ahora?: Date; operativo?: object } = {},
 ) {
   if (!puedeEditarPerfilCompleto(usuario.roles)) throw new AnalysisError('FORBIDDEN', 403, 'No autorizado.')
   try { validarParametrosContextoIA(meses, filtros) }
@@ -42,15 +42,15 @@ export async function responderChatInstitucional(
   const apiKey = (proveedor === 'gemini' ? env.GEMINI_API_KEY : env.OPENAI_API_KEY)?.trim()
   if (!apiKey) throw new AnalysisError('AI_NOT_CONFIGURED', 503, 'El asistente no está configurado.')
   const modelo = (proveedor === 'gemini' ? env.GEMINI_ANALYSIS_MODEL : env.OPENAI_ANALYSIS_MODEL)?.trim()
-    || (proveedor === 'gemini' ? 'gemini-2.5-flash-lite' : 'gpt-5.6-luna')
+    || (proveedor === 'gemini' ? 'gemini-3.5-flash-lite' : 'gpt-5.6-luna')
   if (!/^[a-zA-Z0-9_.-]{2,100}$/.test(modelo)) throw new AnalysisError('AI_CONFIG', 503, 'Modelo no válido.')
-  const limites = { usuario: limiteEntero(env.AI_DAILY_USER_LIMIT, 3, 20), global: limiteEntero(env.AI_DAILY_GLOBAL_LIMIT, 30, 200) }
+  const limites = { usuario: limiteEntero(env.AI_DAILY_USER_LIMIT, 20, 200), global: limiteEntero(env.AI_DAILY_GLOBAL_LIMIT, 60, 2000) }
   const deps = opts.deps ?? dependencias
   const contexto = await deps.consolidar(usuario, meses, filtros, undefined, opts.ahora)
   const reserva = await deps.reservar(usuario.id, modelo, limites)
   try {
     const consultar = proveedor === 'gemini' ? deps.consultarGemini : deps.consultarOpenAI
-    const resultado = await consultar(contexto, preguntaValidada, historialValidado, { apiKey, modelo })
+    const resultado = await consultar(opts.operativo ? { ...contexto, operativo: opts.operativo } : contexto, preguntaValidada, historialValidado, { apiKey, modelo })
     await deps.finalizar(reserva.id, 'COMPLETADA', {
       tokensEntrada: resultado.tokens.entrada, tokensSalida: resultado.tokens.salida, proveedorId: resultado.proveedorId,
     })
