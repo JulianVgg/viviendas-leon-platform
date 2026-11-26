@@ -3,6 +3,7 @@ import { getPrismaClient } from '../../config/prisma.js'
 import { getAuthenticatedUser } from '../auth/auth.service.js'
 import { esDireccionGeneral } from '../auth/require-permission.middleware.js'
 import { eventoYaFinalizo } from './event-history.js'
+import { nivelInstitucional } from './invitation-hierarchy.js'
 import { fechaAnteriorAHoy } from './guatemala-date.js'
 import { verificarCruceInstitucional, ConflictoHorario } from './calendar-conflicts.js'
 import { actualizarRecordatorios, configGuardada, configParaPrisma, reglasTrasCambioFecha } from '../notifications/reminders.service.js'
@@ -41,12 +42,13 @@ function soloAjax(req: Request, res: Response): boolean {
 /** Solicitudes abiertas de los eventos creados por la persona autenticada. */
 reprogrammingRouter.get('/reprogramaciones/pendientes', async (req: Request, res: Response) => {
   const organizadorId = req.session.userId!
-  if (!await esGestor(organizadorId)) {
+  const responsable = await getAuthenticatedUser(organizadorId)
+  if (!responsable || !await esGestor(organizadorId)) {
     res.status(403).json({ error: 'Acceso reservado al personal responsable.' }); return
   }
   try {
     const solicitudes = await getPrismaClient().solicitudReprogramacionInvitacion.findMany({
-      where: { estado: 'PENDIENTE', evento: { creadoPorId: organizadorId } },
+      where: { estado: 'PENDIENTE', ...(nivelInstitucional(responsable.roles) === 2 ? {} : { evento: { creadoPorId: organizadorId } }) },
       include: {
         evento: { select: { id: true, titulo: true, fechaInicio: true, horaInicio: true, horaFin: true } },
         solicitante: { select: { nombre: true, apellido: true } },
@@ -109,7 +111,11 @@ reprogrammingRouter.post('/:id/reprogramacion', async (req: Request, res: Respon
         } } },
       })
       const participante = evento?.participantes[0]
-      if (!evento || !participante || participante.estadoInvitacion === 'ASIGNADO') return 'NO_EXISTE' as const
+      if (!evento || !participante) return 'NO_EXISTE' as const
+      const [solicitante, organizador] = await Promise.all([
+        getAuthenticatedUser(usuarioId), getAuthenticatedUser(evento.creadoPorId),
+      ])
+      if (!solicitante || !organizador || nivelInstitucional(solicitante.roles) >= nivelInstitucional(organizador.roles)) return 'SIN_PERMISO' as const
       if (eventoYaFinalizo(evento.fechaFin)) return 'FINALIZADO' as const
       if (fecha(evento.fechaInicio) === nuevaFecha) return 'MISMA_FECHA' as const
       const previa = await tx.solicitudReprogramacionInvitacion.findFirst({
@@ -121,7 +127,7 @@ reprogrammingRouter.post('/:id/reprogramacion', async (req: Request, res: Respon
         }
         return 'SOLICITUD_PENDIENTE' as const
       }
-      if (!['PENDIENTE', 'ACEPTADA', 'RECHAZADA'].includes(participante.estadoInvitacion)) {
+      if (!['PENDIENTE', 'ACEPTADA', 'ASIGNADO'].includes(participante.estadoInvitacion)) {
         return 'SOLICITUD_PENDIENTE' as const
       }
       const solicitud = await tx.solicitudReprogramacionInvitacion.create({ data: {
@@ -142,7 +148,8 @@ reprogrammingRouter.post('/:id/reprogramacion', async (req: Request, res: Respon
       } })
       return { id: solicitud.id, estado: 'PENDIENTE', sinCambios: false }
     })
-    if (resultado === 'NO_EXISTE') { res.status(404).json({ error: 'No existe una invitación válida para este usuario.' }); return }
+    if (resultado === 'NO_EXISTE') { res.status(404).json({ error: 'No existe una actividad asignada para este usuario.' }); return }
+    if (resultado === 'SIN_PERMISO') { res.status(403).json({ error: 'Solo un participante subordinado al organizador puede solicitar reprogramación.' }); return }
     if (resultado === 'FINALIZADO') { res.status(409).json({ error: 'La actividad ya finalizó.' }); return }
     if (resultado === 'MISMA_FECHA') { res.status(422).json({ error: 'La nueva fecha debe ser distinta de la actual.' }); return }
     if (resultado === 'SOLICITUD_PENDIENTE') { res.status(409).json({ error: 'Ya existe una solicitud pendiente para esta invitación.' }); return }
@@ -164,13 +171,12 @@ reprogrammingRouter.patch('/reprogramaciones/:id/resolver', async (req: Request,
   const esMantenimiento = decision === 'MANTENER_FECHA'
   if (solicitudId === null || (!esAprobacion && !esMantenimiento) ||
       (esAprobacion && (resolucion != null || reemplazoId != null)) ||
-      (esMantenimiento && resolucion !== 'OTRA_PERSONA' && resolucion !== 'SOLO_ORGANIZADOR') ||
-      (esMantenimiento && resolucion === 'OTRA_PERSONA' && !idValido(reemplazoId)) ||
-      (esMantenimiento && resolucion === 'SOLO_ORGANIZADOR' && reemplazoId != null)) {
+      (esMantenimiento && (resolucion !== 'SOLO_ORGANIZADOR' || reemplazoId != null))) {
     res.status(400).json({ error: 'Decisión o alternativa inválida.' }); return
   }
   const organizadorId = req.session.userId!
-  if (!await esGestor(organizadorId)) {
+  const gestor = await getAuthenticatedUser(organizadorId)
+  if (!gestor || !await esGestor(organizadorId)) {
     res.status(403).json({ error: 'Solo el organizador autorizado puede resolver la solicitud.' }); return
   }
   try {
@@ -186,12 +192,11 @@ reprogrammingRouter.patch('/reprogramaciones/:id/resolver', async (req: Request,
         include: { participantes: { select: { usuarioId: true, estadoInvitacion: true } } },
       })
       if (!solicitud || !evento) return 'NO_EXISTE' as const
-      if (evento.creadoPorId !== organizadorId) return 'SIN_PERMISO' as const
+      if (evento.creadoPorId !== organizadorId && nivelInstitucional(gestor.roles) !== 2) return 'SIN_PERMISO' as const
       const estadoFinal = esAprobacion ? 'APROBADA' : 'MANTENIDA'
       if (solicitud.estado !== 'PENDIENTE') {
         const mismaDecision = solicitud.estado === estadoFinal &&
-          (esAprobacion || (solicitud.resolucion === resolucion &&
-            solicitud.reemplazoUsuarioId === (resolucion === 'OTRA_PERSONA' ? reemplazoId : null)))
+          (esAprobacion || (solicitud.resolucion === 'SOLO_ORGANIZADOR' && solicitud.reemplazoUsuarioId === null))
         return mismaDecision ? { id: solicitud.id, estado: solicitud.estado, sinCambios: true } : 'YA_RESUELTA' as const
       }
       if (eventoYaFinalizo(evento.fechaFin)) return 'FINALIZADO' as const
@@ -218,15 +223,15 @@ reprogrammingRouter.patch('/reprogramaciones/:id/resolver', async (req: Request,
             versionNotificacion: { increment: 1 } },
         })
         version = actualizado.versionNotificacion
-        // Quienes habían aceptado la fecha anterior deben confirmar de nuevo.
+        // Nadie necesita aceptar de nuevo: la asignación de Dirección/Coordinación continúa vigente.
         await tx.eventoInstitucionalParticipante.updateMany({
           where: { eventoId: evento.id, usuarioId: { not: solicitud.solicitanteId },
-            estadoInvitacion: { in: ['ACEPTADA', 'REPROGRAMACION'] } },
-          data: { estadoInvitacion: 'PENDIENTE', respondidaEn: null },
+            estadoInvitacion: { in: ['ACEPTADA', 'REPROGRAMACION', 'PENDIENTE'] } },
+          data: { estadoInvitacion: 'ASIGNADO', respondidaEn: null },
         })
         await tx.eventoInstitucionalParticipante.update({
           where: { eventoId_usuarioId: { eventoId: evento.id, usuarioId: solicitud.solicitanteId } },
-          data: { estadoInvitacion: 'ACEPTADA', respondidaEn: hoy },
+          data: { estadoInvitacion: 'ASIGNADO', respondidaEn: hoy },
         })
         const configAnterior = configGuardada(evento.recordatoriosConfig, fechaVigente)
         const configNueva = reglasTrasCambioFecha(configAnterior, fechaSolicitada)
@@ -238,91 +243,70 @@ reprogrammingRouter.patch('/reprogramaciones/:id/resolver', async (req: Request,
           .map(persona => ({
             usuarioId: persona.usuarioId, tipo: 'CALENDARIO_CAMBIO',
             titulo: 'Actividad reprogramada',
-            mensaje: `La actividad ${evento.titulo} se realizará el ${fechaSolicitada}. Consulta la invitación y confirma tu asistencia.`,
+            mensaje: `La actividad ${evento.titulo} se realizará el ${fechaSolicitada}. Tu participación sigue asignada.`,
             referencia: `/notificaciones?invitacion=${evento.id}`,
             permisoDestino: 'PANTALLA_CALENDARIO' as const,
             claveEvento: `CAL:${evento.id}:V${version}:${persona.usuarioId}`,
           })), tx)
       } else {
-        const nuevoId = resolucion === 'OTRA_PERSONA' ? reemplazoId as number : null
-        if (nuevoId !== null) {
-          if (nuevoId === solicitud.solicitanteId || nuevosParticipantes.includes(nuevoId)) return 'REEMPLAZO_INVALIDO' as const
-          const usuarioNuevo = await tx.usuario.findUnique({ where: { id: nuevoId }, select: { estado: true } })
-          if (usuarioNuevo?.estado !== 'ACTIVO') return 'REEMPLAZO_INVALIDO' as const
-          await verificarCruceInstitucional(tx, fechaVigente,
-            { horaInicio: evento.horaInicio, horaFin: evento.horaFin }, [nuevoId], evento.id)
-        }
-        await tx.eventoInstitucionalParticipante.delete({
+        // Rechazar una nueva fecha NO equivale a rechazar la asignación: se mantiene
+        // el evento y el participante, con seguimiento y recordatorios vigentes.
+        await tx.eventoInstitucionalParticipante.update({
           where: { eventoId_usuarioId: { eventoId: evento.id, usuarioId: solicitud.solicitanteId } },
+          data: { estadoInvitacion: 'ASIGNADO', respondidaEn: hoy },
         })
-        if (nuevoId !== null) await tx.eventoInstitucionalParticipante.create({
-          data: { eventoId: evento.id, usuarioId: nuevoId, estadoInvitacion: 'PENDIENTE' },
-        })
-        const actualizado = await tx.eventoInstitucional.update({
-          where: { id: evento.id }, data: { versionNotificacion: { increment: 1 } },
-        })
-        version = actualizado.versionNotificacion
-        const participantesActuales = nuevosParticipantes.filter(id => id !== solicitud.solicitanteId)
-        if (nuevoId !== null) participantesActuales.push(nuevoId)
-        await actualizarRecordatorios(tx, 'CALENDARIO', evento.id, fechaVigente, participantesActuales,
-          configGuardada(evento.recordatoriosConfig, fechaVigente))
-        if (nuevoId !== null) await crearNotificacionesDeActividad([{
-          usuarioId: nuevoId, tipo: 'INVITACION_EVENTO',
-          titulo: 'Nueva invitación institucional',
-          mensaje: `Te invitaron a ${evento.titulo} (${fechaVigente}).`,
-          referencia: `/notificaciones?invitacion=${evento.id}`,
-          permisoDestino: 'PANTALLA_CALENDARIO' as const,
-          claveEvento: `CAL:${evento.id}:V${version}:${nuevoId}`,
-        }], tx)
       }
 
-      const anuladas = await tx.solicitudReprogramacionInvitacion.findMany({
-        where: { eventoId: evento.id, estado: 'PENDIENTE', id: { not: solicitudId } },
-        select: { solicitanteId: true },
-      })
-      await tx.solicitudReprogramacionInvitacion.updateMany({
-        where: { eventoId: evento.id, estado: 'PENDIENTE', id: { not: solicitudId } },
-        data: { estado: 'ANULADA', resueltoPorId: organizadorId, resueltoEn: hoy },
-      })
-      // Reabrir la respuesta de otros solicitantes al quedar obsoleta su propuesta.
-      await tx.eventoInstitucionalParticipante.updateMany({
-        where: { eventoId: evento.id, estadoInvitacion: 'REPROGRAMACION' },
-        data: { estadoInvitacion: 'PENDIENTE', respondidaEn: null },
-      })
-      if (anuladas.length) await tx.notificacion.createMany({
-        data: anuladas.map(item => ({
-          usuarioId: item.solicitanteId, tipo: 'INVITACION_REPROGRAMACION_RESUELTA',
-          titulo: 'Propuesta pendiente actualizada',
-          mensaje: `La actividad ${evento.titulo} cambió mientras se revisaba tu propuesta. Consulta la invitación y responde nuevamente.`,
-          referencia: `/notificaciones?invitacion=${evento.id}`,
-        })),
-      })
+      // Solo al cambiar la fecha quedan obsoletas las demás propuestas abiertas.
+      // Si se deniega una, las solicitudes de los otros participantes siguen pendientes.
+      if (esAprobacion) {
+        const anuladas = await tx.solicitudReprogramacionInvitacion.findMany({
+          where: { eventoId: evento.id, estado: 'PENDIENTE', id: { not: solicitudId } },
+          select: { solicitanteId: true },
+        })
+        await tx.solicitudReprogramacionInvitacion.updateMany({
+          where: { eventoId: evento.id, estado: 'PENDIENTE', id: { not: solicitudId } },
+          data: { estado: 'ANULADA', resueltoPorId: organizadorId, resueltoEn: hoy },
+        })
+        // Reabrir la respuesta de otros solicitantes al quedar obsoleta su propuesta.
+        await tx.eventoInstitucionalParticipante.updateMany({
+          where: { eventoId: evento.id, estadoInvitacion: 'REPROGRAMACION' },
+          data: { estadoInvitacion: 'ASIGNADO', respondidaEn: null },
+        })
+        if (anuladas.length) await tx.notificacion.createMany({
+          data: anuladas.map(item => ({
+            usuarioId: item.solicitanteId, tipo: 'INVITACION_REPROGRAMACION_RESUELTA',
+            titulo: 'Propuesta pendiente actualizada',
+            mensaje: `La actividad ${evento.titulo} cambió mientras se revisaba tu propuesta. Consulta la invitación y responde nuevamente.`,
+            referencia: `/notificaciones?invitacion=${evento.id}`,
+          })),
+        })
+      }
       await tx.solicitudReprogramacionInvitacion.update({
         where: { id: solicitudId }, data: {
           estado: estadoFinal,
-          resolucion: esMantenimiento ? resolucion as 'OTRA_PERSONA' | 'SOLO_ORGANIZADOR' : null,
-          reemplazoUsuarioId: esMantenimiento && resolucion === 'OTRA_PERSONA' ? reemplazoId as number : null,
+          resolucion: esMantenimiento ? 'SOLO_ORGANIZADOR' : null,
+          reemplazoUsuarioId: null,
           resueltoPorId: organizadorId, resueltoEn: hoy,
         },
       })
       await tx.notificacion.create({ data: {
         usuarioId: solicitud.solicitanteId,
         tipo: 'INVITACION_REPROGRAMACION_RESUELTA',
-        titulo: esAprobacion ? 'Nueva fecha aceptada' : 'Fecha original confirmada',
+        titulo: esAprobacion ? 'Reprogramación aprobada' : 'Reprogramación no aprobada',
         mensaje: esAprobacion
           ? `Se aprobó tu propuesta. La actividad ${evento.titulo} se realizará el ${fechaSolicitada}.`
-          : `Gracias por la aclaración, pero la actividad ${evento.titulo} se realizará el ${fechaVigente}.`,
+          : `Tu solicitud no fue aprobada. La actividad ${evento.titulo} se mantiene el ${fechaVigente} y tu participación continúa asignada.`,
         referencia: '/notificaciones',
       } })
       return { id: solicitudId, estado: estadoFinal, sinCambios: false, fecha: esAprobacion ? fechaSolicitada : fechaVigente }
     })
     if (resultado === 'NO_EXISTE') { res.status(404).json({ error: 'Solicitud no encontrada.' }); return }
-    if (resultado === 'SIN_PERMISO') { res.status(403).json({ error: 'Solo el creador puede resolver esta solicitud.' }); return }
+    if (resultado === 'SIN_PERMISO') { res.status(403).json({ error: 'Solo el organizador o Dirección puede resolver esta solicitud.' }); return }
     if (resultado === 'YA_RESUELTA') { res.status(409).json({ error: 'La solicitud ya fue resuelta con otra decisión.' }); return }
     if (resultado === 'DESACTUALIZADA') { res.status(409).json({ error: 'La actividad cambió y esta propuesta ya no está vigente.' }); return }
     if (resultado === 'FINALIZADO') { res.status(409).json({ error: 'La actividad ya finalizó.' }); return }
     if (resultado === 'FECHA_PASADA') { res.status(422).json({ error: 'La fecha propuesta ya pasó.' }); return }
-    if (resultado === 'REEMPLAZO_INVALIDO') { res.status(422).json({ error: 'Selecciona otra persona activa que no participe en esta actividad.' }); return }
     res.json(resultado)
   } catch (error) {
     if (error instanceof ConflictoHorario) { res.status(409).json({ error: error.message }); return }

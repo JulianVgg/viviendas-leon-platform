@@ -48,6 +48,7 @@ import { authRouter } from './modules/auth/auth.routes.js';
 import { createSessionMiddleware } from './config/session.js';
 import { auditOperations } from './modules/audit/audit.middleware.js';
 import { auditRouter } from './modules/audit/audit.routes.js';
+import { financeRouter } from './modules/finance/finance.routes.js';
 
 export const app = express();
 
@@ -101,6 +102,7 @@ app.use('/api/v1/usuarios', usersRouter);
 
 // Bitácora de solo lectura, protegida con el permiso PANTALLA_BITACORA.
 app.use('/api/v1/auditoria', auditRouter);
+app.use('/api/v1/finanzas', financeRouter);
 
 // Rutas existentes de Viviendas León
 app.use('/api/v1/familias', familiesRouter);

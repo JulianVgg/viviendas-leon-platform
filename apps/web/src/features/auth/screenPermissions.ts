@@ -3,6 +3,12 @@ import { esSupervisorCalendario } from './calendarAccess'
 // Los códigos deben coincidir exactamente con la checklist de RolesPermisosPage.tsx.
 export type PermissionUser = { roles: string[]; permisos: string[] }
 
+export function esContador(usuario: PermissionUser): boolean {
+  return !isDireccionGeneral(usuario) && usuario.roles.some(rol =>
+    rol.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() === 'contador',
+  )
+}
+
 export function isDireccionGeneral(usuario: PermissionUser): boolean {
   return usuario.roles.some((rol) =>
     rol.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() === 'direccion general',
@@ -53,6 +59,11 @@ export const SCREEN_PERMISSIONS: Record<string, string> = {
   '/auditoria': 'PANTALLA_AUDITORIA',
   '/auditoria/bitacora': 'PANTALLA_BITACORA',
   '/auditoria/control-financiero': 'PANTALLA_CONTROL_FINANCIERO',
+  '/finanzas': 'PANTALLA_CONTROL_FINANCIERO',
+  '/finanzas/bancos': 'PANTALLA_FINANZAS_BANCOS',
+  '/finanzas/caja-chica': 'PANTALLA_FINANZAS_CAJA',
+  '/finanzas/fondos-medicos': 'PANTALLA_FINANZAS_MEDICOS',
+  '/finanzas/informe-mensual': 'PANTALLA_FINANZAS_INFORME',
   '/offline-test': 'PANTALLA_OFFLINE_TEST',
   '/offline-operations-test': 'PANTALLA_OFFLINE_OPERACIONES',
   '/offline-queue-test': 'PANTALLA_OFFLINE_COLA',
@@ -108,6 +119,7 @@ export function canWritePrograms(usuario: PermissionUser): boolean {
 export function canViewPath(usuario: PermissionUser, path: string): boolean {
   // La bitácora técnica permanece exclusiva de Dirección.
   if (path === '/auditoria/bitacora') return isDireccionGeneral(usuario)
+  if (esContador(usuario) && ['/mi-agenda', '/calendario', '/visitas/agenda'].includes(path)) return false
   // La captura técnica queda reservada a personal operativo, incluso para Dirección.
   if ((path === '/visitas/nueva' || path === '/visitas/preparar-campo') && esSupervisorCalendario(usuario)) return false
   if (isDireccionGeneral(usuario)) return true

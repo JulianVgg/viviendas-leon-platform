@@ -60,10 +60,10 @@ export async function obtenerMiAgenda(user: AuthenticatedUser, ahora = new Date(
     veCalendario ? db.eventoInstitucional.findMany({
       where: {
         fechaInicio: { lte: hasta }, fechaFin: { gte: desde },
-        // Solo una invitación aceptada entra en la agenda personal. Se preservan
-        // las asignaciones históricas (ASIGNADO) y la agenda del responsable.
+        // Una asignación institucional permanece en agenda aunque la solicitud de
+        // reprogramación siga pendiente de decisión. Compatibilidad con registros anteriores.
         OR: [{ responsableId: user.id }, { participantes: { some: {
-          usuarioId: user.id, estadoInvitacion: { in: ['ACEPTADA', 'ASIGNADO'] },
+          usuarioId: user.id, estadoInvitacion: { in: ['ACEPTADA', 'ASIGNADO', 'PENDIENTE', 'REPROGRAMACION'] },
         } } }],
       },
       select: { id: true, titulo: true, categoria: true, fechaInicio: true, fechaFin: true },

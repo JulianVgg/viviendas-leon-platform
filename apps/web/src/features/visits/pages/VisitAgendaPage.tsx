@@ -102,7 +102,7 @@ export default function VisitAgendaPage() {
       setCoverageError(gardenResult.status !== 'fulfilled' || planningResult.status !== 'fulfilled' ||
         (gardenResult.status === 'fulfilled' && gardenResult.value.local) ||
         (planningResult.status === 'fulfilled' && planningResult.value.local))
-      setInvitaciones(eventos.data.filter(e => ['ACEPTADA','ASIGNADO'].includes(e.estado ?? '')))
+      setInvitaciones(eventos.data.filter(e => ['ACEPTADA','ASIGNADO','PENDIENTE','REPROGRAMACION'].includes(e.estado ?? '')))
       setCapacitaciones(mias.data); setAvisoCapacitaciones(mias.error)
       setLocal(visits.local || pending.local); setError('')
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'No se pudo cargar la agenda.') }

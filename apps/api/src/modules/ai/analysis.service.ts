@@ -43,13 +43,13 @@ export async function generarAnalisisIA(
   const apiKey = (proveedor === 'gemini' ? env.GEMINI_API_KEY : env.OPENAI_API_KEY)?.trim()
   if (!apiKey) throw new AnalysisError('AI_NOT_CONFIGURED', 503, 'El análisis asistido aún no está configurado.')
   const modelo = (proveedor === 'gemini' ? env.GEMINI_ANALYSIS_MODEL : env.OPENAI_ANALYSIS_MODEL)?.trim()
-    || (proveedor === 'gemini' ? 'gemini-2.5-flash-lite' : 'gpt-5.6-luna')
+    || (proveedor === 'gemini' ? 'gemini-3.5-flash-lite' : 'gpt-5.6-luna')
   if (!/^[a-zA-Z0-9_.-]{2,100}$/.test(modelo)) {
     throw new AnalysisError('AI_CONFIG', 503, 'Modelo de análisis no válido.')
   }
   const limites = {
-    usuario: limiteEntero(env.AI_DAILY_USER_LIMIT, 3, 20),
-    global: limiteEntero(env.AI_DAILY_GLOBAL_LIMIT, 30, 200),
+    usuario: limiteEntero(env.AI_DAILY_USER_LIMIT, 20, 200),
+    global: limiteEntero(env.AI_DAILY_GLOBAL_LIMIT, 60, 2000),
   }
   const deps = opts.deps ?? dependencias
   // Consultar y sanitizar ANTES de reservar cupo. Nunca se envía el objeto usuario.

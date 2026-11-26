@@ -36,7 +36,7 @@ export default function CrearInvitacionButton() {
     <div className="mb-4 flex flex-wrap items-center justify-end gap-3">
       <p className="text-xs text-gray-500 dark:text-gray-400">Solo Dirección y Coordinación</p>
       <Button type="button" onClick={() => void abrir()} disabled={cargando}>
-        <Plus size={17} /> {cargando ? 'Cargando...' : 'Crear invitación'}
+        <Plus size={17} /> {cargando ? 'Cargando...' : 'Asignar actividad'}
       </Button>
     </div>
     {error && <p role="alert" className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
@@ -44,7 +44,7 @@ export default function CrearInvitacionButton() {
       open={abierto} selected={null} date={new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Guatemala' })}
       users={usuarios} editable onClose={() => setAbierto(false)}
       onSave={async (data) => {
-        if (data.participantesIds.length === 0) throw new Error('Selecciona al menos un participante para enviar la invitación.')
+        if (data.participantesIds.length === 0) throw new Error('Selecciona al menos un participante para asignar la actividad.')
         await saveEvent(data)
         emitirCambioNotificaciones()
       }}
